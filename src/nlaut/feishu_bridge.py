@@ -118,12 +118,108 @@ _IR_TEMPLATES = {
         ],
         "postconditions": [{"cleanup_tag": "RESET_LOCK_STATE"}],
     },
+    "任务搜索": {
+        "title": "任务列表-按任务名称搜索-结果正确匹配",
+        "data_ref": None,
+        "dataset": {},
+        "kw_from_verbal": r"搜[索]?[\s\S]*?(?:「\s*?([\u4e00-\u9fa5A-Za-z0-9]+?)\s*?」|\"([^\"]+)\"|搜[索]?(.+?)(?:,|，|应|该|$))",
+        "default_kw": "冒烟",
+        "steps_template": [
+            {"action": "nav", "path": "/tasks"},
+            {"action": "wait_visible", "selector": "#kw", "timeout_ms": 5000},
+            {"action": "fill", "selector": "#kw", "value": "$kw"},
+            {"action": "click", "selector": "#btn-search"},
+            {"action": "wait_visible", "selector": "table.task-table", "timeout_ms": 5000},
+        ],
+        "steps": [
+            {"action": "nav", "path": "/tasks"},
+            {"action": "wait_visible", "selector": "#kw", "timeout_ms": 5000},
+            {"action": "fill", "selector": "#kw", "value": "冒烟"},
+            {"action": "click", "selector": "#btn-search"},
+            {"action": "wait_visible", "selector": "table.task-table", "timeout_ms": 5000},
+        ],
+        "assertions": [
+            {"kind": "text_visible", "selector": ".result-count", "expected": "共 6 条结果"},
+            {"kind": "text_visible", "selector": "table.task-table", "expected": "冒烟测试-001"},
+            {"kind": "visual_state", "prompt": "任务列表页搜索'冒烟'后：表格是否只显示冒烟测试类型的任务（结果计数显示共 6 条），且每行任务名称都包含'冒烟测试'字样？只答 yes 或 no。", "threshold": 0.9},
+        ],
+        "postconditions": [],
+    },
+    "任务状态筛选": {
+        "title": "任务列表-下拉筛选状态-仅显示所选状态任务",
+        "steps": [
+            {"action": "nav", "path": "/tasks"},
+            {"action": "wait_visible", "selector": "#f-status", "timeout_ms": 5000},
+            {"action": "select_option", "selector": "#f-status", "value": "已完成"},
+            {"action": "click", "selector": "#btn-search"},
+            {"action": "wait_visible", "selector": "table.task-table", "timeout_ms": 5000},
+        ],
+        "assertions": [
+            {"kind": "text_visible", "selector": ".result-count", "expected": "共 8 条结果"},
+            {"kind": "visual_state", "prompt": "任务列表筛选'已完成'状态后：表格中所有任务的状态列是否都显示'已完成'（绿色文字），结果计数为 8 条？只答 yes 或 no。", "threshold": 0.9},
+        ],
+        "postconditions": [],
+    },
+    "任务空结果": {
+        "title": "任务列表-搜索无结果-提示未找到匹配任务",
+        "kw": "不存在的关键词xyz",
+        "steps": [
+            {"action": "nav", "path": "/tasks"},
+            {"action": "wait_visible", "selector": "#kw", "timeout_ms": 5000},
+            {"action": "fill", "selector": "#kw", "value": "不存在的关键词xyz"},
+            {"action": "click", "selector": "#btn-search"},
+            {"action": "wait_visible", "selector": ".empty-tip", "timeout_ms": 5000},
+        ],
+        "assertions": [
+            {"kind": "text_visible", "selector": ".empty-tip", "expected": "未找到匹配的任务"},
+            {"kind": "text_visible", "selector": ".result-count", "expected": "共 0 条结果"},
+            {"kind": "visual_state", "prompt": "任务列表搜索无结果时：页面是否显示'未找到匹配的任务'的空态提示（居中灰色文字），结果计数为 0，页面无报错无异常？只答 yes 或 no。", "threshold": 0.9},
+        ],
+        "postconditions": [],
+    },
 }
 
 
 def draft_from_verbal(verbal: str, system: str) -> dict:
     """口述 → IR 草案 dict（当前用模板+正则，M1 接模型 API 后替换）。"""
-    # 模板命中（演示系统常见场景）
+    # ① 任务搜索/筛选/空结果（演示列表页新增场景）
+    if any(kw in (verbal or "") for kw in ["任务列表", "任务搜索", "任务筛选", "按任务名称", "按.*筛选"]):
+        actor = "任务列表页"
+        obj = "搜索框与结果表格"
+        action = "搜索任务"
+        # 找关键词
+        kw = "冒烟"
+        m = re.search(r"[搜搜索][索]?[「\"](.+?)[」\"]", verbal or "")
+        if m:
+            kw = m.group(1)
+        elif "空" in (verbal or "") or "不存在" in (verbal or ""):
+            return _expand_template("任务空结果", verbal, next_id("tasks"), actor, obj, action)
+        # 状态筛选用 现成模板
+        if "筛选" in (verbal or "") or "已完成" in (verbal or "") or "状态" in (verbal or ""):
+            return _expand_template("任务状态筛选", verbal, next_id("tasks"), actor, obj, action)
+        # 默认搜索
+        t = _IR_TEMPLATES["任务搜索"]
+        return {
+            "id": next_id("tasks"),
+            "title": t["title"],
+            "source": verbal,
+            "data_ref": t["data_ref"],
+            "dataset": {"kw": kw},
+            "actor": actor,
+            "object": obj,
+            "action": action,
+            "steps": [
+                {"action": "nav", "path": "/tasks"},
+                {"action": "wait_visible", "selector": "#kw", "timeout_ms": 5000},
+                {"action": "fill", "selector": "#kw", "value": kw},
+                {"action": "click", "selector": "#btn-search"},
+                {"action": "wait_visible", "selector": "table.task-table", "timeout_ms": 5000},
+            ],
+            "assertions": t["assertions"],
+            "postconditions": [],
+        }
+
+    # ② 登录锁定（原有模板）
     m = re.search(r"连错(\d+)次", verbal or "")
     if m:
         n = m.group(1)
@@ -132,29 +228,61 @@ def draft_from_verbal(verbal: str, system: str) -> dict:
             "id": f"tc_login_lock_{n}",
             "title": t["title"].format(n=n),
             "source": verbal,
-            "data_ref": t["draft"] if False else t["data_ref"],
+            "data_ref": t["data_ref"],
             "dataset": t["dataset"],
             "steps": t["steps"],
             "assertions": t["assertions"],
             "postconditions": t["postconditions"],
         }
-    # 通用兜底：需要人工澄清（信息不足）
+
+    # ③ 未命中: 真实澄清（语义改写，不再把责任推给用户）
     return {}
+
+
+def _expand_template(key: str, verbal: str, case_id: str,
+                     actor: str = "演示系统", obj: str = "目标页面",
+                     action: str = "按口述操作") -> dict:
+    """从模板生成 IR dict。"""
+    t = _IR_TEMPLATES[key]
+    return {
+        "id": case_id,
+        "title": t["title"],
+        "source": verbal,
+        "data_ref": t.get("data_ref"),
+        "dataset": t.get("dataset", {}),
+        "actor": actor,
+        "object": obj,
+        "action": action,
+        "steps": t["steps"],
+        "assertions": t["assertions"],
+        "postconditions": t["postconditions"],
+    }
+
+
+_task_counter = {"n": 5}
+
+
+def next_id(prefix: str) -> str:
+    """生成自增用例 id（如 tc_tasks_006）。"""
+    _task_counter["n"] += 1
+    return f"tc_{prefix}_{_task_counter['n']:03d}"
 
 
 def ir_yaml(ir: dict) -> str:
     """dict → 紧凑 YAML 文本（人可读、可直接入库）。"""
+    actor = ir.get("actor", "演示系统")
+    obj = ir.get("object", "目标页面")
     lines = [f"id: {ir['id']}", f"title: {ir['title']}"]
     lines.append(f'source: "口述: {ir["source"]}"')
     lines.append("req_ref: null")
     lines.append("priority: P1")
     lines.append("channel: web")
     lines.append("quad:")
-    lines.append("  actor: 登录页")
-    lines.append(f"  action: {ir.get('action', '提交登录')}")
-    lines.append("  object: 癭录表单")
+    lines.append(f"  actor: {actor}")
+    lines.append(f"  action: {ir.get('action', '按口述操作')}")
+    lines.append(f"  object: {obj}")
     lines.append("  preconditions:")
-    lines.append('    - "演示用户存在"')
+    lines.append('    - "演示系统已启动且种子数据就绪"')
     if ir.get("data_ref"):
         lines.append(f"data_ref: {ir['data_ref']}")
     lines.append("steps:")
@@ -195,8 +323,9 @@ def process_once(token: str, repo_dir: Path, dry_run: bool = False) -> list[dict
                 })
                 actions.append({"record_id": rid, "action": "drafted", "verbal": verbal[:30]})
             else:
+                # 文案澄清：诚实说明是模板覆盖度问题，不是用户口述问题
                 update_record(token, rid, {
-                    "AI追问": "口述信息不足：请补充①预期结果（出现什么提示/跳转）②操作次数或边界值。当前生成层为规则模板，暂只覆盖演示登录场景。",
+                    "AI追问": "🤖 生成层模板暂未覆盖这条口述的场景。建议：①在对话里直接跟我说口述（我会按协议生成 IR）②或补一句你期望看到的结果，比如「应只看到 6 条冒烟任务」。",
                     "状态": "需澄清",
                 })
                 actions.append({"record_id": "..", "action": "clarify_needed", "verbal": verbal[:30]})
