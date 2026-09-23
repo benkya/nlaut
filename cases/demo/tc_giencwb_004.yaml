@@ -1,15 +1,15 @@
 id: tc_giencwb_004
-title: 输入框-空状态下发送按钮存在且默认可点
+title: 输入框-空状态下发送按钮disabled为true
 source: |
-  口述: 主页输入框未输入任何内容时，发送按钮存在。
-  (实测: 当前实现下发送按钮始终处于可点击态，无 disabled 状态。这是当前产品行为。)
+  口述: 主页输入框未输入任何内容时，发送按钮应该处于禁用（disabled）状态。
+  输入内容后才会启用。
 req_ref: null
-priority: P1
+priority: P0
 channel: web
 quad:
   actor: 用户
   action: 观察空状态下的发送按钮
-  object: 发送按钮的可见性
+  object: 发送按钮 disabled DOM 属性 + 输入框 value 属性
   preconditions:
     - "主页已加载"
     - "输入框为空（未输入任何字符）"
@@ -20,10 +20,12 @@ steps:
   - {action: wait_visible, selector: 'textarea.uV2eYG_input', timeout_ms: 5000}
   - {action: wait_visible, selector: 'button[aria-label="发送消息"]', timeout_ms: 3000}
 assertions:
-  - kind: visual_state
-    prompt: "输入框右下角是否显示了一个带向上箭头的圆形发送按钮？只答 yes 或 no。"
-    threshold: 0.95
-  - kind: visual_state
-    prompt: "主区中央的 4 个 tab（需求工作台/设计工作台/开发工作台/测试工作台）中，「需求工作台」是否处于激活/选中态（蓝底/高亮）？只答 yes 或 no。"
-    threshold: 0.85
+  - kind: attribute
+    selector: 'button[aria-label="发送消息"]'
+    name: disabled
+    expected: "True"
+  - kind: attribute
+    selector: 'textarea.uV2eYG_input'
+    name: value
+    expected: ""
 postconditions: []

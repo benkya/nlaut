@@ -32,16 +32,55 @@ def resolve_vars(value: str, data: dict[str, str]) -> str:
 
 
 def _build_dom_state(page, ir: TestCaseIR) -> dict[str, str]:
-    """采集断言涉及的 selector 可见文本（1° 确定性判定的输入）。"""
+    """采集断言涉及的 selector 可见文本 / DOM 属性（1° 确定性判定的输入）。
+
+    对 text_visible 断言:采集元素 inner_text
+    对 attribute 断言:采集 element.disabled / value / getAttribute(name)
+    """
+    from ...ir.model import AssertAttribute
+
     dom: dict[str, str] = {}
     for a in ir.assertions:
-        sel = getattr(a, "selector", None)
-        if sel and sel not in dom:
+        if isinstance(a, AssertAttribute):
+            # 用 attribute:NAME 作为 key 避免和文本断言混淆
+            key = f"{a.selector}|attr:{a.name}"
+            if key in dom:
+                continue
             try:
-                dom[sel] = page.inner_text(sel)
-            except Exception as e:  # noqa: BLE001 — 元素不存在→空文本交判定层
-                dom[sel] = ""
-                print(f"[web] 采集 {sel} 失败: {type(e).__name__}")
+                handle = page.query_selector(a.selector)
+                if handle is None:
+                    print(f"[web] attribute: selector NOT FOUND: {a.selector}")
+                    dom[key] = "__MISSING__"
+                    continue
+                if a.name == "disabled":
+                    val = handle.evaluate("el => el.disabled")
+                elif a.name == "value":
+                    val = handle.evaluate("el => el.value")
+                elif a.name == "exists":
+                    # 元素存在 → "__PRESENT__"（用 None 代替 "__MISSING__" 做存在性判定）
+                    val = "__PRESENT__"
+                elif a.name.startswith("data:"):
+                    val = handle.get_attribute("data-" + a.name[len("data:"):])
+                else:
+                    val = handle.get_attribute(a.name)
+                # 区分「未设置 (None)」和「空字符串」
+                # React 经常在 toggle 时设 data-x="" 而不是移除属性，
+                # 这两种情况对断言语义都等价为「属性缺席 / 占位」
+                if val is None or val == "":
+                    val = "__ABSENT__"
+                dom[key] = str(val)
+                print(f"[web] attribute: {a.selector}.{a.name} = {dom[key]!r}")
+            except Exception as e:  # noqa: BLE001
+                dom[key] = ""
+                print(f"[web] 采集 {a.selector}.{a.name} 失败: {type(e).__name__}")
+        else:
+            sel = getattr(a, "selector", None)
+            if sel and sel not in dom:
+                try:
+                    dom[sel] = page.inner_text(sel)
+                except Exception as e:  # noqa: BLE001 — 元素不存在→空文本交判定层
+                    dom[sel] = ""
+                    print(f"[web] 采集 {sel} 失败: {type(e).__name__}")
     return dom
 
 

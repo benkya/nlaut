@@ -31,6 +31,19 @@ def _question_for(a, ir: TestCaseIR):
             text=a.expected,
             context={"selector": a.selector, "negated": a.negated},
         )
+    if a.kind == "attribute":
+        # 用 selector + 属性名作为唯一 key，deterministic judge 会查 dom_state 对应键
+        return Question(
+            kind="noul",
+            text=a.expected,
+            context={
+                "selector": f"{a.selector}|attr:{a.name}",
+                "negated": a.negated,
+                "attr_mode": True,
+                "raw_selector": a.selector,
+                "attr_name": a.name,
+            },
+        )
     if a.kind == "visual_state":
         return Question(kind="noul", text=a.prompt)
     if a.kind == "noul":
@@ -44,7 +57,7 @@ def _question_for(a, ir: TestCaseIR):
 
 def _engine_name(a) -> str:
     kind = getattr(a, "kind", "")
-    if kind == "text_visible":
+    if kind in ("text_visible", "attribute"):
         return "deterministic"
     if kind == "visual_state":
         return "mlx-vlm"

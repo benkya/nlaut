@@ -1,32 +1,32 @@
 id: tc_giencwb_002
-title: 顶部tab-研发按钮可点击切换
+title: 顶部tab-点击研发切换主视图到dev-directory
 source: |
-  口述: 顶部 tab「通用工作台」和「研发」都存在，可以点击切换，
-  切换后主区内容应从通用工作台首页变成研发工作台视图。
+  口述: 顶部 tab「通用工作台」和「研发」都存在，点击研发后主区内容应切换，
+  根 frame 的 data-main-view 属性应从 conversation 变成 dev-directory。
 req_ref: null
-priority: P1
+priority: P0
 channel: web
 quad:
   actor: 用户
   action: 点击顶部「研发」tab
-  object: 顶部 tab 状态 + 主区内容
+  object: 根 frame 的 data-main-view 属性 + 通用工作台 4 tab 可见性
   preconditions:
     - "顶部 tabs 已渲染"
-    - "默认在通用工作台"
+    - "默认在通用工作台(conversation 视图)"
 data_ref: null
 steps:
   - {action: nav, path: "http://localhost:55978/"}
   - {action: wait_visible, selector: '[data-testid="gien-titlebar-tabs"]', timeout_ms: 8000}
+  - {action: wait_visible, selector: '[data-testid="workbench-tabs"]', timeout_ms: 5000}
   - {action: click, selector: '[data-testid="gien-titlebar-tabs"] button:nth-of-type(2)'}
-  - {action: wait_visible, selector: '[data-testid="gien-titlebar-tabs"]', timeout_ms: 3000}
+  - {action: wait_visible, selector: '[data-testid="gien-titlebar-tabs"] button:nth-of-type(2)', timeout_ms: 3000}
 assertions:
-  - kind: text_visible
-    selector: '[data-testid="gien-titlebar-tabs"]'
-    expected: "研发"
-  - kind: text_visible
-    selector: '[data-testid="gien-titlebar-tabs"]'
-    expected: "通用工作台"
-  - kind: visual_state
-    prompt: "页面主区现在显示「研发工作台」相关的内容（如 workspace 区域、任务看板、待协作/待评审等卡片），而不是 4 个 tab（需求/设计/开发/测试）+ 编写需求用例/需求原型设计卡片？只答 yes 或 no。"
-    threshold: 0.85
+  - kind: attribute
+    selector: '.pI_x6G_frame'
+    name: data:main-view
+    expected: "dev"
+  - kind: attribute
+    selector: '.pI_x6G_frame'
+    name: data:sidebar-collapsed
+    expected: ""
 postconditions: []

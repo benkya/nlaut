@@ -1,15 +1,16 @@
 id: tc_giencwb_005
-title: 输入框-输入文字后内容回显
+title: 输入框-输入文字后内容回显且按钮启用
 source: |
-  口述: 用户在输入框中输入一段文字后，输入框应该回显该文字内容。
-  (实测: 发送按钮始终可点击，无 disabled 切换，本用例只验证 fill 成功。)
+  口述: 用户在输入框中输入一段文字后：
+  1) 输入框 value 属性应包含该文字
+  2) 发送按钮 disabled 属性应变为 false
 req_ref: null
-priority: P1
+priority: P0
 channel: web
 quad:
   actor: 用户
   action: 在输入框中输入文字
-  object: 输入框文字内容 + 发送按钮可见性
+  object: 输入框 value 属性 + 发送按钮 disabled 属性
   preconditions:
     - "主页已加载"
     - "输入框为空"
@@ -20,10 +21,12 @@ steps:
   - {action: fill, selector: 'textarea.uV2eYG_input', value: "自动化测试MVP验证"}
   - {action: wait_visible, selector: 'button[aria-label="发送消息"]', timeout_ms: 3000}
 assertions:
-  - kind: visual_state
-    prompt: "输入框中是否显示了文字「自动化测试MVP验证」？只答 yes 或 no。"
-    threshold: 0.95
-  - kind: visual_state
-    prompt: "发送消息按钮（输入框右下角带向上箭头的圆形按钮）是否处于可点击状态（蓝色/高亮）？只答 yes 或 no。"
-    threshold: 0.85
+  - kind: attribute
+    selector: 'textarea.uV2eYG_input'
+    name: value
+    expected: "自动化测试MVP验证"
+  - kind: attribute
+    selector: 'button[aria-label="发送消息"]'
+    name: disabled
+    expected: "False"
 postconditions: []

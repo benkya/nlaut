@@ -2,23 +2,30 @@ id: tc_giencwb_001
 title: 工作台-默认加载通用工作台作为首页
 source: |
   口述: 打开 GienCoderWorkbench 后，应该默认进入「通用工作台」作为首页，
-  而不是直接进入研发工作台。
+  而不是直接进入研发工作台。4 个工作台 tab（需求/设计/开发/测试）+ 2 个 quick-action 卡片
+  （编写需求用例/需求原型设计）应可见。
 req_ref: null
 priority: P0
 channel: web
 quad:
   actor: 默认加载流程
   action: 进入应用并初始化首屏
-  object: 顶部 tab 状态
+  object: 顶 tab + 工作台 tab 可见性
   preconditions:
     - "用户访问 http://localhost:55978/"
-    - "应用未处于研发模式"
+    - "应用首次加载"
 data_ref: null
 steps:
   - {action: nav, path: "http://localhost:55978/"}
   - {action: wait_visible, selector: '[data-testid="gien-titlebar-tabs"]', timeout_ms: 8000}
   - {action: wait_visible, selector: '[data-testid="workbench-tabs"]', timeout_ms: 5000}
 assertions:
+  - kind: text_visible
+    selector: '[data-testid="gien-titlebar-tabs"]'
+    expected: "通用工作台"
+  - kind: text_visible
+    selector: '[data-testid="gien-titlebar-tabs"]'
+    expected: "研发"
   - kind: text_visible
     selector: '[data-testid="workbench-tabs"]'
     expected: "需求工作台"
@@ -31,7 +38,10 @@ assertions:
   - kind: text_visible
     selector: '[data-testid="workbench-tabs"]'
     expected: "测试工作台"
-  - kind: visual_state
-    prompt: "顶部 tab 行第一个「需求工作台」是否处于激活态（高亮/有色背景/下划线）？只答 yes 或 no。"
-    threshold: 0.9
+  - kind: text_visible
+    selector: '[data-testid="workbench-tabs"]'
+    expected: "编写需求用例"
+  - kind: text_visible
+    selector: '[data-testid="workbench-tabs"]'
+    expected: "需求原型设计"
 postconditions: []

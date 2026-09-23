@@ -59,6 +59,23 @@ class AssertTextVisible(BaseModel):
     judge: Literal["deterministic"] = "deterministic"
 
 
+class AssertAttribute(BaseModel):
+    """DOM 属性断言：直接读 element.getAttribute(name) 或 element.disabled / element.value 等。
+
+    name 支持普通属性名（class/id/aria-*）以及三个特殊 alias：
+    - 'disabled' → element.disabled (返回 boolean)
+    - 'value'    → element.value (输入框文本)
+    - 'data:KEY' → element.getAttribute('data-KEY') (data-* 属性)
+    """
+
+    kind: Literal["attribute"]
+    selector: str
+    name: str
+    expected: str
+    negated: bool = False
+    judge: Literal["deterministic"] = "deterministic"
+
+
 class AssertVisualState(BaseModel):
     kind: Literal["visual_state"]
     prompt: str
@@ -91,7 +108,7 @@ class AssertScore(BaseModel):
 
 
 Assertion = Annotated[
-    AssertTextVisible | AssertVisualState | AssertNoul | AssertChoice | AssertScore,
+    AssertTextVisible | AssertAttribute | AssertVisualState | AssertNoul | AssertChoice | AssertScore,
     Field(discriminator="kind"),
 ]
 
