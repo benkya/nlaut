@@ -44,6 +44,7 @@ class TestIRStore:
         cases = store.load_all()
         assert {c.id for c in cases} == {
             "tc_login_001", "tc_login_002", "tc_login_003", "tc_login_004",
+            "tc_login_005",
         }
         assert store.get("tc_login_001").title.startswith("登录")
         assert store.get("tc_login_002").data_ref == "login_valid"
