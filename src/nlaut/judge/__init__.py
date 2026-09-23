@@ -14,9 +14,9 @@ register_judge("mlx-vlm", MlxVlmJudge())  # 模型懒加载，import 零开销
 
 __all__ = [
     "DeterministicJudge",
-    "MlxVlmJudge",
     "Evidence",
     "Judge",
+    "MlxVlmJudge",
     "Question",
     "RouteDecision",
     "Verdict",

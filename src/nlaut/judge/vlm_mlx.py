@@ -38,7 +38,7 @@ def confidence_from_output(output) -> float:
     """取首 token logprob 换算置信度代理；无 logprobs 时返回 0.5（不确定）。"""
     logprobs = getattr(output, "logprobs", None)
     try:
-        lp = list(logprobs)[0] if logprobs else None
+        lp = next(iter(logprobs)) if logprobs else None
         if lp is None or not math.isfinite(float(lp)):
             return 0.5
         return min(1.0, math.exp(float(lp)))

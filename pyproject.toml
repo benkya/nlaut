@@ -28,7 +28,7 @@ packages = ["src/nlaut"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-q"
+addopts = "-q -m 'not mlx'"
 markers = [
     "mlx: 需要本机 MLX 权重的真实推理集成测试（默认跳过，-m mlx 显式开启）",
 ]

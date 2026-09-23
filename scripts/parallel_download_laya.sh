@@ -14,9 +14,11 @@ for i in $(seq 0 $((N-1))); do
   START=$(( i * CHUNK ))
   if [ $i -eq $((N-1)) ]; then END=$(( TOTAL - 1 )); else END=$(( START + CHUNK - 1 )); fi
   LEN=$(( END - START + 1 ))
-  ( for r in 1 2 3 4 5; do
-      curl -sL --max-time 300 -r "${START}-${END}" -o "$BLOBDIR/parts/part_$i" "$URL"
-      [ "$(stat -f%z "$BLOBDIR/parts/part_$i" 2>/dev/null || echo 0)" -eq "$LEN" ] && break
+  ( for r in 1 2 3 4 5 6 7 8; do
+      GOT=$(stat -f%z "$BLOBDIR/parts/part_$i" 2>/dev/null || echo 0)
+      [ "$GOT" -eq "$LEN" ] && break
+      # -C - 与 -r 组合: curl 以本地已有字节数为偏移续传该区间
+      curl -sL --max-time 240 -r "${START}-${END}" -C - -o "$BLOBDIR/parts/part_$i" "$URL" 2>/dev/null || true
       sleep 2
     done ) &
   pids+=($!)

@@ -14,8 +14,8 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from nlaut.judge import Evidence, Question, route  # noqa: E402
-from nlaut.judge.vlm_mlx import MlxVlmJudge, parse_yes_no  # noqa: E402
+from nlaut.judge import Evidence, Question, route
+from nlaut.judge.vlm_mlx import MlxVlmJudge, parse_yes_no
 
 pytestmark_vlm_unit = pytest.mark.parametrize(
     ("text", "expected"),

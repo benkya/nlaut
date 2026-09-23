@@ -54,11 +54,11 @@ def yes_no(output) -> bool:
     """从 GenerationResult 或 str 中提取 yes/no。模型输出对象不是字符串——首版 bug。"""
     text = getattr(output, "text", None) or str(output)
     t = text.strip().lower()
-    return t.startswith("yes") or t.startswith("true") or t.split()[:1] == ["yes"]
+    return t.startswith(("yes", "true")) or t.split()[:1] == ["yes"]
 
 
 def main() -> None:
-    from mlx_vlm import load, generate
+    from mlx_vlm import generate, load
     from mlx_vlm.prompt_utils import apply_chat_template
     from mlx_vlm.utils import load_config, load_image
 
