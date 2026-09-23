@@ -9,3 +9,6 @@ login_lock_demo:
   user: testlock
   wrong_pwd: "Wrong@999"
   right_pwd: "Lock@123"
+login_ghost_user:
+  ghost_user: "no_such_user_9f3e"
+  any_pwd: "Whatever@123"
