@@ -1,0 +1,27 @@
+id: tc_login_006
+title: 登录-正确密码-成功进入工作台
+source: "口述: 用正确的用户名密码登录，可以正常登录"
+req_ref: null
+priority: P0
+channel: web
+quad:
+  actor: 登录页
+  action: 提交正确用户名和密码
+  object: 登录表单
+  preconditions:
+    - "用户 $user 存在且启用"
+data_ref: login_valid
+steps:
+  - {action: nav, path: "/login"}
+  - {action: fill, selector: "#username", value: "$user"}
+  - {action: fill, selector: "#password", value: "$pwd"}
+  - {action: click, selector: "button[type=submit]"}
+  - {action: wait_visible, selector: ".banner", timeout_ms: 5000}
+assertions:
+  - kind: text_visible
+    selector: ".banner"
+    expected: "登录成功"
+  - kind: visual_state
+    prompt: "页面是否呈现登录成功状态（出现欢迎横幅与工作台菜单，且没有错误提示）？只答 yes 或 no。"
+    threshold: 0.9
+postconditions: []
