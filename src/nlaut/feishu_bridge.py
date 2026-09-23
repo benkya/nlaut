@@ -79,8 +79,7 @@ def fetch_pending(token: str) -> list[dict]:
         if resp.get("code") != 0:
             raise RuntimeError(f"拉取记录失败: {resp.get('msg')}")
         data = resp["data"]
-        for item in data.get("items", []):
-            rows.append(item)
+        rows.extend(data.get("items", []))
         if not data.get("has_more"):
             break
         page_token = data.get("page_token", "")
@@ -181,7 +180,6 @@ def process_once(token: str, repo_dir: Path, dry_run: bool = False) -> list[dict
         rid = item["record_id"]
         verbal = f.get("口述内容", "")
         status = (f.get("状态") or "").strip()
-        priority = (f.get("优先级") or "").strip()
 
         # 需澄清行：已有 AI 追问，跳过（等提出人补充）
         if status == "需澄清":
@@ -214,21 +212,90 @@ def process_once(token: str, repo_dir: Path, dry_run: bool = False) -> list[dict
                     "--case", case_file.stem,
                 ]
                 env = {**os.environ, "NO_PROXY": "127.0.0.1,localhost"}
-                proc = subprocess.run(cmd, cwd=repo_dir, env=env,
+                proc = subprocess.run(cmd, cwd=repo_dir, env=env, check=False,
                                       capture_output=True, text=True, timeout=600)
                 summary = proc.stdout[-600:] if proc.stdout else proc.stderr[-600:]
                 ok = proc.returncode == 0
+                report_loc = publish_report(token, repo_dir, case_file.stem)
                 update_record(token, rid, {
                     "状态": "已完成" if ok else "失败",
                     "执行结果": summary,
+                    "报告位置": report_loc,
                 })
-                actions.append({"record_id": rid, "action": "executed", "ok": ok})
+                actions.append({"record_id": rid, "action": "executed", "ok": ok, "report": report_loc})
             else:
-                update_record("token", rid, {"状态": "需澄清", "AI追问": "未找到对应 IR 文件，请确认草案已入库。"})
+                update_record(token, rid, {"状态": "需澄清", "AI追问": "未找到对应 IR 文件，请确认草案已入库。"})
             continue
 
         # 待审核 → 等人改状态，不动
     return actions
+
+
+# ---------------------------------------------------------------- 报告分发
+CHAT_ID = "oc_f0ad8ca94fed6bcb6a1990d0889617bd"  # 「nlaut 测试自动化通知」群
+
+
+def publish_report(token: str, repo_dir: Path, case_id: str) -> str:
+    """执行后把 HTML 报告上传到飞书群并返回位置描述。
+
+    上传走 im/v1/files（multipart），随后发 file 消息进群；返回写进表格的报告位置文案。
+    失败不阻塞主流程——返回错误说明文本，链路继续。"""
+    import time as _time
+    import uuid as _uuid
+
+    report = repo_dir / "artifacts" / "report.html"
+    if not report.exists():
+        return "报告未生成（artifacts/report.html 缺失）"
+    fname = f"nlaut_report_{_time.strftime('%Y%m%d_%H%M')}_{case_id}.html"
+    try:
+        boundary = _uuid.uuid4().hex
+        body = b""
+        for k, v in [
+            ("file_type", "stream"),
+            ("file_name", fname),
+            ("file_size", str(report.stat().st_size)),
+            ("duration", "0"),
+        ]:
+            body += (
+                f'--{boundary}\r\nContent-Disposition: form-data; name="{k}"\r\n\r\n{v}\r\n'
+            ).encode()
+        body += (
+            f'--{boundary}\r\nContent-Disposition: form-data; name="file"; '
+            f'filename="{fname}"\r\nContent-Type: text/html\r\n\r\n'
+        ).encode()
+        body += report.read_bytes()
+        body += f"\r\n--{boundary}--\r\n".encode()
+
+        req = urllib.request.Request(
+            "https://open.feishu.cn/open-apis/im/v1/files",
+            data=body,
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": f"multipart/form-data; boundary={boundary}",
+            },
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=30, context=_CTX) as resp:
+            up = json.loads(resp.read())
+        if up.get("code") != 0:
+            return f"报告上传失败: {str(up.get('msg'))[:60]}"
+        file_key = up["data"]["file_key"]
+
+        msg = _call(
+            "POST",
+            f"{_BASE}/im/v1/messages?receive_id_type=chat_id",
+            {
+                "receive_id": CHAT_ID,
+                "msg_type": "file",
+                "content": json.dumps({"file_key": file_key}),
+            },
+            token,
+        )
+        if msg.get("code") != 0:
+            return f"报告消息发送失败: {str(msg.get('msg'))[:60]}"
+        return f"群「nlaut 测试自动化通知」: {fname}"
+    except Exception as e:  # noqa: BLE001
+        return f"报告分发异常: {e}"
 
 
 def draft_id_from(fields: dict) -> str:
