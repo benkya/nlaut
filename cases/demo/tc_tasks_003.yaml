@@ -1,0 +1,29 @@
+id: tc_tasks_003
+title: 任务列表-空结果-提示未找到匹配任务
+source: "口述: 搜一个不存在的关键词，应该提示没有找到，而不是报错或空白"
+req_ref: null
+priority: P1
+channel: web
+quad:
+  actor: 任务列表页
+  action: 搜索不存在关键词
+  object: 搜索框与空态提示
+  preconditions: []
+data_ref: null
+steps:
+  - {action: nav, path: "/tasks"}
+  - {action: wait_visible, selector: "#kw", timeout_ms: 5000}
+  - {action: fill, selector: "#kw", value: "不存在的关键词xyz"}
+  - {action: click, selector: "#btn-search"}
+  - {action: wait_visible, selector: ".empty-tip", timeout_ms: 5000}
+assertions:
+  - kind: text_visible
+    selector: ".empty-tip"
+    expected: "未找到匹配的任务"
+  - kind: text_visible
+    selector: ".result-count"
+    expected: "共 0 条结果"
+  - kind: visual_state
+    prompt: "任务列表搜索无结果时：页面是否显示'未找到匹配的任务'的空态提示（居中灰色文字），结果计数为 0，页面无报错无异常？只答 yes 或 no。"
+    threshold: 0.9
+postconditions: []

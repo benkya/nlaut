@@ -79,6 +79,9 @@ def execute(
                 elif step.action == "click":
                     page.click(step.selector)
                     logger(f"[{ir.id}] 步骤{idx} click {step.selector}")
+                elif step.action == "select_option":
+                    page.select_option(step.selector, resolve_vars(step.value, data))
+                    logger(f"[{ir.id}] 步骤{idx} select_option {step.selector} = {step.value}")
                 elif step.action == "wait_visible":
                     try:
                         page.wait_for_selector(

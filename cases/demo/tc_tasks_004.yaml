@@ -1,0 +1,27 @@
+id: tc_tasks_004
+title: 任务列表-下拉筛选状态-仅显示所选状态任务
+source: "口述: 筛选已完成的任务，列表里应该都是已完成状态"
+req_ref: null
+priority: P1
+channel: web
+quad:
+  actor: 任务列表页
+  action: 状态下拉筛选
+  object: 状态筛选器与结果表格
+  preconditions:
+    - "系统含 8 条已完成状态任务"
+data_ref: null
+steps:
+  - {action: nav, path: "/tasks"}
+  - {action: wait_visible, selector: "#f-status", timeout_ms: 5000}
+  - {action: select_option, selector: "#f-status", value: "已完成"}
+  - {action: click, selector: "#btn-search"}
+  - {action: wait_visible, selector: "table.task-table", timeout_ms: 5000}
+assertions:
+  - kind: text_visible
+    selector: ".result-count"
+    expected: "共 8 条结果"
+  - kind: visual_state
+    prompt: "任务列表筛选'已完成'状态后：表格中所有任务的状态列是否都显示'已完成'（绿色文字），结果计数为 8 条？只答 yes 或 no。"
+    threshold: 0.9
+postconditions: []

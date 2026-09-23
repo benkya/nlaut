@@ -31,6 +31,12 @@ class StepClick(BaseModel):
     selector: str
 
 
+class StepSelectOption(BaseModel):
+    action: Literal["select_option"]
+    selector: str
+    value: str  # 下拉选项值，支持 $var
+
+
 class StepWaitVisible(BaseModel):
     action: Literal["wait_visible"]
     selector: str
@@ -38,7 +44,7 @@ class StepWaitVisible(BaseModel):
 
 
 Step = Annotated[
-    StepNav | StepFill | StepClick | StepWaitVisible,
+    StepNav | StepFill | StepClick | StepSelectOption | StepWaitVisible,
     Field(discriminator="action"),
 ]
 

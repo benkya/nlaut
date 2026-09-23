@@ -1,0 +1,24 @@
+id: tc_tasks_001
+title: 任务列表-默认加载-30条数据分页展示
+source: "口述: 打开任务列表，应该有30条数据，第一页显示10条"
+req_ref: null
+priority: P1
+channel: web
+quad:
+  actor: 任务列表页
+  action: 直接打开列表
+  object: 任务数据表格
+  preconditions:
+    - "系统含 30 条种子任务数据"
+data_ref: null
+steps:
+  - {action: nav, path: "/tasks"}
+  - {action: wait_visible, selector: "table.task-table", timeout_ms: 5000}
+assertions:
+  - kind: text_visible
+    selector: ".result-count"
+    expected: "共 30 条结果"
+  - kind: visual_state
+    prompt: "页面是否为任务列表页：顶部有查询表单（关键词输入框+多个下拉筛选），下方为数据表格且表格有 10 行数据，底部有分页控件？只答 yes 或 no。"
+    threshold: 0.9
+postconditions: []

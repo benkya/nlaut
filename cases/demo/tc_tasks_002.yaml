@@ -1,0 +1,30 @@
+id: tc_tasks_002
+title: 任务列表-关键词搜索-结果数与内容匹配
+source: "口述: 在任务列表搜索冒烟，应该只出来冒烟测试相关的任务"
+req_ref: null
+priority: P1
+channel: web
+quad:
+  actor: 任务列表页
+  action: 关键词搜索
+  object: 搜索框与结果表格
+  preconditions:
+    - "系统含 6 条冒烟测试任务（T001/T006/T011/T016/T021/T026）"
+data_ref: null
+steps:
+  - {action: nav, path: "/tasks"}
+  - {action: wait_visible, selector: "#kw", timeout_ms: 5000}
+  - {action: fill, selector: "#kw", value: "冒烟"}
+  - {action: click, selector: "#btn-search"}
+  - {action: wait_visible, selector: "table.task-table", timeout_ms: 5000}
+assertions:
+  - kind: text_visible
+    selector: ".result-count"
+    expected: "共 6 条结果"
+  - kind: text_visible
+    selector: "table.task-table"
+    expected: "冒烟测试-001"
+  - kind: visual_state
+    prompt: "任务列表页搜索'冒烟'后：表格是否只显示冒烟测试类型的任务（结果计数显示共 6 条），且每行任务名称都包含'冒烟测试'字样？只答 yes 或 no。"
+    threshold: 0.9
+postconditions: []
