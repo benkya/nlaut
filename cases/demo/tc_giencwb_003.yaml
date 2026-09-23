@@ -1,0 +1,30 @@
+id: tc_giencwb_003
+title: 侧边栏-展开/收起切换
+source: |
+  口述: 用户点击顶部的「切换侧边栏」按钮，侧边栏应该收起或展开。
+  收起时主区占满宽度；展开时左侧能看到会话列表。
+req_ref: null
+priority: P1
+channel: web
+quad:
+  actor: 用户
+  action: 点击切换侧边栏按钮
+  object: 侧边栏可见性
+  preconditions:
+    - "应用已加载"
+    - "侧边栏默认展开状态"
+data_ref: null
+steps:
+  - {action: nav, path: "http://localhost:55978/"}
+  - {action: wait_visible, selector: '[data-testid="gien-titlebar-tabs"]', timeout_ms: 8000}
+  - {action: wait_visible, selector: 'button[aria-label="切换侧边栏"]', timeout_ms: 5000}
+  - {action: click, selector: 'button[aria-label="切换侧边栏"]'}
+  - {action: wait_visible, selector: '[data-testid="gien-titlebar-tabs"]', timeout_ms: 3000}
+assertions:
+  - kind: visual_state
+    prompt: "点击切换按钮后，左侧原本的会话列表/新会话按钮/工作目录树是否都消失了（看不到任何侧边栏内容）？只答 yes 或 no。"
+    threshold: 0.85
+  - kind: visual_state
+    prompt: "主区是否占满了更大的宽度（侧边栏收起让出空间，GIENCODER 工作台区域更宽了）？只答 yes 或 no。"
+    threshold: 0.85
+postconditions: []

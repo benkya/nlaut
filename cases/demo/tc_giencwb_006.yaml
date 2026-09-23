@@ -1,0 +1,44 @@
+id: tc_giencwb_006
+title: 侧边栏-会话列表显示历史会话
+source: |
+  口述: 左侧侧边栏的「会话区」应该展示历史会话列表，包含「展开全部 (160)」
+  按钮，并且至少能看到若干条历史会话标题（如「把我的 白盒测试和代码改动范」、
+  「百度查询戊戌变法经过」等）。
+req_ref: null
+priority: P1
+channel: web
+quad:
+  actor: 用户
+  action: 查看侧边栏的会话区
+  object: 会话列表内容
+  preconditions:
+    - "应用已加载"
+    - "侧边栏处于展开状态"
+data_ref: null
+steps:
+  - {action: nav, path: "http://localhost:55978/"}
+  - {action: wait_visible, selector: '[data-testid="sidebar-normal-mode"]', timeout_ms: 8000}
+  - {action: wait_visible, selector: 'button[aria-label="新建会话"]', timeout_ms: 5000}
+assertions:
+  - kind: text_visible
+    selector: '[data-testid="sidebar-normal-mode"]'
+    expected: "新会话"
+  - kind: text_visible
+    selector: '[data-testid="sidebar-normal-mode"]'
+    expected: "数字分身"
+  - kind: text_visible
+    selector: '[data-testid="sidebar-normal-mode"]'
+    expected: "自动化"
+  - kind: text_visible
+    selector: '[data-testid="sidebar-normal-mode"]'
+    expected: "技能 Skills"
+  - kind: text_visible
+    selector: '[data-testid="sidebar-normal-mode"]'
+    expected: "工作目录"
+  - kind: text_visible
+    selector: '[data-testid="sidebar-normal-mode"]'
+    expected: "展开全部"
+  - kind: visual_state
+    prompt: "会话区是否显示了多条历史会话标题（至少 3 条，包含相对时间如「57分钟」「5小时」）？只答 yes 或 no。"
+    threshold: 0.9
+postconditions: []
