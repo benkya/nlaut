@@ -18,12 +18,17 @@ data_ref: null
 steps:
   - {action: nav, path: "http://localhost:55978/"}
   - {action: wait_visible, selector: '[data-testid="gien-titlebar-tabs"]', timeout_ms: 8000}
+  # 测试间隔离：先回到通用工作台（确保 sidebar 按钮在正确视图中渲染）
+  - {action: click, selector: '[data-testid="gien-titlebar-tabs"] button:nth-of-type(1)'}
   - {action: wait_visible, selector: '[data-testid="sidebar-normal-mode"]', timeout_ms: 5000}
+  # 调试：sidebar 切换按钮是否在当前视图存在
+  - {action: wait_visible, selector: 'button[aria-label="切换侧边栏"]', timeout_ms: 5000}
   - {action: click, selector: 'button[aria-label="切换侧边栏"]'}
-  - {action: wait_visible, selector: '[data-testid="gien-titlebar-tabs"]', timeout_ms: 3000}
 assertions:
+  # 跨测试稳定性：直接读 .pI_x6G_frame 的 data-sidebar-collapsed 属性值
+  # 在通用工作台 (conversation) 下 click 切换侧边栏后应变为 "true"
   - kind: attribute
-    selector: 'body'
-    name: data:dsh-sidebar-collapsed
-    expected: "__ABSENT__"
+    selector: '.pI_x6G_frame'
+    name: data:sidebar-collapsed
+    expected: "true"
 postconditions: []
