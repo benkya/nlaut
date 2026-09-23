@@ -1,0 +1,10 @@
+# derived artifacts — regenerate with `make regen`
+gen/
+# execution outputs (screenshots, evidence bundles, reports)
+artifacts/
+# python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/
