@@ -1,0 +1,33 @@
+id: tc_giencwb_007
+title: 核心场景-输入prompt发送后模型开始回复
+source: |
+  口述: 这是一个 AI agent 工具，能和大模型对话。
+  在通用工作台输入 prompt 点击发送后，应该能看到模型开始流式回复（出现助手消息气泡）。
+req_ref: null
+priority: P0
+channel: web
+quad:
+  actor: 用户
+  action: 在输入框输入 prompt 并发送
+  object: 用户消息气泡 + 助手回复气泡出现
+  preconditions:
+    - "通用工作台已加载"
+    - "输入框为空"
+data_ref: null
+steps:
+  - {action: nav, path: "http://localhost:55978/"}
+  - {action: wait_visible, selector: 'textarea.uV2eYG_input', timeout_ms: 8000}
+  - {action: fill, selector: 'textarea.uV2eYG_input', value: "你好，请做一次1+1的算术并简要说明。"}
+  - {action: click, selector: 'button[aria-label="发送消息"]'}
+  - {action: wait_visible, selector: 'button[aria-label="发送消息"]', timeout_ms: 3000}
+  - {action: wait_visible, selector: 'textarea.uV2eYG_input', timeout_ms: 3000}
+assertions:
+  - kind: attribute
+    selector: 'button[aria-label="发送消息"]'
+    name: disabled
+    expected: "True"
+  - kind: attribute
+    selector: 'textarea.uV2eYG_input'
+    name: value
+    expected: ""
+postconditions: []
