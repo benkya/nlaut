@@ -29,6 +29,15 @@ cd ~/workspace/nlaut
 
 ## 怎么用
 
+### 最常用：口述让 AI 生成用例（不用写代码）
+
+对 AI 工作分身说人话即可：`"帮我生成用例：连错五次密码，账号要锁住"`，
+审核草案后说「入库执行」。完整协议见
+**[docs/verbal-to-ir-protocol.md](docs/verbal-to-ir-protocol.md)**——团队成员照
+该文档提供口述就能得到可执行用例。
+
+### 命令行（已入库用例的日常执行）
+
 | 场景 | 命令 |
 | --- | --- |
 | 跑全部（演示系统自动拉起） | `.venv/bin/python -m nlaut.cli` |
@@ -68,8 +77,10 @@ cd ~/workspace/nlaut
 ## 架构与路线图
 
 六层架构、三级判定协议、金标准回归见 [docs/architecture.md](docs/architecture.md)。
-已完成：M0 骨架、M0-poc 判定层实测（VLM 6/6、Laya 误判全被路由拦截）、**MVP 端到端**。
-未完成：M1 口述→IR 自动生成（当前由人写 IR，我在对话里辅助）、M2 IR→pytest 代码生成
+口述→IR 生成协议见 [docs/verbal-to-ir-protocol.md](docs/verbal-to-ir-protocol.md)。
+已完成：M0 骨架、M0-poc 判定层实测（VLM 6/6、Laya 误判全被路由拦截）、**MVP 端到端**、
+口述→IR 生成协议（生成层为对话 AI，`pipeline/` 自动化为 M1 计划）。
+未完成：M1 框架内自动生成、M2 IR→pytest 代码生成
 （当前运行时直接解释 IR，无 gen/ 派生代码）、Electron 通道、RAG 历史用例库。
 
 Agent 行为规范素材见 `docs/agent-conventions.md`（根 AGENTS.md 需本人执行
