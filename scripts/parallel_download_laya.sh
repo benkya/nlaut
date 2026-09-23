@@ -14,12 +14,16 @@ for i in $(seq 0 $((N-1))); do
   START=$(( i * CHUNK ))
   if [ $i -eq $((N-1)) ]; then END=$(( TOTAL - 1 )); else END=$(( START + CHUNK - 1 )); fi
   LEN=$(( END - START + 1 ))
-  ( for r in 1 2 3 4 5 6 7 8; do
+  ( for r in $(seq 1 30); do
       GOT=$(stat -f%z "$BLOBDIR/parts/part_$i" 2>/dev/null || echo 0)
-      [ "$GOT" -eq "$LEN" ] && break
-      # -C - 与 -r 组合: curl 以本地已有字节数为偏移续传该区间
-      curl -sL --max-time 240 -r "${START}-${END}" -C - -o "$BLOBDIR/parts/part_$i" "$URL" 2>/dev/null || true
-      sleep 2
+      [ "$GOT" -ge "$LEN" ] && break
+      # 显式计算剩余区间，curl 下到 .tmp 后追加（-C - 与 -r 组合会污染文件，禁用）
+      REMAIN_START=$(( START + GOT ))
+      curl -sL --max-time 240 -r "${REMAIN_START}-${END}" -o "$BLOBDIR/parts/part_$i.tmp" "$URL" 2>/dev/null || true
+      TSZ=$(stat -f%z "$BLOBDIR/parts/part_$i.tmp" 2>/dev/null || echo 0)
+      if [ "$TSZ" -gt 0 ]; then cat "$BLOBDIR/parts/part_$i.tmp" >> "$BLOBDIR/parts/part_$i" 2>/dev/null; fi
+      rm -f "$BLOBDIR/parts/part_$i.tmp"
+      sleep 1
     done ) &
   pids+=($!)
 done

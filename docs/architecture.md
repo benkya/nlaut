@@ -49,8 +49,8 @@ L6 报告层   report/（Allure/HTML + 证据链：截图/原始判定输出/置
 
 | 阶段 | 内容 | 出口标准 | 状态 |
 | --- | --- | --- | --- |
-| M0-skeleton | IR 模型 + Judge 协议 + 基础设施 + 元测试 | `make verify` 绿 | ✅ 本次交付 |
-| M0-poc | 装 mlx-vlm + laya-mlx，标注截图集实测判定 | 准确率 ≥90%，置信度与正确性正相关 | 待做 |
+| M0-skeleton | IR 模型 + Judge 协议 + 基础设施 + 元测试 | `make verify` 绿 | ✅ |
+| M0-poc | 装 mlx-vlm + laya-mlx，标注截图集实测判定 | 准确率 ≥90%，置信度与正确性正相关 | ✅ 2026-09-23 |
 | M1 | AGENTS.md + 最小 Harness + 口述→IR 闭环（人工审核） | 3 条真实口述全通过审核 | 待做 |
 | M2 | IR → pytest/Playwright 代码生成 + 验证 Loop | 生成用例可直接执行、失败自动回传修正 | 待做 |
 | M3 | 三级判定接入执行链 + 报告证据链 | AI 判定用例跑通，报告含置信度/归因 | 待做 |
