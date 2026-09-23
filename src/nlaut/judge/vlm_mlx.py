@@ -35,13 +35,23 @@ def parse_yes_no(text: str) -> bool | None:
 
 
 def confidence_from_output(output) -> float:
-    """取首 token logprob 换算置信度代理；无 logprobs 时返回 0.5（不确定）。"""
+    """从 GenerationResult.logprobs 提取置信度代理。
+
+    实测（Qwen2.5-VL-3B, temperature=0）: logprobs 形状为 (vocab_size,) 的
+    mlx.core.array——整表给出每个 token 的 logprob，贪心采样下选中 token
+    为最大值（实测 0.0 → 概率 1.0）。confidence = exp(max(logprobs))。
+    旧实现 float(list(lp)[0]) 恰好取到位置 0 的噪声值且标量转换会抛错。
+    """
+    import mlx.core as mx
+
     logprobs = getattr(output, "logprobs", None)
+    if logprobs is None:
+        return 0.5
     try:
-        lp = next(iter(logprobs)) if logprobs else None
-        if lp is None or not math.isfinite(float(lp)):
+        arr = mx.array(logprobs)
+        if arr.size == 0:
             return 0.5
-        return min(1.0, math.exp(float(lp)))
+        return min(1.0, math.exp(float(mx.max(arr))))
     except (TypeError, ValueError, IndexError):
         return 0.5
 

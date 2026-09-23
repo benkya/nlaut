@@ -42,8 +42,9 @@ class TestIRStore:
     def test_load_all_demo(self):
         store = IRStore(ROOT / "cases")
         cases = store.load_all()
-        assert {c.id for c in cases} == {"tc_login_001"}
+        assert {c.id for c in cases} == {"tc_login_001", "tc_login_002"}
         assert store.get("tc_login_001").title.startswith("登录")
+        assert store.get("tc_login_002").data_ref == "login_valid"
         assert store.get("tc_nope") is None
 
     def test_diff_ids(self, tmp_path):

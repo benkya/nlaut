@@ -6,11 +6,13 @@
 
 from .arbiter import RouteDecision, route
 from .deterministic import DeterministicJudge
+from .laya import LayaJudge
 from .protocol import Evidence, Judge, Question, Verdict, get_judge, register_judge
 from .vlm_mlx import MlxVlmJudge
 
 register_judge("deterministic", DeterministicJudge())
 register_judge("mlx-vlm", MlxVlmJudge())  # 模型懒加载，import 零开销
+register_judge("laya", LayaJudge())  # 同上：首次 judge 时才加载权重
 
 __all__ = [
     "DeterministicJudge",

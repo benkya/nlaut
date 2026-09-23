@@ -1,0 +1,7 @@
+# 测试数据集（MVP）：tag → 字段。用例经 data_ref 引用，禁止内嵌。
+login_invalid_pwd:
+  user: zhangpeng
+  wrong_pwd: "Wrong@123"
+login_valid:
+  user: zhangpeng
+  pwd: "Right@123"
