@@ -5,13 +5,26 @@ IR 中间表示保证「换模型/换通道不换框架」。
 
 ```
 L0 规范层   AGENTS.md（命令矩阵/策略/输出模板/禁止事项，≤200 行）
-L1 编排层   harness/（会话持久化 append-only JSONL、工具调用、审批、验证 Loop）
+L1 编排层   harness/session.py（append-only JSONL 会话日志，执行全程留痕可回放）
 L2 生成层   pipeline/（口述 → 意图澄清 → 四元组 → RAG → IR）
+            当前由对话 AI 承担（协议: docs/verbal-to-ir-protocol.md），pipeline/ 为 M1 自动化预留
 L3 资产层   ir/（TestCaseIR = 唯一事实源；数据工厂；快照/回滚）
 L4 执行层   executor/（双通道：Playwright web + Electron CDP；环境矩阵；flaky 统计）
 L5 判定层   judge/（三级漏斗：确定性 → mlx-vlm → laya-mlx；置信度路由）
-L6 报告层   report/（Allure/HTML + 证据链：截图/原始判定输出/置信度/输入追溯）
+L6 报告层   report/（HTML + 证据链：截图/判定明细/置信度/口述溯源内嵌）
 ```
+
+## Harness 角色映射（原设计 vs 当前实现）
+
+原三层设计里的 Harness 能力，在当前仓库的落位：
+
+| 原设计 Harness 能力 | 当前实现 | 说明 |
+| --- | --- | --- |
+| 会话持久化（append-only 日志） | `src/nlaut/harness/session.py` ✅ | CLI 每次执行自动留痕到 `artifacts/session/run.jsonl`：run_start → data_loaded → assertion_judged×N → run_end，可回放审计 |
+| 工具调用 | `executor/` + `judge/`（执行与判定工具） | Python API 形态；对话 AI 的 terminal/write_file 也是工具调用 |
+| 审批策略 | git 卡点 + P0 人工确认 + 对话确认（「入库执行」） | 代码化审批位在 M1（飞书表格模式 A 的「张鹏批准」列） |
+| 任务拆解 Todo | 对话 AI 承担（口述→草案→确认→执行→报告 的五步） | M1 自动化时进 pipeline/ |
+| 验证 Loop（失败回传修正） | pytest 回归 + 金标准回归（`-m mlx`） | 生成式 Loop 在 M2（失败断言回传重生成） |
 
 ## 数据流
 

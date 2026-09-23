@@ -59,14 +59,24 @@ def run_case(
     headless: bool = True,
     use_vlm: bool = True,
     logger=print,
+    session_log=None,
 ) -> dict:
-    """执行单条用例并完成三级判定，返回完整结果记录。"""
+    """执行单条用例并完成三级判定，返回完整结果记录。
+
+    session_log: 可选 SessionLog——传入则每次执行全程留痕（harness 层审计材料），
+    append-only JSONL 可回放。"""
     from ..ir.datafactory import DataFactory
     from ..judge import Evidence, route
     from ..judge.protocol import get_judge
 
+    def _log(event: dict) -> None:
+        if session_log is not None:
+            session_log.record({"case_id": ir.id, **event})
+
+    _log({"event": "run_start", "title": ir.title, "channel": ir.channel})
     if data is None and ir.data_ref:
         data = DataFactory().build(ir.data_ref)
+        _log({"event": "data_loaded", "data_ref": ir.data_ref})
 
     t0 = time.time()
     ev_kw = web.execute(
@@ -88,6 +98,14 @@ def run_case(
         t1 = time.time()
         verdict = judge.judge(evidence, _question_for(a, ir))
         decision = route(verdict, threshold=getattr(a, "threshold", 0.9))
+        _log({
+            "event": "assertion_judged",
+            "assertion": a.kind,
+            "engine": verdict.engine,
+            "value": float(verdict.value) if isinstance(verdict.value, (int, float)) else str(verdict.value),
+            "confidence": verdict.confidence,
+            "status": decision.status,
+        })
         results.append({
             "assertion": a.kind,
             "engine": verdict.engine,
@@ -109,6 +127,7 @@ def run_case(
     else:
         case_status = "passed"
 
+    _log({"event": "run_end", "status": case_status, "duration_s": round(time.time() - t0, 1)})
     return {
         "case_id": ir.id,
         "title": ir.title,
@@ -138,11 +157,21 @@ def _apply_postconditions(ir: TestCaseIR) -> None:
 def run_store(
     store: IRStore | None = None,
     case_ids: list[str] | None = None,
+    session_log_path: str | Path | None = None,
     **kwargs,
 ) -> list[dict]:
-    """跑整个 IR 库（或指定 id），返回结果列表。"""
+    """跑整个 IR 库（或指定 id），返回结果列表。
+
+    session_log_path: 传入则创建 SessionLog，全程留痕到 artifacts/session/。"""
     store = store or IRStore(Path("cases"))
     logger = kwargs.pop("logger", print)
+    session_log = None
+    if session_log_path:
+        from ..harness.session import SessionLog
+
+        Path(session_log_path).parent.mkdir(parents=True, exist_ok=True)
+        session_log = SessionLog(session_log_path)
+    kwargs["session_log"] = session_log
     results = []
     for ir in store.load_all():
         if case_ids and ir.id not in case_ids:

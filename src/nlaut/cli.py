@@ -48,6 +48,7 @@ def main() -> int:
         base_url=args.base_url,
         use_vlm=not args.no_vlm,
         headless=not args.headed,
+        session_log_path="artifacts/session/run.jsonl",
     )
 
     for r in results:
