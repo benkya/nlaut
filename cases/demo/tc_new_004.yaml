@@ -1,0 +1,27 @@
+id: tc_new_004
+title: 新增-名称超长-提示长度限制
+source: "口述: 新增任务名字填超长的，应该提示不能超过限制长度，不能创建"
+req_ref: null
+priority: P1
+channel: web
+quad:
+  actor: 新增任务表单
+  action: 超长名称提交
+  object: 表单长度校验
+  preconditions:
+    - "名称长度限制为 40 字符"
+data_ref: task_new_longname
+steps:
+  - {action: nav, path: "/tasks/new"}
+  - {action: wait_visible, selector: "#t-name", timeout_ms: 5000}
+  - {action: fill, selector: "#t-name", value: "$long_name"}
+  - {action: click, selector: "#btn-submit"}
+  - {action: wait_visible, selector: ".error-msg", timeout_ms: 5000}
+assertions:
+  - kind: text_visible
+    selector: ".error-msg"
+    expected: "不能超过 40"
+  - kind: visual_state
+    prompt: "新增任务输入超过 40 字符的超长名称并保存：页面是否显示'任务名称不能超过 40 个字符'的错误提示，任务未被创建？只答 yes 或 no。"
+    threshold: 0.9
+postconditions: []

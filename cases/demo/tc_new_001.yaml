@@ -1,0 +1,33 @@
+id: tc_new_001
+title: 新增-正常保存-新任务出现在列表
+source: "口述: 新增一个任务，填好名称，保存成功后应该能在列表里看到它"
+req_ref: null
+priority: P1
+channel: web
+quad:
+  actor: 新增任务表单
+  action: 填写并保存新任务
+  object: 任务表单与列表
+  preconditions:
+    - "种子数据 30 条，新任务编号应为 T031"
+data_ref: task_new_normal
+steps:
+  - {action: nav, path: "/tasks/new"}
+  - {action: wait_visible, selector: "#t-name", timeout_ms: 5000}
+  - {action: fill, selector: "#t-name", value: "$name"}
+  - {action: select_option, selector: "#t-type", value: "$type"}
+  - {action: select_option, selector: "#t-owner", value: "$owner"}
+  - {action: click, selector: "#btn-submit"}
+  - {action: wait_visible, selector: "table.task-table", timeout_ms: 5000}
+assertions:
+  - kind: text_visible
+    selector: "table.task-table"
+    expected: "回归验证-新增用例"
+  - kind: text_visible
+    selector: ".result-count"
+    expected: "共 1 条结果"
+  - kind: visual_state
+    prompt: "保存新任务后跳回列表：表格是否显示名称含'回归验证'的任务行？只答 yes 或 no。"
+    threshold: 0.9
+postconditions:
+  - {cleanup_tag: RESET_TASKS}

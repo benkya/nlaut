@@ -1,0 +1,27 @@
+id: tc_new_003
+title: 新增-名称重复-提示已存在并保留输入
+source: "口述: 新增一个和已有任务同名的任务，应该提示名称已存在，不能创建重复任务"
+req_ref: null
+priority: P1
+channel: web
+quad:
+  actor: 新增任务表单
+  action: 重复名称提交
+  object: 表单查重校验
+  preconditions:
+    - "种子数据已含'冒烟测试-001'"
+data_ref: null
+steps:
+  - {action: nav, path: "/tasks/new"}
+  - {action: wait_visible, selector: "#t-name", timeout_ms: 5000}
+  - {action: fill, selector: "#t-name", value: "冒烟测试-001"}
+  - {action: click, selector: "#btn-submit"}
+  - {action: wait_visible, selector: ".error-msg", timeout_ms: 5000}
+assertions:
+  - kind: text_visible
+    selector: ".error-msg"
+    expected: "已存在"
+  - kind: visual_state
+    prompt: "新增任务输入与已有任务相同的名称'冒烟测试-001'并保存：页面是否显示'任务名称已存在'类错误提示，输入框中保留了用户输入的名称？只答 yes 或 no。"
+    threshold: 0.9
+postconditions: []

@@ -1,0 +1,25 @@
+id: tc_new_002
+title: 新增-名称为空-提示必填不保存
+source: "口述: 新增任务不填名字直接保存，应该提示要填名称，任务不能被创建"
+req_ref: null
+priority: P1
+channel: web
+quad:
+  actor: 新增任务表单
+  action: 空名称提交
+  object: 表单校验
+  preconditions: []
+data_ref: null
+steps:
+  - {action: nav, path: "/tasks/new"}
+  - {action: wait_visible, selector: "#t-name", timeout_ms: 5000}
+  - {action: click, selector: "#btn-submit"}
+  - {action: wait_visible, selector: ".error-msg", timeout_ms: 5000}
+assertions:
+  - kind: text_visible
+    selector: ".error-msg"
+    expected: "请输入任务名称"
+  - kind: visual_state
+    prompt: "新增任务不填名称直接保存：页面是否停留在表单页并显示'请输入任务名称'的红色错误提示，没有跳转到列表？只答 yes 或 no。"
+    threshold: 0.9
+postconditions: []

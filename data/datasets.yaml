@@ -12,3 +12,9 @@ login_lock_demo:
 login_ghost_user:
   ghost_user: "no_such_user_9f3e"
   any_pwd: "Whatever@123"
+task_new_normal:
+  name: "回归验证-新增用例"
+  type: "回归测试"
+  owner: "张鹏"
+task_new_longname:
+  long_name: "超长任务名称验证用例超长任务名称验证用例超长任务名称验证用超长任务名称验证用例超长任务名称验"

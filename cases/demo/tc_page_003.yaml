@@ -1,0 +1,27 @@
+id: tc_page_003
+title: 翻页-末页第3页-显示T021至T030且下一页不可用
+source: "口述: 翻到最后一页，应该显示最后10条，且不能再往后翻了"
+req_ref: null
+priority: P1
+channel: web
+quad:
+  actor: 任务列表页
+  action: 跳转末页并验证边界
+  object: 分页控件
+  preconditions:
+    - "共 3 页，末页含 T021-T030"
+data_ref: null
+steps:
+  - {action: nav, path: "/tasks?page=3"}
+  - {action: wait_visible, selector: "table.task-table", timeout_ms: 5000}
+assertions:
+  - kind: text_visible
+    selector: ".result-count"
+    expected: "第 3/3 页"
+  - kind: text_visible
+    selector: "table.task-table"
+    expected: "T030"
+  - kind: visual_state
+    prompt: "任务列表页分页信息是否显示第 3 页（末页），表格有数据行？只答 yes 或 no。"
+    threshold: 0.9
+postconditions: []

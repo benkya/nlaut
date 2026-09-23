@@ -163,6 +163,7 @@ def _render_tasks(rows: list[dict], total: int, page: int, kw: str = "",
  <select id="f-type" name="type">{opt(ttype, TASK_TYPES)}</select>
  <button id="btn-search" type="submit" class="btn-search">查 询</button>
  <a class="nav-link" href="/tasks">重置</a>
+ <a class="nav-link" href="/tasks/new" id="lnk-new">+ 新增任务</a>
 </form>
 <p class="result-count">共 <b id="total">{total}</b> 条结果 · 第 <b id="page">{page}</b>/{max(1, (total + 9) // 10)} 页</p>
 <table class="task-table">
@@ -196,6 +197,34 @@ def _filter_tasks(q: dict) -> tuple[list[dict], int]:
     return rows[(page - 1) * 10:page * 10], total
 
 
+def reset_tasks() -> None:
+    """恢复种子任务数据（测试后置钩子，保证用例可重复执行）。"""
+    TASKS[:] = _seed_tasks()
+
+
+def _render_task_form(error: str = "", name: str = "") -> str:
+    """渲染新增任务表单页（含错误提示回显）。"""
+    def opts(cur: str, vals: list[str]) -> str:
+        s = ""
+        for v in vals:
+            sel = " selected" if v == cur else ""
+            s += f"<option value='{v}'{sel}>{v}</option>"
+        return s
+
+    err_html = f"<div class='error-msg'>⚠ {error}</div>" if error else ""
+    return f"""
+<h1>新增任务</h1>
+{err_html}
+<form id="task-form" method="POST" action="/tasks/new">
+ <label for="t-name">任务名称</label><input id="t-name" name="name" type="text" value="{name}" autocomplete="off">
+ <label for="t-type">类型</label><select id="t-type" name="type">{opts(TASK_TYPES[4], TASK_TYPES)}</select>
+ <label for="t-owner">负责人</label><select id="t-owner" name="owner">{opts(TASK_OWNERS[0], TASK_OWNERS)}</select>
+ <label for="f-new-status">状态</label><select id="f-new-status" name="status">{opts("待启动", TASK_STATUSES)}</select>
+ <button id="btn-submit" type="submit">保 存</button>
+</form>
+<p style='text-align:center;margin-top:14px'><a class='nav-link' href='/tasks'>← 返回任务列表</a></p>"""
+
+
 class Handler(http.server.BaseHTTPRequestHandler):
     def log_message(self, format, *a):
         pass
@@ -220,6 +249,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         if self.path in ("/", "/login"):
             self._page(LOGIN_FORM)
+        elif self.path.startswith("/tasks/new"):
+            self._page(_render_task_form())
         elif self.path.startswith("/tasks"):
             parsed = urllib.parse.urlparse(self.path)
             q = urllib.parse.parse_qs(parsed.query)
@@ -237,6 +268,40 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._page("<h1>404 页面不存在</h1>", code=404)
 
     def do_POST(self) -> None:
+        if self.path == "/tasks/new":
+            length = int(self.headers.get("Content-Length", 0))
+            form = urllib.parse.parse_qs(self.rfile.read(length).decode("utf-8"))
+            name = (form.get("name") or [""])[0].strip()
+            ttype = (form.get("type") or [TASK_TYPES[0]])[0]
+            owner = (form.get("owner") or [TASK_OWNERS[0]])[0]
+            status = (form.get("status") or ["待启动"])[0]
+
+            # 校验1: 名称必填
+            if not name:
+                self._page(_render_task_form(error="请输入任务名称", name=name))
+                return
+            # 校验2: 名称查重（与已有任务同名则拒绝）
+            if any(t["name"] == name for t in TASKS):
+                self._page(_render_task_form(error=f"任务名称「{name}」已存在，请换一个", name=name))
+                return
+            # 校验3: 名称长度（真实业务约束）
+            if len(name) > 40:
+                self._page(_render_task_form(error="任务名称不能超过 40 个字符", name=name))
+                return
+
+            # 保存: 新 id = T+序号（种子数据是 T001-T030，新增从 T031 起）
+            new_id = f"T{len(TASKS) + 1:03d}"
+            TASKS.append({
+                "id": new_id, "name": name, "type": ttype,
+                "owner": owner, "status": status,
+                "date": time.strftime("%Y-%m-%d"),
+            })
+            # 保存成功 → 跳回列表并高亮新任务（kw=新名称，第1页必含）
+            self.send_response(302)
+            self.send_header("Location", f"/tasks?kw={urllib.parse.quote(name)}")
+            self.end_headers()
+            return
+
         if self.path != "/login":
             self._page("<h1>404</h1>", code=404)
             return

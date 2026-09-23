@@ -1,0 +1,27 @@
+id: tc_page_001
+title: 翻页-第1页默认-显示T001至T010
+source: "口述: 打开任务列表默认第1页，应该显示前10条，从T001开始"
+req_ref: null
+priority: P1
+channel: web
+quad:
+  actor: 任务列表页
+  action: 查看默认分页
+  object: 分页控件与表格
+  preconditions:
+    - "30 条种子数据，10 条/页"
+data_ref: null
+steps:
+  - {action: nav, path: "/tasks"}
+  - {action: wait_visible, selector: "table.task-table", timeout_ms: 5000}
+assertions:
+  - kind: text_visible
+    selector: ".result-count"
+    expected: "第 1/3 页"
+  - kind: text_visible
+    selector: "table.task-table"
+    expected: "T001"
+  - kind: visual_state
+    prompt: "页面是否为任务列表页：有查询表单、数据表格和分页控件，分页信息显示第 1 页？只答 yes 或 no。"
+    threshold: 0.9
+postconditions: []

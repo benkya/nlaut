@@ -1,0 +1,27 @@
+id: tc_query_004
+title: 查询-按类型筛选-结果全部属于该类型
+source: "口述: 筛选接口测试的任务，出来的应该全是接口测试"
+req_ref: null
+priority: P1
+channel: web
+quad:
+  actor: 任务列表页
+  action: 按类型下拉筛选
+  object: 类型筛选器与结果表格
+  preconditions:
+    - "系统含 6 条接口测试任务（T003/T008/T013/T018/T023/T028）"
+data_ref: null
+steps:
+  - {action: nav, path: "/tasks"}
+  - {action: wait_visible, selector: "#f-type", timeout_ms: 5000}
+  - {action: select_option, selector: "#f-type", value: "接口测试"}
+  - {action: click, selector: "#btn-search"}
+  - {action: wait_visible, selector: "table.task-table", timeout_ms: 5000}
+assertions:
+  - kind: text_visible
+    selector: ".result-count"
+    expected: "共 6 条结果"
+  - kind: visual_state
+    prompt: "任务列表筛选'接口测试'类型后：表格中所有任务的类型列是否都显示'接口测试'，结果计数为 6 条？只答 yes 或 no。"
+    threshold: 0.9
+postconditions: []

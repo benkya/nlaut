@@ -1,0 +1,29 @@
+id: tc_page_002
+title: 翻页-下一页到第2页-显示T011至T020
+source: "口述: 点下一页翻到第2页，应该显示T011到T020这十条"
+req_ref: null
+priority: P1
+channel: web
+quad:
+  actor: 任务列表页
+  action: 点击下一页
+  object: 分页控件
+  preconditions:
+    - "当前在第 1 页"
+data_ref: null
+steps:
+  - {action: nav, path: "/tasks"}
+  - {action: wait_visible, selector: "table.task-table", timeout_ms: 5000}
+  - {action: click, selector: "a[href*='page=2']"}
+  - {action: wait_visible, selector: "table.task-table", timeout_ms: 5000}
+assertions:
+  - kind: text_visible
+    selector: ".result-count"
+    expected: "第 2/3 页"
+  - kind: text_visible
+    selector: "table.task-table"
+    expected: "T011"
+  - kind: visual_state
+    prompt: "任务列表页分页信息是否显示第 2 页，表格有数据行？只答 yes 或 no。"
+    threshold: 0.9
+postconditions: []

@@ -1,0 +1,30 @@
+id: tc_query_001
+title: 查询-按任务名称搜索精确词-结果数与内容匹配
+source: "口述: 在任务列表搜索'性能测试'，应该只出来性能测试相关的任务，数量要对"
+req_ref: null
+priority: P1
+channel: web
+quad:
+  actor: 任务列表页
+  action: 按名称关键词搜索
+  object: 搜索框与结果表格
+  preconditions:
+    - "系统含 6 条性能测试任务（T005/T010/T015/T020/T025/T030）"
+data_ref: null
+steps:
+  - {action: nav, path: "/tasks"}
+  - {action: wait_visible, selector: "#kw", timeout_ms: 5000}
+  - {action: fill, selector: "#kw", value: "性能测试"}
+  - {action: click, selector: "#btn-search"}
+  - {action: wait_visible, selector: "table.task-table", timeout_ms: 5000}
+assertions:
+  - kind: text_visible
+    selector: ".result-count"
+    expected: "共 6 条结果"
+  - kind: text_visible
+    selector: "table.task-table"
+    expected: "性能测试-004"
+  - kind: visual_state
+    prompt: "任务列表页搜索'性能测试'后：表格是否只显示性能测试类型的任务（每行任务名称都包含'性能测试'字样）？只答 yes 或 no。"
+    threshold: 0.9
+postconditions: []

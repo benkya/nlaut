@@ -1,0 +1,30 @@
+id: tc_query_002
+title: 查询-按任务编号搜索-精确定位单条任务
+source: "口述: 搜任务编号 T017，应该就出来那一条"
+req_ref: null
+priority: P1
+channel: web
+quad:
+  actor: 任务列表页
+  action: 按编号搜索
+  object: 搜索框与结果表格
+  preconditions:
+    - "T017 存在于种子数据（安全测试-017，王言，进行中）"
+data_ref: null
+steps:
+  - {action: nav, path: "/tasks"}
+  - {action: wait_visible, selector: "#kw", timeout_ms: 5000}
+  - {action: fill, selector: "#kw", value: "T017"}
+  - {action: click, selector: "#btn-search"}
+  - {action: wait_visible, selector: "table.task-table", timeout_ms: 5000}
+assertions:
+  - kind: text_visible
+    selector: ".result-count"
+    expected: "共 1 条结果"
+  - kind: text_visible
+    selector: "table.task-table"
+    expected: "回归测试-017"
+  - kind: visual_state
+    prompt: "任务列表搜索'T017'后：表格是否只显示一行编号为 T017 的任务？只答 yes 或 no。"
+    threshold: 0.9
+postconditions: []

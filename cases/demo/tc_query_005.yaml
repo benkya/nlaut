@@ -1,0 +1,31 @@
+id: tc_query_005
+title: 查询-组合筛选状态加类型-两个条件同时生效
+source: "口述: 同时筛选已完成和接口测试，结果要同时满足两个条件，不能只满足一个"
+req_ref: null
+priority: P1
+channel: web
+quad:
+  actor: 任务列表页
+  action: 组合筛选（状态+类型）
+  object: 状态与类型筛选器
+  preconditions:
+    - "已完成+接口测试的交集为 2 条（T008 和 T028）"
+data_ref: null
+steps:
+  - {action: nav, path: "/tasks"}
+  - {action: wait_visible, selector: "#f-status", timeout_ms: 5000}
+  - {action: select_option, selector: "#f-status", value: "已完成"}
+  - {action: select_option, selector: "#f-type", value: "接口测试"}
+  - {action: click, selector: "#btn-search"}
+  - {action: wait_visible, selector: "table.task-table", timeout_ms: 5000}
+assertions:
+  - kind: text_visible
+    selector: ".result-count"
+    expected: "共 1 条结果"
+  - kind: text_visible
+    selector: "table.task-table"
+    expected: "接口测试-018"
+  - kind: visual_state
+    prompt: "任务列表组合筛选'已完成'状态和'接口测试'类型后：表格是否只显示一行任务（T018），且该行状态列为已完成、类型列为接口测试？只答 yes 或 no。"
+    threshold: 0.9
+postconditions: []

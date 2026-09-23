@@ -152,6 +152,14 @@ def _apply_postconditions(ir: TestCaseIR) -> None:
                 reset_lock_state()
             except ImportError:
                 print(f"[{ir.id}] 后置钩子跳过: demo_app 不可导入")
+        elif tag == "RESET_TASKS":
+            sys.path.insert(0, str(ROOT / "tests"))
+            try:
+                from demo_app import reset_tasks
+
+                reset_tasks()
+            except ImportError:
+                print(f"[{ir.id}] 后置钩子跳过: demo_app 不可导入")
 
 
 def run_store(

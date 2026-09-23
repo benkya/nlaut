@@ -79,6 +79,12 @@ def execute(
                 elif step.action == "click":
                     page.click(step.selector)
                     logger(f"[{ir.id}] 步骤{idx} click {step.selector}")
+                    # click 可能触发整页导航（a 链接/表单）——等 load 完成再继续，
+                    # 避免后续步骤/截图截到跳转前的旧页面（竞态）
+                    try:
+                        page.wait_for_load_state("load", timeout=3000)
+                    except Exception as nav_err:  # noqa: BLE001 — SPA 无导航时超时属正常
+                        logger(f"[{ir.id}] click 后等待 load 超时（无导航，继续）: {type(nav_err).__name__}")
                 elif step.action == "select_option":
                     page.select_option(step.selector, resolve_vars(step.value, data))
                     logger(f"[{ir.id}] 步骤{idx} select_option {step.selector} = {step.value}")

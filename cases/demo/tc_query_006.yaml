@@ -1,0 +1,29 @@
+id: tc_query_006
+title: 查询-关键词与筛选共存-重置后恢复全量
+source: "口述: 先搜个词再筛选，然后点重置，应该回到30条全部数据"
+req_ref: null
+priority: P1
+channel: web
+quad:
+  actor: 任务列表页
+  action: 条件查询后重置
+  object: 查询表单与重置链接
+  preconditions: []
+data_ref: null
+steps:
+  - {action: nav, path: "/tasks"}
+  - {action: wait_visible, selector: "#kw", timeout_ms: 5000}
+  - {action: fill, selector: "#kw", value: "冒烟"}
+  - {action: select_option, selector: "#f-status", value: "已完成"}
+  - {action: click, selector: "#btn-search"}
+  - {action: wait_visible, selector: "table.task-table", timeout_ms: 5000}
+  - {action: click, selector: "a[href='/tasks']"}
+  - {action: wait_visible, selector: "table.task-table", timeout_ms: 5000}
+assertions:
+  - kind: text_visible
+    selector: ".result-count"
+    expected: "共 30 条结果"
+  - kind: visual_state
+    prompt: "页面是否显示任务列表（表格有多行数据），且搜索输入框里没有用户输入的文字？只答 yes 或 no。"
+    threshold: 0.9
+postconditions: []
