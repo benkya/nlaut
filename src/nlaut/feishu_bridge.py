@@ -313,15 +313,26 @@ def process_once(token: str, repo_dir: Path, dry_run: bool = False) -> list[dict
         if status == "需澄清":
             continue
 
-        # 待生成 → 草案
+        # 待生成 → 草案 + 真实入库到 cases/（让 cases/ 成为唯一事实源）
         if status == "待生成" or status == "":
             draft = draft_from_verbal(verbal, f.get("被测系统", ""))
             if draft:
+                yaml_text = ir_yaml(draft)
+                # 真正写入 cases/demo/<id>.yaml（AGENTS.md 要求的唯一事实源）
+                case_path = repo_dir / "cases" / "demo" / f"{draft['id']}.yaml"
+                case_path.parent.mkdir(parents=True, exist_ok=True)
+                case_path.write_text(yaml_text + "\n", encoding="utf-8")
                 update_record(token, rid, {
-                    "IR草案": ir_yaml(draft),
+                    "IR草案": yaml_text,
                     "状态": "待审核",
+                    "AI追问": f"✓ IR 已入库到 {case_path.relative_to(repo_dir)}",
                 })
-                actions.append({"record_id": rid, "action": "drafted", "verbal": verbal[:30]})
+                actions.append({
+                    "record_id": rid,
+                    "action": "drafted",
+                    "verbal": verbal[:30],
+                    "case_file": str(case_path.relative_to(repo_dir)),
+                })
             else:
                 # 文案澄清：诚实说明是模板覆盖度问题，不是用户口述问题
                 update_record(token, rid, {
@@ -331,32 +342,43 @@ def process_once(token: str, repo_dir: Path, dry_run: bool = False) -> list[dict
                 actions.append({"record_id": "..", "action": "clarify_needed", "verbal": verbal[:30]})
             continue
 
-        # 已确认 → 执行
+        # 已确认 → 执行（找不到文件时兜底从表格落盘）
         if status == "已确认":
             case_file = repo_dir / "cases" / "demo" / f"{draft_id_from(f)}.yaml"
-            if case_file.exists():
-                update_record(token, rid, {"状态": "执行中"})
-                cmd = [
-                    str(repo_dir / ".venv/bin/python"), "-m", "nlaut.cli",
-                    "--case", case_file.stem,
-                ]
-                env = {**os.environ, "NO_PROXY": "127.0.0.1,localhost"}
-                proc = subprocess.run(cmd, cwd=repo_dir, env=env, check=False,
-                                      capture_output=True, text=True, timeout=600)
-                summary = proc.stdout[-600:] if proc.stdout else proc.stderr[-600:]
-                ok = proc.returncode == 0
-                report_loc = publish_report(token, repo_dir, case_file.stem)
-                update_record(token, rid, {
-                    "状态": "已完成" if ok else "失败",
-                    "执行结果": summary,
-                    "报告位置": report_loc,
-                })
-                actions.append({"record_id": rid, "action": "executed", "ok": ok, "report": report_loc})
-            else:
-                update_record(token, rid, {"状态": "需澄清", "AI追问": "未找到对应 IR 文件，请确认草案已入库。"})
+            if not case_file.exists():
+                # 兜底：把表格里的草案文本直接落盘（旧版本曾漏写，给个自愈机会）
+                if f.get("IR草案"):
+                    case_file.parent.mkdir(parents=True, exist_ok=True)
+                    case_file.write_text(f["IR草案"], encoding="utf-8")
+                    update_record(token, rid, {
+                        "AI追问": f"⚠️ IR 之前没自动入库，刚补写到 {case_file.relative_to(repo_dir)}。下面立即执行一次。",
+                    })
+                else:
+                    update_record(token, rid, {
+                        "状态": "需澄清",
+                        "AI追问": "⚠️ 状态是「已确认」但仓库里找不到 IR 文件，且表格没有 IR草案可兜底。请把状态改回「待审核」等下一轮扫描，或在对话里跟我说一声重新生成。",
+                    })
+                    continue
+            # 至此 case_file 必然存在——执行
+            update_record(token, rid, {"状态": "执行中"})
+            cmd = [
+                str(repo_dir / ".venv/bin/python"), "-m", "nlaut.cli",
+                "--case", case_file.stem,
+            ]
+            env = {**os.environ, "NO_PROXY": "127.0.0.1,localhost"}
+            proc = subprocess.run(cmd, cwd=repo_dir, env=env, check=False,
+                                  capture_output=True, text=True, timeout=600)
+            summary = proc.stdout[-600:] if proc.stdout else proc.stderr[-600:]
+            ok = proc.returncode == 0
+            report_loc = publish_report(token, repo_dir, case_file.stem)
+            update_record(token, rid, {
+                "状态": "已完成" if ok else "失败",
+                "执行结果": summary,
+                "报告位置": report_loc,
+            })
+            actions.append({"record_id": rid, "action": "executed", "ok": ok, "report": report_loc})
             continue
 
-        # 待审核 → 等人改状态，不动
     return actions
 
 

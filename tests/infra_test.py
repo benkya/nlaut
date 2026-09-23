@@ -46,6 +46,7 @@ class TestIRStore:
             "tc_login_001", "tc_login_002", "tc_login_003", "tc_login_004",
             "tc_login_005", "tc_login_006",
             "tc_tasks_001", "tc_tasks_002", "tc_tasks_003", "tc_tasks_004",
+            "tc_tasks_006",
         }
         assert store.get("tc_login_001").title.startswith("登录")
         assert store.get("tc_login_002").data_ref == "login_valid"

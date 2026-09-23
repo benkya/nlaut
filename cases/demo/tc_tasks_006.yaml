@@ -1,0 +1,23 @@
+id: tc_tasks_006
+title: 任务列表-按任务名称搜索-结果正确匹配
+source: "口述: 在任务列表中按任务名称进行搜索，可以模糊或者精确的搜索到对应的结果，并且分页控件展示正常"
+req_ref: null
+priority: P1
+channel: web
+quad:
+  actor: 任务列表页
+  action: 搜索任务
+  object: 搜索框与结果表格
+  preconditions:
+    - "演示系统已启动且种子数据就绪"
+steps:
+  - {action: "nav", path: "/tasks"}
+  - {action: "wait_visible", selector: "#kw", timeout_ms: 5000}
+  - {action: "fill", selector: "#kw", value: "冒烟"}
+  - {action: "click", selector: "#btn-search"}
+  - {action: "wait_visible", selector: "table.task-table", timeout_ms: 5000}
+assertions:
+  - {kind: "text_visible", selector: ".result-count", expected: "共 6 条结果"}
+  - {kind: "text_visible", selector: "table.task-table", expected: "冒烟测试-001"}
+  - {kind: "visual_state", prompt: "任务列表页搜索'冒烟'后：表格是否只显示冒烟测试类型的任务（结果计数显示共 6 条），且每行任务名称都包含'冒烟测试'字样？只答 yes 或 no。", threshold: 0.9}
+postconditions: []
