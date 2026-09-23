@@ -5,3 +5,7 @@ login_invalid_pwd:
 login_valid:
   user: zhangpeng
   pwd: "Right@123"
+login_lock_demo:
+  user: testlock
+  wrong_pwd: "Wrong@999"
+  right_pwd: "Lock@123"

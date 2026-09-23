@@ -1,0 +1,37 @@
+id: tc_login_004
+title: 登录-连错3次-账号临时锁定拒绝后续登录
+source: "口述: 故意输错三次密码，账号要锁住，这时候就算输对密码也应该进不去，提示锁定"
+req_ref: null
+priority: P1
+channel: web
+quad:
+  actor: 登录页
+  action: 同一账号连续提交3次错误密码后再提交正确密码
+  object: 登录表单与账号锁定规则
+  preconditions:
+    - "账号 $user 存在且未处于锁定状态（执行前重置锁定计数）"
+data_ref: login_lock_demo
+steps:
+  - {action: nav, path: "/login"}
+  - {action: fill, selector: "#username", value: "$user"}
+  - {action: fill, selector: "#password", value: "$wrong_pwd"}
+  - {action: click, selector: "button[type=submit]"}
+  - {action: fill, selector: "#username", value: "$user"}
+  - {action: fill, selector: "#password", value: "$wrong_pwd"}
+  - {action: click, selector: "button[type=submit]"}
+  - {action: fill, selector: "#username", value: "$user"}
+  - {action: fill, selector: "#password", value: "$wrong_pwd"}
+  - {action: click, selector: "button[type=submit]"}
+  - {action: fill, selector: "#username", value: "$user"}
+  - {action: fill, selector: "#password", value: "$right_pwd"}
+  - {action: click, selector: "button[type=submit]"}
+  - {action: wait_visible, selector: ".locked", timeout_ms: 5000}
+assertions:
+  - kind: text_visible
+    selector: ".locked"
+    expected: "锁定"
+  - kind: visual_state
+    prompt: "页面是否显示账号被临时锁定的提示（黄色警示样式），且没有出现登录成功的欢迎横幅？只答 yes 或 no。"
+    threshold: 0.9
+postconditions:
+  - cleanup_tag: RESET_LOCK_STATE

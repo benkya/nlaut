@@ -10,12 +10,15 @@ ruff: noqa: BLE001 —— run_store 对单用例的宽泛 except 是刻意兜底
 
 from __future__ import annotations
 
+import sys
 import time
 from pathlib import Path
 
 from ..ir.model import TestCaseIR
 from ..ir.store import IRStore
 from .channels import web
+
+ROOT = Path(__file__).resolve().parents[3]
 
 
 def _question_for(a, ir: TestCaseIR):
@@ -118,6 +121,20 @@ def run_case(
     }
 
 
+def _apply_postconditions(ir: TestCaseIR) -> None:
+    """执行后置钩子（MVP）：数据还原动作。"""
+    for post in ir.postconditions:
+        tag = getattr(post, "cleanup_tag", None)
+        if tag == "RESET_LOCK_STATE":
+            sys.path.insert(0, str(ROOT / "tests"))
+            try:
+                from demo_app import reset_lock_state
+
+                reset_lock_state()
+            except ImportError:
+                print(f"[{ir.id}] 后置钩子跳过: demo_app 不可导入")
+
+
 def run_store(
     store: IRStore | None = None,
     case_ids: list[str] | None = None,
@@ -132,7 +149,7 @@ def run_store(
             continue
         try:
             results.append(run_case(ir, logger=logger, **kwargs))
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:  # noqa: BLE001 — 单用例崩不中断批次
             results.append({
                 "case_id": ir.id, "title": ir.title, "source": ir.source,
                 "channel": ir.channel, "status": "error",
@@ -140,5 +157,10 @@ def run_store(
                                 "status": "error", "detail": f"{type(e).__name__}: {e}"}],
                 "screenshot": None, "duration_s": 0.0,
             })
+        finally:
+            try:
+                _apply_postconditions(ir)
+            except Exception as e:  # noqa: BLE001 — 清理失败不吞结果
+                print(f"[{ir.id}] 后置清理失败: {e}")
     kwargs["logger"] = logger
     return results

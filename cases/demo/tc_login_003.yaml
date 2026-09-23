@@ -1,0 +1,24 @@
+id: tc_login_003
+title: 登录-空表单提交-提示必填且不发起校验
+source: "口述: 什么都不填直接点登录，应该提示要输用户名密码，不能直接过"
+req_ref: null
+priority: P1
+channel: web
+quad:
+  actor: 登录页
+  action: 空表单直接提交
+  object: 登录表单
+  preconditions:
+    - "登录页可访问"
+steps:
+  - {action: nav, path: "/login"}
+  - {action: click, selector: "button[type=submit]"}
+  - {action: wait_visible, selector: ".error-msg", timeout_ms: 5000}
+assertions:
+  - kind: text_visible
+    selector: ".error-msg"
+    expected: "请输入用户名和密码"
+  - kind: visual_state
+    prompt: "页面是否停留在登录页并显示了必填提示（没有任何登录成功的迹象）？只答 yes 或 no。"
+    threshold: 0.9
+postconditions: []
