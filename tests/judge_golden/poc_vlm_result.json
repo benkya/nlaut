@@ -1,0 +1,62 @@
+[
+  {
+    "image": "login_success.png",
+    "question": "页面是否呈现登录成功状态（出现欢迎/工作台元素，且没有错误提示）？只答 yes ",
+    "raw": "GenerationResult(text='yes', token=151645, logprobs=array([-",
+    "expected": true,
+    "got": true,
+    "pass": true,
+    "latency_s": 6.13,
+    "template_s": 0.01
+  },
+  {
+    "image": "login_wrong_pwd.png",
+    "question": "页面是否呈现登录失败状态（出现用户名或密码错误提示）？只答 yes 或 no。",
+    "raw": "GenerationResult(text='yes', token=151645, logprobs=array([-",
+    "expected": true,
+    "got": true,
+    "pass": true,
+    "latency_s": 5.32,
+    "template_s": 0.0
+  },
+  {
+    "image": "login_network_error.png",
+    "question": "页面是否呈现网络异常/连接失败状态？只答 yes 或 no。",
+    "raw": "GenerationResult(text='Yes', token=151645, logprobs=array([-",
+    "expected": true,
+    "got": true,
+    "pass": true,
+    "latency_s": 5.3,
+    "template_s": 0.0
+  },
+  {
+    "image": "login_success.png",
+    "question": "页面上是否出现了错误提示（如密码错误、网络异常字样）？只答 yes 或 no。",
+    "raw": "GenerationResult(text='no', token=151645, logprobs=array([-1",
+    "expected": false,
+    "got": false,
+    "pass": true,
+    "latency_s": 5.44,
+    "template_s": 0.0
+  },
+  {
+    "image": "login_wrong_pwd.png",
+    "question": "页面是否呈现登录成功状态（出现欢迎/工作台元素）？只答 yes 或 no。",
+    "raw": "GenerationResult(text='No', token=151645, logprobs=array([-1",
+    "expected": false,
+    "got": false,
+    "pass": true,
+    "latency_s": 5.49,
+    "template_s": 0.0
+  },
+  {
+    "image": "login_network_error.png",
+    "question": "页面是否呈现登录成功状态（出现欢迎/工作台元素）？只答 yes 或 no。",
+    "raw": "GenerationResult(text='No', token=151645, logprobs=array([-1",
+    "expected": false,
+    "got": false,
+    "pass": true,
+    "latency_s": 5.53,
+    "template_s": 0.0
+  }
+]

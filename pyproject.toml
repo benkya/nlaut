@@ -4,6 +4,10 @@ version = "0.1.0"
 description = "Natural-language Automation Testing framework: NL in -> IR (cases/) -> derived pytest/Playwright code (gen/) -> 3-tier judging -> evidence-chained reports"
 requires-python = ">=3.11"
 dependencies = [
+    "laya-mlx>=0.2.0",
+    "mlx-lm>=0.31.3",
+    "mlx-vlm>=0.7.2",
+    "modelscope>=1.40.1",
     "pydantic>=2.7",
     "PyYAML>=6.0",
 ]

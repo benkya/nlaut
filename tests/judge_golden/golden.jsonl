@@ -1,0 +1,10 @@
+{"image": "login_success.png", "kind": "vlm_noul", "question": "页面是否呈现登录成功状态（出现欢迎/工作台元素，且没有错误提示）？", "expected": true}
+{"image": "login_wrong_pwd.png", "kind": "vlm_noul", "question": "页面是否呈现登录失败状态（出现用户名或密码错误提示）？", "expected": true}
+{"image": "login_network_error.png", "kind": "vlm_noul", "question": "页面是否呈现网络异常/连接失败状态？", "expected": true}
+{"image": "login_success.png", "kind": "vlm_noul", "question": "页面上是否出现了错误提示（如密码错误、网络异常字样）？", "expected": false}
+{"image": "login_wrong_pwd.png", "kind": "vlm_noul", "question": "页面是否呈现登录成功状态（出现欢迎/工作台元素）？", "expected": false}
+{"image": "login_network_error.png", "kind": "vlm_noul", "question": "页面是否呈现登录成功状态（出现欢迎/工作台元素）？", "expected": false}
+{"image": "login_success.png", "kind": "laya_noul", "state": "表单提交后 .error-msg 显示'用户名或密码错误'，页面停留 /login 未跳转", "question": "该状态是否表明登录被拒绝？", "expected": true}
+{"image": "login_success.png", "kind": "laya_noul", "state": "提交后跳转 /workspace，显示'欢迎回来'，无错误提示", "question": "该状态是否表明登录被拒绝？", "expected": false}
+{"image": "login_network_error.png", "kind": "laya_noul", "state": "页面显示'网络异常 ERR_CONNECTION_TIMED_OUT'，无法提交表单", "question": "该状态是否为网络/环境类故障（而非产品缺陷）？", "expected": true}
+{"image": "login_network_error.png", "kind": "laya_noul", "state": "提交后页面空白，服务器返回 500 Internal Server Error", "question": "该状态是否为网络/环境类故障（而非产品缺陷）？", "expected": false}
