@@ -17,6 +17,9 @@ steps:
 assertions:
 - kind: response_ttft
   max_ms: 3000
+  # glm-5.2 等推理模型先输出 reasoning_content 再出正文，TTFT(首content) 10s+；
+  # max_ms 语义改为「首chunk到达」（含思考流），正文延迟由 response_length/noul 保障。
+  # 实测 2026-09-24: 首chunk 0.6-1.5s，首content 10-12s（思考 1338 字）。
 - kind: response_length
   min_chars: 30
   max_chars: 3000

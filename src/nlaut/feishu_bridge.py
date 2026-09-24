@@ -184,7 +184,18 @@ def draft_from_verbal(verbal: str, system: str) -> dict:
     """口述 → IR 草案 dict（当前用模板+正则，M1 接模型 API 后替换）。"""
     # ⓪ 大模型能力测试（v0.2.7 新增：口述含「测试XXX模型能力」即触发 LLM 批次）
     model_name = _extract_model_name(verbal) or _extract_model_name(system or "")
-    if model_name and _looks_like_llm_test(verbal, system or ""):
+    if _looks_like_llm_test(verbal, system or ""):
+        if not model_name:
+            # 带了 endpoint 却没识别出模型名（如口述写「某某某」占位）——用被测系统列，再不行提示
+            base_url, api_key = _extract_llm_endpoint(verbal) or _extract_llm_endpoint(system or "")
+            if (verbal or "").strip() and (base_url or api_key):
+                model_name = (system or "").strip() or "un-named-model"
+            else:
+                return {
+                    "need_clarify": True,
+                    "reason": "识别到大模型测试意图，但没读到模型名和地址/key。请按句式补全："
+                              "测试<模型名>模型能力，模型地址是：<URL>，key是：<KEY>",
+                }
         return _llm_batch_draft(verbal, model_name, system or "")
 
     # ① 任务搜索/筛选/空结果（演示列表页新增场景）
@@ -247,6 +258,32 @@ def draft_from_verbal(verbal: str, system: str) -> dict:
 # ---------------------------------------------------------------- 大模型能力测试（v0.2.7）
 _LLM_TEST_HINTS = ("模型能力", "大模型", "模型测试", "能力测试", "llm测试", "测试.*模型")
 
+# 口述里的地址/key 提取（v0.2.8：临时模型免预配置，直接口述携带）
+_RE_BASE_URL = re.compile(
+    r"(?:模型地址|接口地址|地址|base[_\s-]?url|baseurl)[^\n]{0,6}"
+    r"(https?://[^\s,，;；、\"']+)", re.IGNORECASE)
+_RE_API_KEY = re.compile(
+    r"(?:模型(?:的)?(?:key|密钥)|api[_\s-]?key|key是|(?<=[,，;；\s:])key(?=[是:：=\s])|(?<=[,，;；\s])密钥)"
+    r"[是:：=\s]*([A-Za-z0-9_\-\.]{8,})", re.IGNORECASE)
+
+
+def _mask_key(text: str) -> str:
+    """把口述文本里的 key 值打码（写表格/日志前必过）。"""
+    if not text:
+        return text
+    return _RE_API_KEY.sub(lambda m: f"key:***{m.group(1)[-4:]}", text)
+
+
+def _extract_llm_endpoint(text: str) -> tuple[str, str]:
+    """从口述提取 (base_url, api_key)。二者均可为空（为空则回落 models.yaml 预设）。"""
+    if not text:
+        return "", ""
+    m_url = _RE_BASE_URL.search(text)
+    m_key = _RE_API_KEY.search(text)
+    base_url = m_url.group(1).rstrip("/") if m_url else ""
+    api_key = m_key.group(1) if m_key else ""
+    return base_url, api_key
+
 
 def _load_models_yaml() -> dict:
     """读 config/models.yaml 的 models 节（不存在返回空）。"""
@@ -260,7 +297,10 @@ def _load_models_yaml() -> dict:
 
 
 def _extract_model_name(text: str) -> str:
-    """从口述/被测系统列提取模型名（须是 config/models.yaml 里已配置的）。"""
+    """从口述/被测系统列提取模型名。
+
+    优先匹配 config/models.yaml 已配置名（含 model_id 别名）；
+    未命中且口述携带了地址/key 时，按「测试<名>模型/大模型」句式捕获裸名（临时模型）。"""
     if not text:
         return ""
     models = _load_models_yaml()
@@ -270,19 +310,35 @@ def _extract_model_name(text: str) -> str:
     for n in names + list(ids.keys()):
         if n and n in text:
             return ids.get(n, n)
+    # 临时模型 fallback：口述带了 endpoint 时按句式捕获裸名（v0.2.8）
+    url, key = _extract_llm_endpoint(text)
+    if url or key:
+        m = re.search(r"测[试评]?\s*([A-Za-z0-9_\-\.]+)\s*(?:的能力|大?模型|模型能力)", text)
+        if m:
+            return m.group(1)
+        m2 = re.search(r"模型名[称是:：=\s]+([A-Za-z0-9_\-\.]+)", text)
+        if m2:
+            return m2.group(1)
     return ""
 
 
 def _looks_like_llm_test(verbal: str, system: str) -> bool:
     """口述是否表达「测某个模型」（而非 Web 场景）。"""
     text = f"{verbal or ''} {system or ''}"
-    return any(h in text for h in ("模型能力", "大模型", "模型测试", "能力测试"))
+    return any(h in text for h in ("模型能力", "大模型", "模型测试", "能力测试", "的能力", "测模型"))
 
 
 def _llm_batch_draft(verbal: str, model_name: str, system: str) -> dict:
-    """生成大模型能力测试批次声明（执行时跑 cases/llm 的 P0 批次 + 可选维度过滤）。"""
+    """生成大模型能力测试批次声明（执行时跑 cases/llm 的 P0 批次 + 可选维度过滤）。
+
+    v0.2.8：口述可直接携带模型地址和 key（「模型地址是：https://…，key是：sk-…」），
+    此时无需在 config/models.yaml 预配置；未携带则回落预设。key 不写入任何持久化文本。"""
     models = _load_models_yaml()
     cfg = models.get(model_name, {})
+    # 口述携带的 endpoint（优先于预设）
+    base_url, api_key = _extract_llm_endpoint(verbal) or _extract_llm_endpoint(system)
+    eff_base_url = base_url or cfg.get("base_url", "")
+    key_via = "口述携带" if api_key else (f"环境变量 {cfg.get('api_key_env', '')}" if cfg.get("api_key_env") else "缺失")
     # 优先级：口述说「全量/P1」就跑 P1（P0+P1），否则默认 P0
     want_p1 = any(kw in verbal for kw in ("全量", "P1", "p1", "全部能力"))
     priority = "P0,P1" if want_p1 else "P0"
@@ -300,33 +356,44 @@ def _llm_batch_draft(verbal: str, model_name: str, system: str) -> dict:
         "priority": priority,
         "dims": dim_hits,
         "model_cfg": {
-            "base_url": cfg.get("base_url", ""),
+            "base_url": eff_base_url,
             "api_key_env": cfg.get("api_key_env", ""),
             "model_id": cfg.get("model_id", model_name),
+            "inline_api_key": api_key,  # 仅存在于内存/运行期，严禁写入 YAML/表格
+            "key_via": key_via,
         },
         "_llm_batch": True,  # 特殊标记：不是单用例，是批次编排
-        "note": f"执行时运行 cases/llm 全部 {priority} 用例{dim_note}，模型 {model_name}（{cfg.get('provider', '?')}）",
+        "note": f"执行时运行 cases/llm 全部 {priority} 用例{dim_note}，模型 {model_name}（{cfg.get('provider', '临时模型' if api_key or base_url else '?')}）",
     }
 
 
 def _llm_batch_yaml(draft: dict) -> str:
-    """批次声明 → 表格可读文本（说明型，非执行 IR）。"""
+    """批次声明 → 表格可读文本（说明型，非执行 IR）。
+
+    注意：api_key 永不写入此处（表格/表格导出都是泄漏面）。"""
     cfg = draft.get("model_cfg", {})
     lines = [
         "# 大模型能力测试批次（channel: api）",
         f"模型: {draft['model']}  (model_id: {cfg.get('model_id')})",
         f"批次: {draft['priority']}  (执行命令: nlaut.cli --model {draft['model']} --api-only --priority {draft['priority'].replace(',', '+')})",
         f"接口: {cfg.get('base_url')}",
-        f"Key 环境变量: {cfg.get('api_key_env')}",
+        f"Key: {cfg.get('key_via', '环境变量')}",  # 只写来源，不写值
         f"来源口述: {draft['source']}",
     ]
     if draft.get("dims"):
         lines.append(f"重点维度: {','.join(draft['dims'])}")
+    # 来源口述打码（key 值绝不落表格）
+    masked = _mask_key(draft.get("source", ""))
+    lines = [l.replace(draft.get("source", "\x00"), masked) if draft.get("source") else l for l in lines]
     return "\n".join(lines)
 
 
-def _run_llm_batch(token, repo_dir, rid, model_name, prio) -> dict:
-    """执行大模型能力批次：--model X --api-only --priority P0（45 条左右真实 API 调用）。"""
+def _run_llm_batch(token, repo_dir, rid, model_name, prio,
+                   base_url: str = "", inline_api_key: str = "") -> dict:
+    """执行大模型能力批次：--model X --api-only --priority P0（45 条左右真实 API 调用）。
+
+    v0.2.8：口述携带的地址/key 经环境变量注入子进程（LLM_API_KEY 优先级在 cli 里
+    低于 --api-key，但为避免 key 出现在 ps 命令行里，改走 env 传递 + cli 已支持）。"""
     update_record(token, rid, {"状态": "执行中"})
     safe_name = re.sub(r"[^a-z0-9]", "_", model_name.lower())
     report_path = f"artifacts/report_llm_{safe_name}.html"
@@ -338,6 +405,11 @@ def _run_llm_batch(token, repo_dir, rid, model_name, prio) -> dict:
         "--report", report_path,
     ]
     env = {**os.environ, "NO_PROXY": "127.0.0.1,localhost"}
+    if base_url:
+        cmd += ["--api-base", base_url]
+    if inline_api_key:
+        # key 走 env（防 ps 泄漏），cli 侧 LLM_API_KEY 兜底读取
+        env["LLM_API_KEY"] = inline_api_key
     try:
         proc = subprocess.run(cmd, cwd=repo_dir, env=env, check=False,
                               capture_output=True, text=True, timeout=3600)
@@ -446,7 +518,9 @@ def process_once(token: str, repo_dir: Path, dry_run: bool = False) -> list[dict
                         "AI追问": f"✓ 已识别大模型能力批次，正在执行：--model {draft['model']} --api-only --priority {draft['priority']}",
                     })
                     act = _run_llm_batch(token, repo_dir, rid, draft["model"],
-                                         draft["priority"].replace(",", "+"))
+                                         draft["priority"].replace(",", "+"),
+                                         base_url=draft["model_cfg"].get("base_url", ""),
+                                         inline_api_key=draft["model_cfg"].get("inline_api_key", ""))
                     actions.append(act)
                     continue
                 yaml_text = ir_yaml(draft)

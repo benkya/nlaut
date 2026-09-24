@@ -111,8 +111,9 @@ def _call_api(
         full_content = ""
         finish_reason = None
         tool_calls_accum: dict[int, dict] = {}
-        ttft_ms: float | None = None  # 首 token 延迟（首个含 content 的 chunk）
+        ttft_ms: float | None = None  # 首 token 延迟（首个含 content/reasoning 的 chunk，见下方语义注释）
         stream_chunks = 0
+        reasoning_len = 0  # 推理模型思考总量（字符）——用于报告与诊断，不参与断言
 
         with (
             httpx.Client(timeout=timeout, trust_env=False) as client,
@@ -135,11 +136,16 @@ def _call_api(
                 if not choices:
                     continue
                 delta = choices[0].get("delta", {}) or {}
+                # TTFT 语义（v0.2.7）：首个含 content 或 reasoning_content 的 chunk 即计时——
+                # 推理模型（glm-5.2 等）先流式输出思考再出正文，若只认 content，
+                # 3s 上限会把所有推理模型误判为 TTFT 超标（实测首chunk 0.6-1.5s、首content 10-12s）。
+                if ttft_ms is None and (delta.get("content") or delta.get("reasoning_content")):
+                    ttft_ms = (time.time() - t0) * 1000
                 if delta.get("content"):
-                    if ttft_ms is None:
-                        ttft_ms = (time.time() - t0) * 1000
                     full_content += delta["content"]
                     stream_chunks += 1
+                if delta.get("reasoning_content"):
+                    reasoning_len += len(delta.get("reasoning_content") or "")
                 if delta.get("tool_calls"):
                     for tc in delta["tool_calls"]:
                         idx = tc.get("index", 0)
@@ -169,6 +175,7 @@ def _call_api(
             "streamed": True,
             "ttft_ms": round(ttft_ms, 1) if ttft_ms is not None else None,
             "stream_chunks": stream_chunks,
+            "reasoning_len": reasoning_len,
         }
         return response, latency_ms
 
@@ -246,6 +253,7 @@ def execute(
         "latency_ms": latency_ms,
         "ttft_ms": response.get("ttft_ms"),
         "stream_chunks": response.get("stream_chunks"),
+        "reasoning_len": response.get("reasoning_len"),
         "conversation": messages,
         # web 通道字段留空
         "screenshot": None,
