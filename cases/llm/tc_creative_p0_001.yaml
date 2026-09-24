@@ -17,9 +17,9 @@ steps:
 assertions:
 - kind: response_contains
   keywords:
-  - 智能旅行助手
-  - 旅行
-  min_match: 1
+  - slogan
+  - 产品描述
+  min_match: 2
   judge: deterministic
 - kind: noul
   question: 输出是否包含一句 slogan 和一段产品描述（两段结构可辨）？只答 yes 或 no。
