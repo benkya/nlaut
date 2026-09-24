@@ -182,6 +182,11 @@ _IR_TEMPLATES = {
 
 def draft_from_verbal(verbal: str, system: str) -> dict:
     """口述 → IR 草案 dict（当前用模板+正则，M1 接模型 API 后替换）。"""
+    # ⓪ 大模型能力测试（v0.2.7 新增：口述含「测试XXX模型能力」即触发 LLM 批次）
+    model_name = _extract_model_name(verbal) or _extract_model_name(system or "")
+    if model_name and _looks_like_llm_test(verbal, system or ""):
+        return _llm_batch_draft(verbal, model_name, system or "")
+
     # ① 任务搜索/筛选/空结果（演示列表页新增场景）
     if any(kw in (verbal or "") for kw in ["任务列表", "任务搜索", "任务筛选", "按任务名称", "按.*筛选"]):
         actor = "任务列表页"
@@ -237,6 +242,122 @@ def draft_from_verbal(verbal: str, system: str) -> dict:
 
     # ③ 未命中: 真实澄清（语义改写，不再把责任推给用户）
     return {}
+
+
+# ---------------------------------------------------------------- 大模型能力测试（v0.2.7）
+_LLM_TEST_HINTS = ("模型能力", "大模型", "模型测试", "能力测试", "llm测试", "测试.*模型")
+
+
+def _load_models_yaml() -> dict:
+    """读 config/models.yaml 的 models 节（不存在返回空）。"""
+    import yaml
+
+    p = Path(__file__).resolve().parents[2] / "config" / "models.yaml"
+    if not p.exists():
+        return {}
+    cfg = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+    return cfg.get("models", {})
+
+
+def _extract_model_name(text: str) -> str:
+    """从口述/被测系统列提取模型名（须是 config/models.yaml 里已配置的）。"""
+    if not text:
+        return ""
+    models = _load_models_yaml()
+    # 精确匹配：口述里直接写了配置名（含别名 model_id）
+    names = sorted(models.keys(), key=len, reverse=True)
+    ids = {m.get("model_id", ""): k for k, m in models.items() if m.get("model_id")}
+    for n in names + list(ids.keys()):
+        if n and n in text:
+            return ids.get(n, n)
+    return ""
+
+
+def _looks_like_llm_test(verbal: str, system: str) -> bool:
+    """口述是否表达「测某个模型」（而非 Web 场景）。"""
+    text = f"{verbal or ''} {system or ''}"
+    return any(h in text for h in ("模型能力", "大模型", "模型测试", "能力测试"))
+
+
+def _llm_batch_draft(verbal: str, model_name: str, system: str) -> dict:
+    """生成大模型能力测试批次声明（执行时跑 cases/llm 的 P0 批次 + 可选维度过滤）。"""
+    models = _load_models_yaml()
+    cfg = models.get(model_name, {})
+    # 优先级：口述说「全量/P1」就跑 P1（P0+P1），否则默认 P0
+    want_p1 = any(kw in verbal for kw in ("全量", "P1", "p1", "全部能力"))
+    priority = "P0,P1" if want_p1 else "P0"
+    # 维度过滤：口述点名某维度（如「重点测工具调用」→ tool 集）
+    dims = ("tool", "code", "safety", "stream", "math", "reason", "rag", "ctx", "dialog", "instruct", "know", "nlu", "creative", "lang", "perf")
+    dim_hits = [d for d in dims if d in (verbal or "").lower()]
+    dim_note = f"，重点维度: {','.join(dim_hits)}" if dim_hits else ""
+
+    return {
+        "id": f"tc_llm_batch_{re.sub(r'[^a-z0-9]', '_', model_name.lower())}",
+        "title": f"大模型能力测试-{model_name}-{priority}批次",
+        "source": verbal,
+        "channel": "api",
+        "model": model_name,
+        "priority": priority,
+        "dims": dim_hits,
+        "model_cfg": {
+            "base_url": cfg.get("base_url", ""),
+            "api_key_env": cfg.get("api_key_env", ""),
+            "model_id": cfg.get("model_id", model_name),
+        },
+        "_llm_batch": True,  # 特殊标记：不是单用例，是批次编排
+        "note": f"执行时运行 cases/llm 全部 {priority} 用例{dim_note}，模型 {model_name}（{cfg.get('provider', '?')}）",
+    }
+
+
+def _llm_batch_yaml(draft: dict) -> str:
+    """批次声明 → 表格可读文本（说明型，非执行 IR）。"""
+    cfg = draft.get("model_cfg", {})
+    lines = [
+        "# 大模型能力测试批次（channel: api）",
+        f"模型: {draft['model']}  (model_id: {cfg.get('model_id')})",
+        f"批次: {draft['priority']}  (执行命令: nlaut.cli --model {draft['model']} --api-only --priority {draft['priority'].replace(',', '+')})",
+        f"接口: {cfg.get('base_url')}",
+        f"Key 环境变量: {cfg.get('api_key_env')}",
+        f"来源口述: {draft['source']}",
+    ]
+    if draft.get("dims"):
+        lines.append(f"重点维度: {','.join(draft['dims'])}")
+    return "\n".join(lines)
+
+
+def _run_llm_batch(token, repo_dir, rid, model_name, prio) -> dict:
+    """执行大模型能力批次：--model X --api-only --priority P0（45 条左右真实 API 调用）。"""
+    update_record(token, rid, {"状态": "执行中"})
+    safe_name = re.sub(r"[^a-z0-9]", "_", model_name.lower())
+    report_path = f"artifacts/report_llm_{safe_name}.html"
+    cmd = [
+        str(repo_dir / ".venv/bin/python"), "-m", "nlaut.cli",
+        "--model", model_name,
+        "--api-only",
+        "--priority", prio,
+        "--report", report_path,
+    ]
+    env = {**os.environ, "NO_PROXY": "127.0.0.1,localhost"}
+    try:
+        proc = subprocess.run(cmd, cwd=repo_dir, env=env, check=False,
+                              capture_output=True, text=True, timeout=3600)
+        summary = (proc.stdout[-600:] if proc.stdout else proc.stderr[-600:])
+        ok = proc.returncode == 0
+    except subprocess.TimeoutExpired:
+        summary = "执行超时（>60 分钟）"
+        ok = False
+    report_loc = publish_report(
+        token, repo_dir, f"llm_{safe_name}",
+        report_name=f"nlaut_report_llm_{model_name}.html",
+        report_path=report_path,
+    )
+    update_record(token, rid, {
+        "状态": "已完成" if ok else "失败",
+        "执行结果": summary,
+        "报告位置": report_loc,
+    })
+    return {"record_id": rid, "action": "llm_batch_executed",
+            "model": model_name, "ok": ok, "report": report_loc}
 
 
 def _expand_template(key: str, verbal: str, case_id: str,
@@ -317,6 +438,17 @@ def process_once(token: str, repo_dir: Path, dry_run: bool = False) -> list[dict
         if status == "待生成" or status == "":
             draft = draft_from_verbal(verbal, f.get("被测系统", ""))
             if draft:
+                if draft.get("_llm_batch"):
+                    # 大模型能力批次：零动作直达——写批次声明后立即执行（不设确认卡点）
+                    update_record(token, rid, {
+                        "IR草案": _llm_batch_yaml(draft),
+                        "状态": "执行中",
+                        "AI追问": f"✓ 已识别大模型能力批次，正在执行：--model {draft['model']} --api-only --priority {draft['priority']}",
+                    })
+                    act = _run_llm_batch(token, repo_dir, rid, draft["model"],
+                                         draft["priority"].replace(",", "+"))
+                    actions.append(act)
+                    continue
                 yaml_text = ir_yaml(draft)
                 # 真正写入 cases/demo/<id>.yaml（AGENTS.md 要求的唯一事实源）
                 case_path = repo_dir / "cases" / "demo" / f"{draft['id']}.yaml"
@@ -344,6 +476,24 @@ def process_once(token: str, repo_dir: Path, dry_run: bool = False) -> list[dict
 
         # 已确认 → 执行（找不到文件时兜底从表格落盘）
         if status == "已确认":
+            # 兼容旧批次行（新版在「待生成」阶段即执行，这里是历史行重跑入口）
+            draft_text = f.get("IR草案") or ""
+            if "大模型能力测试批次" in draft_text:
+                m_model = re.search(r"^模型: (\S+)", draft_text, re.MULTILINE)
+                m_prio = re.search(r"^批次: (\S+)", draft_text, re.MULTILINE)
+                model_name = m_model.group(1) if m_model else ""
+                prio = (m_prio.group(1) if m_prio else "P0").replace("+", ",")
+                if not model_name:
+                    update_record(token, rid, {
+                        "状态": "需澄清",
+                        "AI追问": "⚠️ 批次声明里读不出模型名，请在「被测系统」列填模型名（config/models.yaml 中已配置的）。",
+                    })
+                    continue
+                act = _run_llm_batch(token, repo_dir, rid, model_name,
+                                     prio.replace(",", "+"))
+                actions.append(act)
+                continue
+
             case_file = repo_dir / "cases" / "demo" / f"{draft_id_from(f)}.yaml"
             if not case_file.exists():
                 # 兜底：把表格里的草案文本直接落盘（旧版本曾漏写，给个自愈机会）
@@ -386,7 +536,8 @@ def process_once(token: str, repo_dir: Path, dry_run: bool = False) -> list[dict
 CHAT_ID = "oc_f0ad8ca94fed6bcb6a1990d0889617bd"  # 「nlaut 测试自动化通知」群
 
 
-def publish_report(token: str, repo_dir: Path, case_id: str) -> str:
+def publish_report(token: str, repo_dir: Path, case_id: str,
+                   report_name: str = "", report_path: str = "") -> str:
     """执行后把 HTML 报告上传到飞书群并返回位置描述。
 
     上传走 im/v1/files（multipart），随后发 file 消息进群；返回写进表格的报告位置文案。
@@ -394,10 +545,10 @@ def publish_report(token: str, repo_dir: Path, case_id: str) -> str:
     import time as _time
     import uuid as _uuid
 
-    report = repo_dir / "artifacts" / "report.html"
+    report = repo_dir / report_path.lstrip("/") if report_path else repo_dir / "artifacts" / "report.html"
     if not report.exists():
-        return "报告未生成（artifacts/report.html 缺失）"
-    fname = f"nlaut_report_{_time.strftime('%Y%m%d_%H%M')}_{case_id}.html"
+        return f"报告未生成（{report_path or 'artifacts/report.html'} 缺失）"
+    fname = report_name or f"nlaut_report_{_time.strftime('%Y%m%d_%H%M')}_{case_id}.html"
     try:
         boundary = _uuid.uuid4().hex
         body = b""
