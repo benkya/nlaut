@@ -74,7 +74,6 @@ def main() -> int:
         if r is None:
             return f"<tr><td>{cid}</td><td>-</td><td>未执行</td><td>-</td><td>-</td></tr>"
         badge = {"passed": "✅", "failed": "❌", "need_review": "👀", "error": "⚠️"}.get(r["status"], "?")
-        lat = r["assertions"][0] if r["assertions"] else {}
         note = NOTES.get(cid, "")
         note_html = f'<span class="note">{note}</span>' if note else ""
         return f"<tr><td>{cid}</td><td>{r['title']}</td><td>{badge} {r['status']}</td><td>{note_html}</td></tr>"
