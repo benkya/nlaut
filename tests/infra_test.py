@@ -51,6 +51,9 @@ class TestIRStore:
             "tc_query_004", "tc_query_005", "tc_query_006",
             "tc_page_001", "tc_page_002", "tc_page_003",
             "tc_new_001", "tc_new_002", "tc_new_003", "tc_new_004",
+            "tc_giencwb_001", "tc_giencwb_002", "tc_giencwb_003",
+            "tc_giencwb_004", "tc_giencwb_005", "tc_giencwb_006",
+            "tc_giencwb_007",
         }
         assert store.get("tc_login_001").title.startswith("登录")
         assert store.get("tc_login_002").data_ref == "login_valid"
