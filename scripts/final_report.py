@@ -22,7 +22,7 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from nlaut.report.render import render_html  # noqa: E402
+from nlaut.report.render import render_html  # type: ignore  # noqa: E402
 
 # 通用用例定性备注（与模型无关）
 COMMON_NOTES = {
