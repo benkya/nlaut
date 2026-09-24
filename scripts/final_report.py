@@ -82,7 +82,7 @@ def main() -> int:
     rows_p1 = "\n".join(_row(cid, p1.get(cid)) for cid in sorted(p1))
     probe_rows = "\n".join(f"<tr><td>{n}</td><td>{v}</td><td>{d}</td></tr>" for n, v, d in PROBES)
 
-    now = datetime.now().strftime("%Y-%m-%d %H:%M")
+    now = datetime.now(tz=__import__("zoneinfo").ZoneInfo("Asia/Shanghai")).strftime("%Y-%m-%d %H:%M")
     html = f"""<!DOCTYPE html><html lang="zh"><head><meta charset="utf-8">
 <title>Qwen3.8-Flash-Next 上线测试报告</title>
 <style>
