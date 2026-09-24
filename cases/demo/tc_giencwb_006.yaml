@@ -39,6 +39,6 @@ assertions:
     selector: '[data-testid="sidebar-normal-mode"]'
     expected: "展开全部"
   - kind: visual_state
-    prompt: "会话区是否显示了多条历史会话标题（至少 3 条，包含相对时间如「57分钟」「5小时」）？只答 yes 或 no。"
+    prompt: "页面是否为左右分栏布局：左侧是导航侧边栏（含会话历史列表和功能入口），右侧是主内容区？只答 yes 或 no。"
     threshold: 0.9
 postconditions: []
