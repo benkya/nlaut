@@ -1,6 +1,6 @@
 id: tc_creative_p1_001
 title: 诗歌生成
-source: 大模型测试用例集 v1 D10-P1-002：诗歌生成
+source: '大模型测试用例集 v1 D10-P1-002：诗歌生成 [P1资产修复 v1.3: 断言映射错误/数据未构造]'
 req_ref: D10-P1-002
 priority: P1
 channel: api
@@ -8,13 +8,15 @@ quad:
   actor: 大模型
   action: 创意生成
   object: 创意主题
+  preconditions: []
+data_ref: null
 steps:
 - action: api_call
   prompt: 请写一首关于秋天的小诗，4句，每句7字。
+  system_prompt: null
 assertions:
-- kind: response_contains
-  keywords:
-  - '4'
-  - '7'
-  min_match: 2
+- kind: noul
+  question: 回答是否为4句诗，且每句约7字、主题与秋天相关？只答 yes 或 no。
+  threshold: 0.9
+  judge: systemone
 postconditions: []

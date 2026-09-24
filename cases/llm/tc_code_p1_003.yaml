@@ -1,6 +1,6 @@
 id: tc_code_p1_003
 title: 多语言代码生成
-source: 大模型测试用例集 v1 D03-P1-003：多语言代码生成
+source: '大模型测试用例集 v1 D03-P1-003：多语言代码生成 [P1资产修复 v1.3: 断言映射错误/数据未构造]'
 req_ref: D03-P1-003
 priority: P1
 channel: api
@@ -8,11 +8,24 @@ quad:
   actor: 大模型
   action: 生成代码
   object: 代码需求
+  preconditions: []
+data_ref: null
 steps:
 - action: api_call
   prompt: 用Python和Java分别实现一个单例模式。
+  system_prompt: null
 assertions:
-- kind: response_json_schema
-  required_fields: []
-  expected_values: {}
+- kind: response_contains
+  keywords:
+  - class
+  - getInstance
+  - static
+  - __init__
+  - new
+  min_match: 3
+  judge: deterministic
+- kind: noul
+  question: Python 和 Java 两段代码是否都实现了单例模式核心逻辑？只答 yes 或 no。
+  threshold: 0.9
+  judge: systemone
 postconditions: []

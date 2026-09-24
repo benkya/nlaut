@@ -1,6 +1,6 @@
 id: tc_instruct_p1_001
 title: 字数限制
-source: 大模型测试用例集 v1 D06-P1-001：字数限制
+source: '大模型测试用例集 v1 D06-P1-001：字数限制 [P1资产修复 v1.3: 断言映射错误/数据未构造]'
 req_ref: D06-P1-001
 priority: P1
 channel: api
@@ -8,12 +8,15 @@ quad:
   actor: 大模型
   action: 遵循指令约束
   object: 格式/角色约束
+  preconditions: []
+data_ref: null
 steps:
 - action: api_call
   prompt: 请用恰好50个字（含标点）描述机器学习的概念。
+  system_prompt: null
 assertions:
-- kind: response_contains
-  keywords:
-  - '50'
-  min_match: 1
+- kind: noul
+  question: 回答是否为描述机器学习概念的一段文字且字数接近50字（40-60字之间）？只答 yes 或 no。
+  threshold: 0.9
+  judge: systemone
 postconditions: []

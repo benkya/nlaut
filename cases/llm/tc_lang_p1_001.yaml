@@ -1,6 +1,6 @@
 id: tc_lang_p1_001
 title: 纯英文对话
-source: 大模型测试用例集 v1 D05-P1-001：纯英文对话
+source: '大模型测试用例集 v1 D05-P1-001：纯英文对话 [P1资产修复 v1.3: 断言映射错误/数据未构造]'
 req_ref: D05-P1-001
 priority: P1
 channel: api
@@ -8,14 +8,20 @@ quad:
   actor: 大模型
   action: 多语言处理
   object: 多语言文本
+  preconditions: []
+data_ref: null
 steps:
 - action: api_call
   prompt: Explain how HTTPS works in simple terms.
+  system_prompt: null
 assertions:
 - kind: response_contains
   keywords:
-  - 加密
-  - 证书
   - TLS
-  min_match: 1
+  - SSL
+  - encrypt
+  - certificate
+  - handshake
+  min_match: 2
+  judge: deterministic
 postconditions: []

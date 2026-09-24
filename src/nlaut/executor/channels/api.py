@@ -127,7 +127,12 @@ def _call_api(
                     chunk = json.loads(payload)
                 except json.JSONDecodeError:
                     continue
-                delta = chunk.get("choices", [{}])[0].get("delta", {})
+                # Qwen3 等推理模型的流式会插入 choices 为空数组的 chunk
+                # （thinking 段/usage 统计段）——必须容错跳过，否则 IndexError
+                choices = chunk.get("choices") or []
+                if not choices:
+                    continue
+                delta = choices[0].get("delta", {}) or {}
                 if delta.get("content"):
                     full_content += delta["content"]
                 if delta.get("tool_calls"):
@@ -143,7 +148,7 @@ def _call_api(
                             tool_calls_accum[idx]["function"]["name"] += tc["function"]["name"]
                         if tc.get("function", {}).get("arguments"):
                             tool_calls_accum[idx]["function"]["arguments"] += tc["function"]["arguments"]
-                    if chunk.get("choices", [{}])[0].get("finish_reason"):
+                    if choices[0].get("finish_reason"):
                         finish_reason = chunk["choices"][0]["finish_reason"]
 
         latency_ms = (time.time() - t0) * 1000
