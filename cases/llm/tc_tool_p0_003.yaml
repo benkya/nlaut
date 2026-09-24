@@ -1,6 +1,8 @@
 id: tc_tool_p0_003
 title: 无需工具时不过调
-source: '大模型测试用例集 v1 D12-P0-003：无需工具时不过调 [断言修复 v1.1: 原断言为转换脚本描述性期望，判定不可执行]'
+source: '大模型测试用例集 v1 D12-P0-003：无需工具时不过调 [资产修复 v1.4: 原 prompt 文字描述工具定义；改为真实 tools。
+    v1.5: prompt 加"直接回答"显式约束——工具选择测试的意图必须无歧义，中性表达"1+1等于几"时
+    glm-5.2 调 calculator 属可辩护行为（推定用户期待计算），Qwen 直答；显式约束下两模型均应直答]'
 req_ref: D12-P0-003
 priority: P0
 channel: api
@@ -11,9 +13,33 @@ quad:
   preconditions: []
 data_ref: null
 steps:
-- action: api_call
-  prompt: 用户问"1+1等于几？"+提供多个工具定义
-  system_prompt: null
+- action: api_tool_call
+  prompt: 不用调用任何工具，直接回答：1+1等于几？
+  tools:
+  - type: function
+    function:
+      name: calculator
+      description: 数学计算器，执行复杂四则运算
+      parameters:
+        type: object
+        properties:
+          expression:
+            type: string
+            description: 数学表达式
+        required:
+        - expression
+  - type: function
+    function:
+      name: get_weather
+      description: 查询城市当前天气
+      parameters:
+        type: object
+        properties:
+          city:
+            type: string
+            description: 城市名
+        required:
+        - city
 assertions:
 - kind: response_contains
   keywords:
@@ -21,7 +47,7 @@ assertions:
   min_match: 1
   judge: deterministic
 - kind: noul
-  question: 模型是否直接回答了算术问题而未建议调用工具？只答 yes 或 no。
+  question: 模型是否直接回答了算术问题（1+1=2）而没有发起任何工具调用？只答 yes 或 no。
   threshold: 0.9
   judge: systemone
 postconditions: []

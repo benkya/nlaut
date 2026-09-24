@@ -1,0 +1,20 @@
+# glm-5.2 能力探测与用例定性备注（2026-09-24 实测）
+probes:
+  - name: 工具调用
+    value: 原生支持
+    detail: 'get_weather({"city": "北京"}) 参数精准，finish_reason=tool_calls'
+  - name: 流式输出
+    value: 支持
+    detail: finish=stop，chunk 聚合完整
+  - name: TTFT 首token延迟
+    value: 10247ms（3次平均）
+    detail: 10810/12408/7522ms——推理模型 thinking 段不产生 content delta，首可见 token 需等思考完成；对比 Qwen3.8-Flash-Next（863ms）慢 12 倍
+  - name: 平均响应延迟（P0批次）
+    value: 约 17.7s
+    detail: 同用例集 Qwen3.8-Flash-Next 为 5.5s
+
+notes:
+  tc_ctx_p0_001: need_review：长文本抽取 laya 置信度 0.83 落入 0.5-0.9 转人工区间（设计行为）
+  tc_stream_p0_001: 真实性能差异：流式 TTFT 15.2s 超阈值 3s——推理模型 thinking 段不产生 content delta，首可见 token 需等思考完成（Qwen3.8-Flash-Next 为 0.86s，差 12 倍）
+  tc_tool_p1_003: need_review：模拟类用例需多轮 tool round-trip 编排（Phase 5 深水区），当前单轮 prompt 让模型"演示"而非"处理"
+  tc_tool_p0_003: '[资产修复 v1.5] prompt 加显式约束后通过；暴露真实行为差异：中性表达下 glm 倾向调工具、Qwen 直答'

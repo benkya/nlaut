@@ -1,0 +1,23 @@
+# Qwen3.8-Flash-Next 能力探测与用例定性备注（2026-09-24 实测）
+probes:
+  - name: 工具调用
+    value: 原生支持
+    detail: 'get_weather({"city": "北京"}) 参数精准，finish_reason=tool_calls'
+  - name: 流式输出
+    value: 支持
+    detail: finish=stop，chunk 聚合完整；空 choices chunk（thinking 段）已容错
+  - name: TTFT 首token延迟
+    value: 863ms（3次平均）
+    detail: 788/1070/730ms，达标（阈值 3000ms）
+  - name: 平均响应延迟（P0批次）
+    value: 约 5.5s
+    detail: glm-5.2 同用例集为 17.7s，快 3.2 倍
+  - name: thinking 输出
+    value: 服务端剥离
+    detail: content 干净无 think 标签，reasoning_tokens 单独计量
+
+notes:
+  tc_creative_p0_001: flaky：批次内 1 次关键词未命中，独立重放 3/3 通过——创意类输出波动，观察项
+  tc_nlu_p0_003: '[数据修复 v1.2] 原 prompt 占位符无真实文章导致假失败，已修复'
+  tc_ctx_p0_001: '[数据修复 v1.2] 同上，ReadTimeout 根因'
+  tc_instruct_p0_001: 响应为数组 JSON 形态，判定引擎 v0.2.1 已容错（模型风格差异非缺陷）

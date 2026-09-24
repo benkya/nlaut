@@ -1,6 +1,7 @@
 id: tc_reason_p1_002
 title: 条件推理
-source: 大模型测试用例集 v1 D02-P1-002：条件推理
+source: '大模型测试用例集 v1 D02-P1-002：条件推理 [资产修复 v1.4: 关键词只含"周五"漏了"星期五"——
+    glm 用"后天是**星期五**"正确作答却被误判 fail；两词均为正确表述]'
 req_ref: D02-P1-002
 priority: P1
 channel: api
@@ -15,5 +16,6 @@ assertions:
 - kind: response_contains
   keywords:
   - 周五
+  - 星期五
   min_match: 1
 postconditions: []
