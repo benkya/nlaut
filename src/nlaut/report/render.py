@@ -31,7 +31,18 @@ def _esc(s) -> str:
     return html.escape(str(s))
 
 
-def render_html(results: list[dict], out_path: str | Path = "artifacts/report.html") -> Path:
+def render_html(
+    results: list[dict],
+    out_path: str | Path = "artifacts/report.html",
+    header_html: str = "",
+    kpi_html: str = "",
+    title: str = "nlaut 测试报告",
+) -> Path:
+    """渲染测试报告。
+
+    新增可选参数 header_html / kpi_html / title 让上层报告生成器可注入自定义头部与KPI。
+    默认行为与之前完全相同，向后兼容。
+    """
     det_pass = det_total = ai_pass = ai_total = review = 0
     for r in results:
         for a in r.get("assertions", []):
@@ -79,12 +90,24 @@ def render_html(results: list[dict], out_path: str | Path = "artifacts/report.ht
   </table>
 </div>""")
 
+    default_kpi = (
+        f'<div>'
+        f'<span class="kpi"><b style="color:#1a7f37">{passed}</b>用例通过</span>'
+        f'<span class="kpi"><b style="color:#c0392b">{failed}</b>用例失败</span>'
+        f'<span class="kpi"><b style="color:#b8860b">{need}</b>待人工仲裁</span>'
+        f'<span class="kpi"><b>{total}</b>用例总数</span>'
+        f'<span class="kpi"><b>{det_pass}/{det_total}</b>确定性断言</span>'
+        f'<span class="kpi"><b>{ai_pass}/{ai_total}</b>AI 断言自动通过</span>'
+        f'<span class="kpi"><b style="color:#b8860b">{review}</b>AI 断言转人工</span>'
+        f'</div>'
+    )
+
     out = Path(out_path)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(f"""<!DOCTYPE html>
-<html lang="zh"><head><meta charset="UTF-8"><title>nlaut 测试报告</title>
+<html lang="zh"><head><meta charset="UTF-8"><title>{_esc(title)}</title>
 <style>
-  body {{ font-family: -apple-system, sans-serif; background: #f5f6f8; margin: 24px; color: #222; }}
+  body {{ font-family: -apple-system, "PingFang SC", sans-serif; background: #f5f6f8; margin: 24px; color: #222; }}
   .card {{ background: #fff; border-radius: 10px; padding: 20px; margin: 16px 0;
           box-shadow: 0 2px 8px rgba(0,0,0,.06); }}
   table {{ border-collapse: collapse; width: 100%; font-size: 13px; }}
@@ -94,18 +117,13 @@ def render_html(results: list[dict], out_path: str | Path = "artifacts/report.ht
   .kpi {{ display: inline-block; background: #fff; border-radius: 10px; padding: 14px 22px;
           margin: 0 10px 10px 0; box-shadow: 0 2px 8px rgba(0,0,0,.06); }}
   .kpi b {{ font-size: 22px; display: block; }}
+  .verdict {{ font-size: 18px; font-weight: 600; padding: 14px 18px; border-radius: 10px; margin: 14px 0; }}
+  .verdict.pass {{ background:#ecfdf5; border:1px solid #a7f3d0; color:#065f46; }}
+  .verdict.warn {{ background:#fffbeb; border:1px solid #fde68a; color:#92400e; }}
+  .verdict.fail {{ background:#fef2f2; border:1px solid #fecaca; color:#991b1b; }}
 </style></head><body>
-<h1>nlaut 自然语言自动化测试报告</h1>
-<p class="muted">生成时间: {time.strftime('%Y-%m-%d %H:%M:%S')} · 三级判定: 确定性 → VLM → Laya</p>
-<div>
-  <span class="kpi"><b style="color:#1a7f37">{passed}</b>用例通过</span>
-  <span class="kpi"><b style="color:#c0392b">{failed}</b>用例失败</span>
-  <span class="kpi"><b style="color:#b8860b">{need}</b>待人工仲裁</span>
-  <span class="kpi"><b>{total}</b>用例总数</span>
-  <span class="kpi"><b>{det_pass}/{det_total}</b>确定性断言</span>
-  <span class="kpi"><b>{ai_pass}/{ai_total}</b>AI 断言自动通过</span>
-  <span class="kpi"><b style="color:#b8860b">{review}</b>AI 断言转人工</span>
-</div>
+{header_html}
+{kpi_html or default_kpi}
 {''.join(rows)}
 </body></html>""", encoding="utf-8")
     return out

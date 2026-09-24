@@ -18,6 +18,7 @@ probes:
 
 notes:
   tc_creative_p0_001: flaky：批次内 1 次关键词未命中，独立重放 3/3 通过——创意类输出波动，观察项
+  tc_stream_p0_001: flaky：TTFT 阈值 3000ms 边缘，单独跑批次偶发超 3s（探测 3 次均值 863ms 达标）。建议业务调用方按 P95 监控而非单次断言
   tc_nlu_p0_003: '[数据修复 v1.2] 原 prompt 占位符无真实文章导致假失败，已修复'
   tc_ctx_p0_001: '[数据修复 v1.2] 同上，ReadTimeout 根因'
   tc_instruct_p0_001: 响应为数组 JSON 形态，判定引擎 v0.2.1 已容错（模型风格差异非缺陷）
