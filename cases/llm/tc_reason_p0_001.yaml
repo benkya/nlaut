@@ -1,0 +1,30 @@
+id: tc_reason_p0_001
+title: 三段论推理
+source: '大模型测试用例集 v1 D02-P0-001：三段论推理 [断言修复 v1.1: 原断言为转换脚本描述性期望，判定不可执行]'
+req_ref: D02-P0-001
+priority: P0
+channel: api
+quad:
+  actor: 大模型
+  action: 逻辑推理
+  object: 推理问题
+  preconditions: []
+data_ref: null
+steps:
+- action: api_call
+  prompt: 所有人都会死。苏格拉底是人。苏格拉底会死吗？请回答是或否并说明理由。
+  system_prompt: null
+assertions:
+- kind: response_contains
+  keywords:
+  - 是
+  min_match: 1
+  judge: deterministic
+- kind: response_contains
+  keywords:
+  - 前提
+  - 苏格拉底
+  - 人
+  min_match: 2
+  judge: deterministic
+postconditions: []

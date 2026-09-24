@@ -1,0 +1,19 @@
+id: tc_dialog_p1_001
+title: 长轮次上下文保持
+source: 大模型测试用例集 v1 D11-P1-001：长轮次上下文保持
+req_ref: D11-P1-001
+priority: P1
+channel: api
+quad:
+  actor: 大模型
+  action: 多轮对话
+  object: 多轮对话上下文
+steps:
+- action: api_call
+  prompt: 进行10轮对话，每轮提供不同信息，第10轮问第3轮的内容
+assertions:
+- kind: response_contains
+  keywords:
+  - '3'
+  min_match: 1
+postconditions: []

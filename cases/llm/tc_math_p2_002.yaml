@@ -1,0 +1,22 @@
+id: tc_math_p2_002
+title: 公式推导
+source: 大模型测试用例集 v1 D04-P2-002：公式推导
+req_ref: D04-P2-002
+priority: P2
+channel: api
+quad:
+  actor: 大模型
+  action: 数学计算
+  object: 数学问题
+steps:
+- action: api_call
+  prompt: 已知二次方程 ax^2+bx+c=0，请推导求根公式。
+assertions:
+- kind: response_contains
+  keywords:
+  - '4'
+  - '2'
+  - (
+  - )
+  min_match: 1
+postconditions: []

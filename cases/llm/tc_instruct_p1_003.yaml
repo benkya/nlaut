@@ -1,0 +1,18 @@
+id: tc_instruct_p1_003
+title: 输出风格约束
+source: 大模型测试用例集 v1 D06-P1-003：输出风格约束
+req_ref: D06-P1-003
+priority: P1
+channel: api
+quad:
+  actor: 大模型
+  action: 遵循指令约束
+  object: 格式/角色约束
+steps:
+- action: api_call
+  prompt: 请用markdown表格格式对比Python和Java的特点，至少包含4个对比维度。
+assertions:
+- kind: response_json_schema
+  required_fields: []
+  expected_values: {}
+postconditions: []

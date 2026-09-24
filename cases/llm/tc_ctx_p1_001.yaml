@@ -1,0 +1,17 @@
+id: tc_ctx_p1_001
+title: 上下文开头记忆
+source: 大模型测试用例集 v1 D08-P1-001：上下文开头记忆
+req_ref: D08-P1-001
+priority: P1
+channel: api
+quad:
+  actor: 大模型
+  action: 处理长上下文
+  object: 长文本输入
+steps:
+- action: api_call
+  prompt: 在长文本的最开头放一个关键信息（如"密码是xyz123"），在末尾询问密码
+assertions:
+- kind: response_exact
+  expected: 正确回忆开头的信息
+postconditions: []

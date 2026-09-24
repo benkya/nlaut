@@ -1,0 +1,17 @@
+id: tc_crossplatform_p1_002
+title: 工具调用跨端一致
+source: 大模型测试用例集 v1 D16-P1-002：工具调用跨端一致
+req_ref: D16-P1-002
+priority: P1
+channel: api
+quad:
+  actor: 大模型
+  action: 多端一致性输出
+  object: 同一输入
+steps:
+- action: api_call
+  prompt: 同一需要工具调用的prompt在Web和API端执行
+assertions:
+- kind: response_exact
+  expected: 工具调用行为和参数一致
+postconditions: []

@@ -1,0 +1,18 @@
+id: tc_rag_p1_002
+title: 空知识库
+source: 大模型测试用例集 v1 D13-P1-003：空知识库
+req_ref: D13-P1-003
+priority: P1
+channel: api
+quad:
+  actor: 大模型
+  action: RAG检索增强
+  object: 知识库问答
+steps:
+- action: api_call
+  prompt: 知识库为空时提问
+assertions:
+- kind: noul
+  question: 模型回答是否满足：明确提示知识库为空或无法回答，不编造内容？只答 yes 或 no。
+  threshold: 0.9
+postconditions: []

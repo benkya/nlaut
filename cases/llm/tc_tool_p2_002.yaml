@@ -1,0 +1,19 @@
+id: tc_tool_p2_002
+title: 复杂参数提取
+source: 大模型测试用例集 v1 D12-P2-002：复杂参数提取
+req_ref: D12-P2-002
+priority: P2
+channel: api
+quad:
+  actor: 大模型
+  action: 调用工具
+  object: 工具调用请求
+steps:
+- action: api_call
+  prompt: 用户问"帮我订3张下周三下午从北京到上海的高铁票，要二等座"+提供复杂参数的函数定义
+assertions:
+- kind: noul
+  question: '模型是否参数: from=北京, to=上海, date=下周三, time=下午, count=3, seat_type=二等座？只答
+    yes 或 no。'
+  threshold: 0.9
+postconditions: []

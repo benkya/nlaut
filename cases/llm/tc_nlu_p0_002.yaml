@@ -1,0 +1,22 @@
+id: tc_nlu_p0_002
+title: 多义词消歧
+source: 大模型测试用例集 v1 D01-P0-002：多义词消歧
+req_ref: D01-P0-002
+priority: P0
+channel: api
+quad:
+  actor: 大模型
+  action: 理解用户意图
+  object: 自然语言输入
+steps:
+- action: api_call
+  prompt: '测试两个prompt：
+
+    1."苹果的最新发布会什么时候"
+
+    2."苹果的营养价值是什么"'
+assertions:
+- kind: noul
+  question: 模型回答是否满足：前者识别为公司，后者识别为水果；回答内容与对应含义匹配？只答 yes 或 no。
+  threshold: 0.9
+postconditions: []

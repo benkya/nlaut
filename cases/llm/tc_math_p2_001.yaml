@@ -1,0 +1,19 @@
+id: tc_math_p2_001
+title: 大数计算
+source: 大模型测试用例集 v1 D04-P2-001：大数计算
+req_ref: D04-P2-001
+priority: P2
+channel: api
+quad:
+  actor: 大模型
+  action: 数学计算
+  object: 数学问题
+steps:
+- action: api_call
+  prompt: 计算 2^64 的精确值
+assertions:
+- kind: response_contains
+  keywords:
+  - '18446744073709551616'
+  min_match: 1
+postconditions: []

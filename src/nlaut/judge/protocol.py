@@ -2,6 +2,9 @@
 
 证据链原则：判定只能基于 Evidence 作答，不得访问外部状态；
 原始输出全部进 Verdict.raw，随报告留痕。
+
+v0.2.0 扩展：Evidence 增加 llm_response / llm_response_json / tool_calls /
+latency_ms / conversation 字段，支持 API 通道判定。
 """
 
 from __future__ import annotations
@@ -15,13 +18,24 @@ EngineName = Literal["deterministic", "mlx-vlm", "laya", "jev"]
 
 
 class Evidence(BaseModel):
-    """判定输入的证据包：执行器产出，判定引擎只读。"""
+    """判定输入的证据包：执行器产出，判定引擎只读。
+
+    通道与字段对应：
+    - web 通道：screenshot + dom_state
+    - api 通道：llm_response + response + tool_calls + latency_ms + conversation
+    """
 
     case_id: str
     screenshot: str | None = None  # artifacts 相对路径
     dom_state: dict[str, str] | None = None  # selector -> 可见文本
-    response: dict | None = None  # API 响应（JSON）
+    response: dict | None = None  # API 原始 JSON 响应
     db_state: dict | None = None  # 关键表行数/状态
+    # --- v0.2.0 API 通道新增 ---
+    llm_response: str | None = None  # LLM 文本输出（assistant message content）
+    llm_response_json: dict | None = None  # 解析后的 JSON（当 response_json_schema 断言时填充）
+    tool_calls: list[dict] | None = None  # 工具调用列表（OpenAI tool_calls 格式）
+    latency_ms: float | None = None  # 响应延迟（毫秒）
+    conversation: list[dict] | None = None  # 多轮对话消息历史
 
 
 class Question(BaseModel):

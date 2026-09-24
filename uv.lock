@@ -961,6 +961,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "hf-transfer" },
+    { name = "httpx" },
     { name = "laya-mlx" },
     { name = "mlx-lm" },
     { name = "mlx-vlm" },
@@ -979,6 +980,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "hf-transfer", specifier = ">=0.1.9" },
+    { name = "httpx", specifier = ">=0.27" },
     { name = "laya-mlx", specifier = ">=0.2.0" },
     { name = "mlx-lm", specifier = ">=0.31.3" },
     { name = "mlx-vlm", specifier = ">=0.7.2" },

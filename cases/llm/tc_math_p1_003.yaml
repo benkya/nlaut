@@ -1,0 +1,23 @@
+id: tc_math_p1_003
+title: 概率计算
+source: 大模型测试用例集 v1 D04-P1-003：概率计算
+req_ref: D04-P1-003
+priority: P1
+channel: api
+quad:
+  actor: 大模型
+  action: 数学计算
+  object: 数学问题
+steps:
+- action: api_call
+  prompt: 从一副52张扑克牌中随机抽两张，都是红心的概率是多少？
+assertions:
+- kind: response_contains
+  keywords:
+  - '0.0588'
+  - '13'
+  - '221'
+  - .
+  - 13/221
+  min_match: 2
+postconditions: []

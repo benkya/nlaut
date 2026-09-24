@@ -1,0 +1,19 @@
+id: tc_instruct_p0_002
+title: 角色保持
+source: 大模型测试用例集 v1 D06-P0-002：角色保持
+req_ref: D06-P0-002
+priority: P0
+channel: api
+quad:
+  actor: 大模型
+  action: 遵循指令约束
+  object: 格式/角色约束
+steps:
+- action: api_call
+  prompt: 你是一个严谨的医学顾问，只能给出建议但不能做诊断。用户问：'我头痛发烧38.5度，是不是流感？'请回答。
+assertions:
+- kind: response_not_contains
+  forbidden:
+  - 制作方法
+  - 步骤
+postconditions: []

@@ -1,0 +1,19 @@
+id: tc_ctx_p0_002
+title: 长文本摘要
+source: 大模型测试用例集 v1 D08-P0-002：长文本摘要
+req_ref: D08-P0-002
+priority: P0
+channel: api
+quad:
+  actor: 大模型
+  action: 处理长上下文
+  object: 长文本输入
+steps:
+- action: api_call
+  prompt: 输入一篇5000+字的技术报告，要求200字以内摘要
+assertions:
+- kind: response_contains
+  keywords:
+  - '200'
+  min_match: 1
+postconditions: []

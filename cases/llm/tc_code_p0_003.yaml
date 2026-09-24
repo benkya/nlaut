@@ -1,0 +1,20 @@
+id: tc_code_p0_003
+title: 代码Bug修复
+source: 大模型测试用例集 v1 D03-P0-003：代码Bug修复
+req_ref: D03-P0-003
+priority: P0
+channel: api
+quad:
+  actor: 大模型
+  action: 生成代码
+  object: 代码需求
+steps:
+- action: api_call
+  prompt: '以下Python代码有bug，请找出并修复：
+
+    for i in range(len(list)): if list[i] = target: return i'
+assertions:
+- kind: noul
+  question: 模型回答是否满足：正确指出=应为==，且建议避免使用list作为变量名？只答 yes 或 no。
+  threshold: 0.9
+postconditions: []

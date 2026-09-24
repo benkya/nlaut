@@ -1,0 +1,23 @@
+id: tc_reason_p0_003
+title: 时间序列推理
+source: '大模型测试用例集 v1 D02-P0-003：时间序列推理 [断言修复 v1.1: 原断言为转换脚本描述性期望，判定不可执行]'
+req_ref: D02-P0-003
+priority: P0
+channel: api
+quad:
+  actor: 大模型
+  action: 逻辑推理
+  object: 推理问题
+  preconditions: []
+data_ref: null
+steps:
+- action: api_call
+  prompt: A比B高，B比C高，C比D高。谁最矮？
+  system_prompt: null
+assertions:
+- kind: response_contains
+  keywords:
+  - D
+  min_match: 1
+  judge: deterministic
+postconditions: []

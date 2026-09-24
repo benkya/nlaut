@@ -1,0 +1,20 @@
+id: tc_nlu_p0_003
+title: 复杂指令理解
+source: 大模型测试用例集 v1 D01-P0-003：复杂指令理解
+req_ref: D01-P0-003
+priority: P0
+channel: api
+quad:
+  actor: 大模型
+  action: 理解用户意图
+  object: 自然语言输入
+steps:
+- action: api_call
+  prompt: 请用3个要点总结以下文章，每个要点不超过20字：[插入一篇500字文章]
+assertions:
+- kind: response_contains
+  keywords:
+  - '3'
+  - '20'
+  min_match: 2
+postconditions: []

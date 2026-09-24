@@ -1,0 +1,20 @@
+id: tc_dialog_p0_002
+title: 指代消解
+source: 大模型测试用例集 v1 D11-P0-002：指代消解
+req_ref: D11-P0-002
+priority: P0
+channel: api
+quad:
+  actor: 大模型
+  action: 多轮对话
+  object: 多轮对话上下文
+steps:
+- action: api_call
+  prompt: 帮我推荐一款笔记本电脑
+- action: api_followup
+  prompt: 它的价格大概多少？
+assertions:
+- kind: noul
+  question: 模型回答是否满足："它"指代上一轮的笔记本电脑，回答包含价格信息？只答 yes 或 no。
+  threshold: 0.9
+postconditions: []

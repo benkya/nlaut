@@ -1,0 +1,18 @@
+id: tc_lang_p1_002
+title: 语言自动检测
+source: 大模型测试用例集 v1 D05-P1-003：语言自动检测
+req_ref: D05-P1-003
+priority: P1
+channel: api
+quad:
+  actor: 大模型
+  action: 多语言处理
+  object: 多语言文本
+steps:
+- action: api_call
+  prompt: Was ist der Hauptunterschied zwischen Python und Java?
+assertions:
+- kind: noul
+  question: 模型回答是否满足：正确识别为德语，用德语或中文回答均可但内容正确？只答 yes 或 no。
+  threshold: 0.9
+postconditions: []

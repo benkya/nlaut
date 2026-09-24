@@ -1,0 +1,19 @@
+id: tc_math_p0_001
+title: 多步算术
+source: 大模型测试用例集 v1 D04-P0-001：多步算术
+req_ref: D04-P0-001
+priority: P0
+channel: api
+quad:
+  actor: 大模型
+  action: 数学计算
+  object: 数学问题
+steps:
+- action: api_call
+  prompt: 一个商品原价200元，先打8折，再用30元优惠券，最终价格是多少？
+assertions:
+- kind: response_contains
+  keywords:
+  - '130'
+  min_match: 1
+postconditions: []

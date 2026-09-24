@@ -1,0 +1,22 @@
+id: tc_dialog_p0_003
+title: 话题切换后记忆
+source: 大模型测试用例集 v1 D11-P0-003：话题切换后记忆
+req_ref: D11-P0-003
+priority: P0
+channel: api
+quad:
+  actor: 大模型
+  action: 多轮对话
+  object: 多轮对话上下文
+steps:
+- action: api_call
+  prompt: Python怎么读取文件？
+- action: api_followup
+  prompt: 那Java呢？
+- action: api_followup
+  prompt: 回到刚才第一个问题，用Python还有什么方式？
+assertions:
+- kind: noul
+  question: 模型回答是否满足：正确识别回到Python文件读取话题？只答 yes 或 no。
+  threshold: 0.9
+postconditions: []

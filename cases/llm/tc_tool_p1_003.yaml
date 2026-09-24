@@ -1,0 +1,18 @@
+id: tc_tool_p1_003
+title: 工具调用失败处理
+source: 大模型测试用例集 v1 D12-P1-003：工具调用失败处理
+req_ref: D12-P1-003
+priority: P1
+channel: api
+quad:
+  actor: 大模型
+  action: 调用工具
+  object: 工具调用请求
+steps:
+- action: api_call
+  prompt: 模拟工具返回错误（如500），观察模型行为
+assertions:
+- kind: noul
+  question: 模型回答是否满足：模型告知用户工具调用失败，给出替代建议或重试，不应崩溃？只答 yes 或 no。
+  threshold: 0.9
+postconditions: []

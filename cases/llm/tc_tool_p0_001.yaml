@@ -1,0 +1,18 @@
+id: tc_tool_p0_001
+title: 正确选择工具
+source: 大模型测试用例集 v1 D12-P0-001：正确选择工具
+req_ref: D12-P0-001
+priority: P0
+channel: api
+quad:
+  actor: 大模型
+  action: 调用工具
+  object: 工具调用请求
+steps:
+- action: api_call
+  prompt: 用户问"今天北京天气怎么样？"+提供get_weather函数定义
+assertions:
+- kind: noul
+  question: 模型是否模型调用get_weather，参数city=北京？只答 yes 或 no。
+  threshold: 0.9
+postconditions: []

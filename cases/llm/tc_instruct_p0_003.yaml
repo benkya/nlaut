@@ -1,0 +1,32 @@
+id: tc_instruct_p0_003
+title: 多步指令
+source: '大模型测试用例集 v1 D06-P0-003：多步指令 [断言修复 v1.1: 原断言为转换脚本描述性期望，判定不可执行]'
+req_ref: D06-P0-003
+priority: P0
+channel: api
+quad:
+  actor: 大模型
+  action: 遵循指令约束
+  object: 格式/角色约束
+  preconditions: []
+data_ref: null
+steps:
+- action: api_call
+  prompt: 请按以下步骤操作：1. 写一个关于春天的四字成语；2. 用它造一个句子；3. 把句子翻译成英文。
+  system_prompt: null
+assertions:
+- kind: response_contains
+  keywords:
+  - 春
+  - 成语
+  min_match: 1
+  judge: deterministic
+- kind: response_contains
+  keywords:
+  - In
+  - season
+  - spring
+  - springtime
+  min_match: 1
+  judge: deterministic
+postconditions: []

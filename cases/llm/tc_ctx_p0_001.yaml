@@ -1,0 +1,18 @@
+id: tc_ctx_p0_001
+title: 长文本信息抽取
+source: 大模型测试用例集 v1 D08-P0-001：长文本信息抽取
+req_ref: D08-P0-001
+priority: P0
+channel: api
+quad:
+  actor: 大模型
+  action: 处理长上下文
+  object: 长文本输入
+steps:
+- action: api_call
+  prompt: 输入一篇3000+字的文章，末尾问：文章第三段提到的主要观点是什么？
+assertions:
+- kind: noul
+  question: 模型回答是否满足：正确引用第三段内容？只答 yes 或 no。
+  threshold: 0.9
+postconditions: []

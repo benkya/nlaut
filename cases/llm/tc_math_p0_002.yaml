@@ -1,0 +1,20 @@
+id: tc_math_p0_002
+title: 应用题
+source: 大模型测试用例集 v1 D04-P0-002：应用题
+req_ref: D04-P0-002
+priority: P0
+channel: api
+quad:
+  actor: 大模型
+  action: 数学计算
+  object: 数学问题
+steps:
+- action: api_call
+  prompt: 甲乙两人同时从A地出发去B地，甲速60km/h，乙速40km/h，AB相距120km。甲到B地后立即返回，多久后和乙相遇？
+assertions:
+- kind: response_contains
+  keywords:
+  - '2.4'
+  - .
+  min_match: 2
+postconditions: []

@@ -1,0 +1,18 @@
+id: tc_rag_p0_001
+title: 检索准确性
+source: 大模型测试用例集 v1 D13-P0-001：检索准确性
+req_ref: D13-P0-001
+priority: P0
+channel: api
+quad:
+  actor: 大模型
+  action: RAG检索增强
+  object: 知识库问答
+steps:
+- action: api_call
+  prompt: 知识库含10篇文档，问其中1篇的核心内容
+assertions:
+- kind: noul
+  question: 模型回答是否满足：回答正确引用目标文档内容？只答 yes 或 no。
+  threshold: 0.9
+postconditions: []

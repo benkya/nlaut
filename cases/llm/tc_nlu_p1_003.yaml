@@ -1,0 +1,18 @@
+id: tc_nlu_p1_003
+title: 混合语言输入
+source: 大模型测试用例集 v1 D01-P1-003：混合语言输入
+req_ref: D01-P1-003
+priority: P1
+channel: api
+quad:
+  actor: 大模型
+  action: 理解用户意图
+  object: 自然语言输入
+steps:
+- action: api_call
+  prompt: 帮我schedule一个meeting，跟marketing team讨论下Q4的plan
+assertions:
+- kind: noul
+  question: 模型回答是否满足：正确理解中英混合输入，识别为安排会议的意图？只答 yes 或 no。
+  threshold: 0.9
+postconditions: []

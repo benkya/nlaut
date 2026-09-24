@@ -1,0 +1,27 @@
+id: tc_d06_p0_001
+title: 格式约束-JSON输出
+source: '大模型测试用例集 D06-P0-001：验证模型按要求输出合法JSON [断言修复 v1.1: 原断言为转换脚本描述性期望，判定不可执行]'
+req_ref: D06-P0-001
+priority: P0
+channel: api
+quad:
+  actor: 大模型
+  action: 格式约束遵循
+  object: JSON输出
+  preconditions:
+  - 模型 API 可访问
+data_ref: d06_json_format
+steps:
+- action: api_call
+  prompt: $prompt
+  system_prompt: null
+assertions:
+- kind: response_json_schema
+  required_fields: []
+  expected_values: {}
+  judge: deterministic
+- kind: noul
+  question: JSON 是否包含3种编程语言及其应用领域？只答 yes 或 no。
+  threshold: 0.9
+  judge: systemone
+postconditions: []

@@ -1,0 +1,28 @@
+id: tc_code_p0_001
+title: Python基础函数生成
+source: '大模型测试用例集 v1 D03-P0-001：Python基础函数生成 [断言修复 v1.1: 原断言为转换脚本描述性期望，判定不可执行]'
+req_ref: D03-P0-001
+priority: P0
+channel: api
+quad:
+  actor: 大模型
+  action: 生成代码
+  object: 代码需求
+  preconditions: []
+data_ref: null
+steps:
+- action: api_call
+  prompt: 用Python写一个函数，输入一个列表，返回其中所有偶数的平方。包含函数定义和调用示例。
+  system_prompt: null
+assertions:
+- kind: response_contains
+  keywords:
+  - def
+  - return
+  min_match: 2
+  judge: deterministic
+- kind: noul
+  question: 代码是否正确实现'返回列表中偶数的平方'（filter偶数+平方）？只答 yes 或 no。
+  threshold: 0.9
+  judge: systemone
+postconditions: []

@@ -1,0 +1,18 @@
+id: tc_tool_p1_002
+title: 工具结果整合
+source: 大模型测试用例集 v1 D12-P1-002：工具结果整合
+req_ref: D12-P1-002
+priority: P1
+channel: api
+quad:
+  actor: 大模型
+  action: 调用工具
+  object: 工具调用请求
+steps:
+- action: api_call
+  prompt: 模型调用工具获得返回值后，需要把工具返回的JSON整合为自然语言回答
+assertions:
+- kind: noul
+  question: 模型回答是否满足：回答中包含工具返回的关键信息，格式为自然语言而非原始JSON？只答 yes 或 no。
+  threshold: 0.9
+postconditions: []

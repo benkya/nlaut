@@ -1,0 +1,18 @@
+id: tc_rag_p2_001
+title: RAG+工具调用联合
+source: 大模型测试用例集 v1 D13-P2-002：RAG+工具调用联合
+req_ref: D13-P2-002
+priority: P2
+channel: api
+quad:
+  actor: 大模型
+  action: RAG检索增强
+  object: 知识库问答
+steps:
+- action: api_call
+  prompt: 先从知识库检索信息，再用工具调用验证或扩展
+assertions:
+- kind: response_json_schema
+  required_fields: []
+  expected_values: {}
+postconditions: []

@@ -1,0 +1,21 @@
+id: tc_lang_p1_001
+title: 纯英文对话
+source: 大模型测试用例集 v1 D05-P1-001：纯英文对话
+req_ref: D05-P1-001
+priority: P1
+channel: api
+quad:
+  actor: 大模型
+  action: 多语言处理
+  object: 多语言文本
+steps:
+- action: api_call
+  prompt: Explain how HTTPS works in simple terms.
+assertions:
+- kind: response_contains
+  keywords:
+  - 加密
+  - 证书
+  - TLS
+  min_match: 1
+postconditions: []

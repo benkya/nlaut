@@ -1,0 +1,25 @@
+id: tc_login_lock_5
+title: 登录-连错密码-5次-账号锁定并拒绝正确密码
+source: "口述: 连错5次密码，账号要锁定，输对了也进不去"
+req_ref: null
+priority: P1
+channel: web
+quad:
+  actor: 演示系统
+  action: 按口述操作
+  object: 目标页面
+  preconditions:
+    - "演示系统已启动且种子数据就绪"
+data_ref: login_lock_demo
+steps:
+  - {action: "nav", path: "/login"}
+  - {action: "fill", selector: "#username", value: "$user"}
+  - {action: "fill", selector: "#password", value: "$wrong_pwd"}
+  - {action: "fill", selector: "#password", value: "$wrong_pwd"}
+  - {action: "fill", selector: "new_pwd", value: "$wrong_pwd"}
+  - {action: "click", selector: "button[type=submit]"}
+  - {action: "wait_visible", selector: ".locked", timeout_ms: 5000}
+assertions:
+  - {kind: "text_visible", selector: ".locked", expected: "锁定"}
+  - {kind: "visual_state", prompt: "页面是否显示账号被锁定的提示（黄色警示样式），且没有出现登录成功的欢迎横幅？只答 yes 或 no。", threshold: 0.9}
+postconditions: []

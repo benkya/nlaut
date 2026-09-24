@@ -1,0 +1,17 @@
+id: tc_ctx_p2_002
+title: 上下文中数值细节
+source: 大模型测试用例集 v1 D08-P2-002：上下文中数值细节
+req_ref: D08-P2-002
+priority: P2
+channel: api
+quad:
+  actor: 大模型
+  action: 处理长上下文
+  object: 长文本输入
+steps:
+- action: api_call
+  prompt: 在长文本中散布多个具体数值，末尾问其中一个
+assertions:
+- kind: response_exact
+  expected: 正确回忆指定数值
+postconditions: []

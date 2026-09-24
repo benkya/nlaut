@@ -1,0 +1,18 @@
+id: tc_code_p1_001
+title: JavaScript函数生成
+source: 大模型测试用例集 v1 D03-P1-001：JavaScript函数生成
+req_ref: D03-P1-001
+priority: P1
+channel: api
+quad:
+  actor: 大模型
+  action: 生成代码
+  object: 代码需求
+steps:
+- action: api_call
+  prompt: 用JavaScript写一个函数，实现数组去重并保持原始顺序。
+assertions:
+- kind: response_json_schema
+  required_fields: []
+  expected_values: {}
+postconditions: []

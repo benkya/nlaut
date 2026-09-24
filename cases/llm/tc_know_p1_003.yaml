@@ -1,0 +1,18 @@
+id: tc_know_p1_003
+title: 概念解释
+source: 大模型测试用例集 v1 D09-P1-003：概念解释
+req_ref: D09-P1-003
+priority: P1
+channel: api
+quad:
+  actor: 大模型
+  action: 回答知识问题
+  object: 知识问题
+steps:
+- action: api_call
+  prompt: 什么是微服务架构？它和单体架构的主要区别是什么？
+assertions:
+- kind: noul
+  question: 模型回答是否满足：正确解释微服务概念，列出与单体架构的区别？只答 yes 或 no。
+  threshold: 0.9
+postconditions: []

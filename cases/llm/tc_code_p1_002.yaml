@@ -1,0 +1,22 @@
+id: tc_code_p1_002
+title: 代码解释
+source: 大模型测试用例集 v1 D03-P1-002：代码解释
+req_ref: D03-P1-002
+priority: P1
+channel: api
+quad:
+  actor: 大模型
+  action: 生成代码
+  object: 代码需求
+steps:
+- action: api_call
+  prompt: '请解释以下代码的功能：
+
+    def f(n): return n if n<=1 else f(n-1)+f(n-2)'
+assertions:
+- kind: response_contains
+  keywords:
+  - 斐波那契
+  - 递归
+  min_match: 1
+postconditions: []

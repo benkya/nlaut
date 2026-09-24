@@ -1,0 +1,19 @@
+id: tc_instruct_p1_001
+title: 字数限制
+source: 大模型测试用例集 v1 D06-P1-001：字数限制
+req_ref: D06-P1-001
+priority: P1
+channel: api
+quad:
+  actor: 大模型
+  action: 遵循指令约束
+  object: 格式/角色约束
+steps:
+- action: api_call
+  prompt: 请用恰好50个字（含标点）描述机器学习的概念。
+assertions:
+- kind: response_contains
+  keywords:
+  - '50'
+  min_match: 1
+postconditions: []

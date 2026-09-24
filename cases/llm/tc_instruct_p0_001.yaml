@@ -1,0 +1,26 @@
+id: tc_instruct_p0_001
+title: 格式约束-JSON输出
+source: '大模型测试用例集 v1 D06-P0-001：格式约束-JSON输出 [断言修复 v1.1: 原断言为转换脚本描述性期望，判定不可执行]'
+req_ref: D06-P0-001
+priority: P0
+channel: api
+quad:
+  actor: 大模型
+  action: 遵循指令约束
+  object: 格式/角色约束
+  preconditions: []
+data_ref: null
+steps:
+- action: api_call
+  prompt: 请用JSON格式回答：列出3种编程语言及其主要应用领域。
+  system_prompt: null
+assertions:
+- kind: response_json_schema
+  required_fields: []
+  expected_values: {}
+  judge: deterministic
+- kind: noul
+  question: JSON 是否包含3种编程语言及其应用领域？只答 yes 或 no。
+  threshold: 0.9
+  judge: systemone
+postconditions: []

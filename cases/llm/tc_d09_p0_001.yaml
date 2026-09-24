@@ -1,0 +1,24 @@
+id: tc_d09_p0_001
+title: 事实性知识-地理
+source: "大模型测试用例集 D09-P0-001：验证模型回答中国最长的河流"
+req_ref: "D09-P0-001"
+priority: P0
+channel: api
+quad:
+  actor: 大模型
+  action: 事实性知识回答
+  object: 中国最长河流
+  preconditions:
+    - "模型 API 可访问"
+data_ref: d09_longest_river
+steps:
+  - action: api_call
+    prompt: "$prompt"
+assertions:
+  - kind: response_contains
+    keywords: ["长江"]
+    min_match: 1
+  - kind: noul
+    question: "模型是否回答了中国最长的河流是长江（约6300公里）？只答 yes 或 no。"
+    threshold: 0.9
+postconditions: []

@@ -1,0 +1,101 @@
+# 大模型配置模板
+# 用法：CLI --model deepseek-chat --api-key sk-xxx
+# models.yaml 中预设的 base_url 会自动补全，api_key 从环境变量读取
+# 新接入模型时在 models 节下追加一个条目即可
+
+models:
+  # --- Aliyun MAAS token-plan（本机已配置 CUSTOM_API_KEY，实测 26 模型可用）---
+
+  glm-5.2:
+    provider: aliyun_maas
+    base_url: "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1"
+    api_key_env: "CUSTOM_API_KEY"
+    model_id: "glm-5.2"
+    type: commercial_api
+    supports_streaming: true
+    supports_function_calling: true
+    context_window: 131072
+
+  glm-5:
+    provider: aliyun_maas
+    base_url: "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1"
+    api_key_env: "CUSTOM_API_KEY"
+    model_id: "glm-5"
+    type: commercial_api
+    supports_streaming: true
+    supports_function_calling: true
+    context_window: 131072
+
+  qwen3.7-max:
+    provider: aliyun_maas
+    base_url: "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1"
+    api_key_env: "CUSTOM_API_KEY"
+    model_id: "qwen3.7-max"
+    type: commercial_api
+    supports_streaming: true
+    supports_function_calling: true
+    context_window: 131072
+
+  deepseek-v4-pro:
+    provider: aliyun_maas
+    base_url: "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1"
+    api_key_env: "CUSTOM_API_KEY"
+    model_id: "deepseek-v4-pro"
+    type: commercial_api
+    supports_streaming: true
+    supports_function_calling: true
+    context_window: 131072
+
+  # --- 商用 API（其他渠道，需自行配置 key）---
+
+  deepseek-chat:
+    provider: deepseek
+    base_url: "https://api.deepseek.com/v1"
+    api_key_env: "DEEPSEEK_API_KEY"
+    model_id: "deepseek-chat"
+    type: commercial_api
+    supports_streaming: true
+    supports_function_calling: true
+    context_window: 65536
+
+  qwen-max:
+    provider: alibaba
+    base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    api_key_env: "DASHSCOPE_API_KEY"
+    model_id: "qwen-max"
+    type: commercial_api
+    supports_streaming: true
+    supports_function_calling: true
+    context_window: 32768
+
+  gpt-4o:
+    provider: openai
+    base_url: "https://api.openai.com/v1"
+    api_key_env: "OPENAI_API_KEY"
+    model_id: "gpt-4o"
+    type: commercial_api
+    supports_streaming: true
+    supports_function_calling: true
+    context_window: 128000
+
+  glm-4-plus:
+    provider: zhipu
+    base_url: "https://open.bigmodel.cn/api/paas/v4"
+    api_key_env: "ZHIPU_API_KEY"
+    model_id: "glm-4-plus"
+    type: commercial_api
+    supports_streaming: true
+    supports_function_calling: true
+    context_window: 128000
+
+  # --- 本地部署（示例，按实际地址修改）---
+
+  qwen-local:
+    provider: local
+    base_url: "http://10.0.1.100:8000/v1"
+    api_key_env: "LOCAL_LLM_KEY"  # 本地推理通常不需要 key，用占位
+    model_id: "Qwen2.5-72B-Instruct"
+    type: local_deployment
+    supports_streaming: true
+    supports_function_calling: true
+    context_window: 32768

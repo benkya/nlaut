@@ -1,0 +1,20 @@
+id: tc_know_p0_001
+title: 事实性知识-地理
+source: 大模型测试用例集 v1 D09-P0-001：事实性知识-地理
+req_ref: D09-P0-001
+priority: P0
+channel: api
+quad:
+  actor: 大模型
+  action: 回答知识问题
+  object: 知识问题
+steps:
+- action: api_call
+  prompt: 中国最长的河流是什么？长度约多少公里？
+assertions:
+- kind: response_contains
+  keywords:
+  - '6300'
+  - 长江
+  min_match: 2
+postconditions: []

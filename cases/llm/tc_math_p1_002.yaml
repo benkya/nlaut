@@ -1,0 +1,20 @@
+id: tc_math_p1_002
+title: 几何计算
+source: 大模型测试用例集 v1 D04-P1-002：几何计算
+req_ref: D04-P1-002
+priority: P1
+channel: api
+quad:
+  actor: 大模型
+  action: 数学计算
+  object: 数学问题
+steps:
+- action: api_call
+  prompt: 一个半径为5的圆的面积是多少？（取π=3.14）
+assertions:
+- kind: response_contains
+  keywords:
+  - '78.5'
+  - .
+  min_match: 2
+postconditions: []

@@ -1,0 +1,19 @@
+id: tc_reason_p1_002
+title: 条件推理
+source: 大模型测试用例集 v1 D02-P1-002：条件推理
+req_ref: D02-P1-002
+priority: P1
+channel: api
+quad:
+  actor: 大模型
+  action: 逻辑推理
+  object: 推理问题
+steps:
+- action: api_call
+  prompt: 如果今天是周三，那后天是星期几？请给出推理过程。
+assertions:
+- kind: response_contains
+  keywords:
+  - 周五
+  min_match: 1
+postconditions: []

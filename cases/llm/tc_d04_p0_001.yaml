@@ -1,0 +1,24 @@
+id: tc_d04_p0_001
+title: 多步算术
+source: "大模型测试用例集 D04-P0-001：验证模型能正确完成多步算术（折扣+优惠券）"
+req_ref: "D04-P0-001"
+priority: P0
+channel: api
+quad:
+  actor: 大模型
+  action: 多步算术
+  object: 折扣+优惠券计算
+  preconditions:
+    - "模型 API 可访问"
+data_ref: d04_multi_step
+steps:
+  - action: api_call
+    prompt: "$prompt"
+assertions:
+  - kind: response_contains
+    keywords: ["130"]
+    min_match: 1
+  - kind: noul
+    question: "模型是否正确计算出最终价格130元（200×0.8-30=130）？只答 yes 或 no。"
+    threshold: 0.9
+postconditions: []

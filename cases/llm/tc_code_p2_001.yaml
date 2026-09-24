@@ -1,0 +1,18 @@
+id: tc_code_p2_001
+title: 完整程序生成
+source: 大模型测试用例集 v1 D03-P2-002：完整程序生成
+req_ref: D03-P2-002
+priority: P2
+channel: api
+quad:
+  actor: 大模型
+  action: 生成代码
+  object: 代码需求
+steps:
+- action: api_call
+  prompt: 用Python写一个命令行todo list程序，支持增删改查和标记完成。
+assertions:
+- kind: response_json_schema
+  required_fields: []
+  expected_values: {}
+postconditions: []

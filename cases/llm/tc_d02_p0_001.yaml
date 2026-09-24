@@ -1,0 +1,24 @@
+id: tc_d02_p0_001
+title: 三段论推理
+source: "大模型测试用例集 D02-P0-001：验证模型能正确进行三段论演绎推理"
+req_ref: "D02-P0-001"
+priority: P0
+channel: api
+quad:
+  actor: 大模型
+  action: 演绎推理
+  object: 三段论
+  preconditions:
+    - "模型 API 可访问"
+data_ref: d02_syllogism
+steps:
+  - action: api_call
+    prompt: "$prompt"
+assertions:
+  - kind: response_contains
+    keywords: ["是"]
+    min_match: 1
+  - kind: noul
+    question: "模型是否正确回答了苏格拉底会死，且推理链包含'所有人都会死'和'苏格拉底是人'两个前提？只答 yes 或 no。"
+    threshold: 0.9
+postconditions: []

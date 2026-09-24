@@ -1,0 +1,20 @@
+id: tc_reason_p1_003
+title: 常识推理
+source: 大模型测试用例集 v1 D02-P1-003：常识推理
+req_ref: D02-P1-003
+priority: P1
+channel: api
+quad:
+  actor: 大模型
+  action: 逻辑推理
+  object: 推理问题
+steps:
+- action: api_call
+  prompt: 把一个铁球和一个木球同时从楼上扔下（不考虑空气阻力），哪个先落地？
+assertions:
+- kind: response_contains
+  keywords:
+  - 同时落地
+  - 同时
+  min_match: 2
+postconditions: []

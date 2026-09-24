@@ -1,0 +1,28 @@
+id: tc_creative_p0_001
+title: 结构化创意
+source: '大模型测试用例集 v1 D10-P0-002：结构化创意 [断言修复 v1.1: 原断言为转换脚本描述性期望，判定不可执行]'
+req_ref: D10-P0-002
+priority: P0
+channel: api
+quad:
+  actor: 大模型
+  action: 创意生成
+  object: 创意主题
+  preconditions: []
+data_ref: null
+steps:
+- action: api_call
+  prompt: 为一个名为'智能旅行助手'的AI产品写一句slogan和一段50字的产品描述
+  system_prompt: null
+assertions:
+- kind: response_contains
+  keywords:
+  - 智能旅行助手
+  - 旅行
+  min_match: 1
+  judge: deterministic
+- kind: noul
+  question: 输出是否包含一句 slogan 和一段产品描述（两段结构可辨）？只答 yes 或 no。
+  threshold: 0.9
+  judge: systemone
+postconditions: []

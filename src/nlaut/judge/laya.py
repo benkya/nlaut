@@ -20,8 +20,30 @@ DEFAULT_MODEL = "aac6fef/laya-multilingual-mlx"  # HF id；若本地缓存已有
 
 
 def render_state(evidence: Evidence) -> str:
-    """把 Evidence 渲染为 Laya 的 state 文本（可审计、可回放）。"""
+    """把 Evidence 渲染为 Laya 的 state 文本（可审计、可回放）。
+
+    v0.2.0：API 通道证据优先渲染 llm_response（模型文本输出）与 conversation
+    （用户输入），再渲染原始 response JSON。Laya 是纯文本决策模型，
+    长 prompt 优先，避免 choices 包装结构稀释关键信息。
+    """
     parts = [f"case: {evidence.case_id}"]
+    # API 通道（v0.2.0）：用户 prompt + 模型回答优先渲染
+    if evidence.conversation:
+        user_turns = [m.get("content", "") for m in evidence.conversation
+                      if m.get("role") == "user"]
+        if user_turns:
+            parts.append(f"用户输入: {' / '.join(t[:200] for t in user_turns)}")
+    if evidence.llm_response:
+        parts.append(f"模型回答: {evidence.llm_response[:600]}")
+    if evidence.tool_calls:
+        calls = "; ".join(
+            f"{c.get('function', {}).get('name')}({c.get('function', {}).get('arguments', '')[:100]})"
+            for c in evidence.tool_calls
+        )
+        parts.append(f"工具调用: {calls}")
+    if evidence.latency_ms is not None:
+        parts.append(f"响应延迟: {evidence.latency_ms:.0f}ms")
+    # Web 通道原有渲染
     if evidence.dom_state:
         dom = "; ".join(f"{sel} -> {txt[:80]}" for sel, txt in evidence.dom_state.items())
         parts.append(f"DOM 可见状态: {dom}")

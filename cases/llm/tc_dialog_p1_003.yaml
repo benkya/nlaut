@@ -1,0 +1,22 @@
+id: tc_dialog_p1_003
+title: 多轮指令累积
+source: 大模型测试用例集 v1 D11-P1-003：多轮指令累积
+req_ref: D11-P1-003
+priority: P1
+channel: api
+quad:
+  actor: 大模型
+  action: 多轮对话
+  object: 多轮对话上下文
+steps:
+- action: api_call
+  prompt: 帮我写一个函数计算阶乘
+- action: api_followup
+  prompt: 加上错误处理
+- action: api_followup
+  prompt: 再加上日志输出
+assertions:
+- kind: response_json_schema
+  required_fields: []
+  expected_values: {}
+postconditions: []

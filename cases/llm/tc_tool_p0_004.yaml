@@ -1,0 +1,22 @@
+id: tc_tool_p0_004
+title: 多工具串联
+source: '大模型测试用例集 v1 D12-P0-004：多工具串联 [断言修复 v1.1: 原断言为转换脚本描述性期望，判定不可执行]'
+req_ref: D12-P0-004
+priority: P0
+channel: api
+quad:
+  actor: 大模型
+  action: 调用工具
+  object: 工具调用请求
+  preconditions: []
+data_ref: null
+steps:
+- action: api_call
+  prompt: 用户问"查北京天气，然后把结果发到myemail@test.com"+提供get_weather+send_email函数定义
+  system_prompt: null
+assertions:
+- kind: noul
+  question: 模型是否表达了'先查天气再发邮件'的两步调用意图？只答 yes 或 no。
+  threshold: 0.9
+  judge: systemone
+postconditions: []

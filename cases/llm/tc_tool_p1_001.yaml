@@ -1,0 +1,18 @@
+id: tc_tool_p1_001
+title: 可选参数处理
+source: 大模型测试用例集 v1 D12-P1-001：可选参数处理
+req_ref: D12-P1-001
+priority: P1
+channel: api
+quad:
+  actor: 大模型
+  action: 调用工具
+  object: 工具调用请求
+steps:
+- action: api_call
+  prompt: 用户问"帮我查上海天气"+提供get_weather函数定义（含required=city, optional=unit）
+assertions:
+- kind: noul
+  question: 模型是否调用get_weather，city=上海，unit可默认或省略？只答 yes 或 no。
+  threshold: 0.9
+postconditions: []

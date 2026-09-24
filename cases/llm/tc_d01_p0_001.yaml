@@ -1,0 +1,24 @@
+id: tc_d01_p0_001
+title: 意图准确识别
+source: "大模型测试用例集 D01-P0-001：验证模型能识别航班查询意图并提取关键实体"
+req_ref: "D01-P0-001"
+priority: P0
+channel: api
+quad:
+  actor: 大模型
+  action: 理解用户意图
+  object: 航班查询请求
+  preconditions:
+    - "模型 API 可访问"
+data_ref: d01_intent
+steps:
+  - action: api_call
+    prompt: "$prompt"
+assertions:
+  - kind: response_contains
+    keywords: ["航班", "北京", "上海"]
+    min_match: 2
+  - kind: noul
+    question: "模型回答是否正确识别了航班查询意图并提取了出发地北京和目的地上海？只答 yes 或 no。"
+    threshold: 0.9
+postconditions: []

@@ -1,0 +1,18 @@
+id: tc_ctx_p2_001
+title: 上下文中代码理解
+source: 大模型测试用例集 v1 D08-P2-001：上下文中代码理解
+req_ref: D08-P2-001
+priority: P2
+channel: api
+quad:
+  actor: 大模型
+  action: 处理长上下文
+  object: 长文本输入
+steps:
+- action: api_call
+  prompt: 输入一段1000+行的代码，问代码中某个函数的功能
+assertions:
+- kind: noul
+  question: 模型回答是否满足：正确识别函数功能？只答 yes 或 no。
+  threshold: 0.9
+postconditions: []

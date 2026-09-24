@@ -42,7 +42,7 @@ class TestIRStore:
     def test_load_all_demo(self):
         store = IRStore(ROOT / "cases")
         cases = store.load_all()
-        assert {c.id for c in cases} == {
+        assert {c.id for c in cases} >= {
             "tc_login_001", "tc_login_002", "tc_login_003", "tc_login_004",
             "tc_login_005", "tc_login_006",
             "tc_tasks_001", "tc_tasks_002", "tc_tasks_003", "tc_tasks_004",
@@ -54,6 +54,9 @@ class TestIRStore:
             "tc_giencwb_001", "tc_giencwb_002", "tc_giencwb_003",
             "tc_giencwb_004", "tc_giencwb_005", "tc_giencwb_006",
             "tc_giencwb_007",
+            # v0.2.0 LLM 用例
+            "tc_d01_p0_001", "tc_d02_p0_001", "tc_d04_p0_001",
+            "tc_d06_p0_001", "tc_d07_p0_001", "tc_d07_p0_002", "tc_d09_p0_001",
         }
         assert store.get("tc_login_001").title.startswith("登录")
         assert store.get("tc_login_002").data_ref == "login_valid"

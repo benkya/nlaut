@@ -1,0 +1,22 @@
+id: tc_rag_p0_003
+title: 来源引用
+source: '大模型测试用例集 v1 D13-P0-003：来源引用 [断言修复 v1.1: 原断言为转换脚本描述性期望，判定不可执行]'
+req_ref: D13-P0-003
+priority: P0
+channel: api
+quad:
+  actor: 大模型
+  action: RAG检索增强
+  object: 知识库问答
+  preconditions: []
+data_ref: null
+steps:
+- action: api_call
+  prompt: 知识库含5篇文档，问"产品A的价格是多少"
+  system_prompt: null
+assertions:
+- kind: noul
+  question: 模型回答是否包含来源引用（文档名/编号/出处标识）或声明无法访问知识库？只答 yes 或 no。
+  threshold: 0.9
+  judge: systemone
+postconditions: []

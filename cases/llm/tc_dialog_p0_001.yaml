@@ -1,0 +1,24 @@
+id: tc_dialog_p0_001
+title: 上下文保持-3轮
+source: 大模型测试用例集 v1 D11-P0-001：上下文保持-3轮
+req_ref: D11-P0-001
+priority: P0
+channel: api
+quad:
+  actor: 大模型
+  action: 多轮对话
+  object: 多轮对话上下文
+steps:
+- action: api_call
+  prompt: 我叫张三
+- action: api_followup
+  prompt: 我今年30岁
+- action: api_followup
+  prompt: 我叫什么名字？今年几岁？
+assertions:
+- kind: response_contains
+  keywords:
+  - '30'
+  - 张三
+  min_match: 2
+postconditions: []

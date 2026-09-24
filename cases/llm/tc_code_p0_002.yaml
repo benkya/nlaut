@@ -1,0 +1,31 @@
+id: tc_code_p0_002
+title: SQL查询生成
+source: '大模型测试用例集 v1 D03-P0-002：SQL查询生成 [断言修复 v1.1: 原断言为转换脚本描述性期望，判定不可执行]'
+req_ref: D03-P0-002
+priority: P0
+channel: api
+quad:
+  actor: 大模型
+  action: 生成代码
+  object: 代码需求
+  preconditions: []
+data_ref: null
+steps:
+- action: api_call
+  prompt: 写一条SQL，查询orders表中2024年订单金额超过1000的客户姓名和总金额，按总金额降序排列。
+  system_prompt: null
+assertions:
+- kind: response_contains
+  keywords:
+  - SELECT
+  - FROM
+  - WHERE
+  - GROUP BY
+  - ORDER BY
+  min_match: 4
+  judge: deterministic
+- kind: noul
+  question: SQL 是否查询2024年金额>1000客户姓名和总金额并按总金额降序？只答 yes 或 no。
+  threshold: 0.9
+  judge: systemone
+postconditions: []

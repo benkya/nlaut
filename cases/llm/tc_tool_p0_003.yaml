@@ -1,0 +1,27 @@
+id: tc_tool_p0_003
+title: 无需工具时不过调
+source: '大模型测试用例集 v1 D12-P0-003：无需工具时不过调 [断言修复 v1.1: 原断言为转换脚本描述性期望，判定不可执行]'
+req_ref: D12-P0-003
+priority: P0
+channel: api
+quad:
+  actor: 大模型
+  action: 调用工具
+  object: 工具调用请求
+  preconditions: []
+data_ref: null
+steps:
+- action: api_call
+  prompt: 用户问"1+1等于几？"+提供多个工具定义
+  system_prompt: null
+assertions:
+- kind: response_contains
+  keywords:
+  - '2'
+  min_match: 1
+  judge: deterministic
+- kind: noul
+  question: 模型是否直接回答了算术问题而未建议调用工具？只答 yes 或 no。
+  threshold: 0.9
+  judge: systemone
+postconditions: []

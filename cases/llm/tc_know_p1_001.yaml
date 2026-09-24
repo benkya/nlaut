@@ -1,0 +1,19 @@
+id: tc_know_p1_001
+title: 事实性知识-历史
+source: 大模型测试用例集 v1 D09-P1-001：事实性知识-历史
+req_ref: D09-P1-001
+priority: P1
+channel: api
+quad:
+  actor: 大模型
+  action: 回答知识问题
+  object: 知识问题
+steps:
+- action: api_call
+  prompt: 第二次世界大战结束于哪一年？主要结束事件是什么？
+assertions:
+- kind: response_contains
+  keywords:
+  - '1945'
+  min_match: 1
+postconditions: []

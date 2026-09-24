@@ -1,0 +1,18 @@
+id: tc_tool_p0_002
+title: 参数提取准确
+source: 大模型测试用例集 v1 D12-P0-002：参数提取准确
+req_ref: D12-P0-002
+priority: P0
+channel: api
+quad:
+  actor: 大模型
+  action: 调用工具
+  object: 工具调用请求
+steps:
+- action: api_call
+  prompt: 用户问"帮我订一张明天上午10点从北京到上海的高铁票"+提供book_ticket函数定义
+assertions:
+- kind: noul
+  question: '模型是否参数: from=北京, to=上海, date=明天, time=10:00？只答 yes 或 no。'
+  threshold: 0.9
+postconditions: []

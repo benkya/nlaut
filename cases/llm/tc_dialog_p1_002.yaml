@@ -1,0 +1,25 @@
+id: tc_dialog_p1_002
+title: 上下文修正
+source: 大模型测试用例集 v1 D11-P1-002：上下文修正
+req_ref: D11-P1-002
+priority: P1
+channel: api
+quad:
+  actor: 大模型
+  action: 多轮对话
+  object: 多轮对话上下文
+steps:
+- action: api_call
+  prompt: 我有一只猫叫小白
+- action: api_followup
+  prompt: 小白是公的还是母的？
+- action: api_followup
+  prompt: 等等，它其实叫小黑不是小白
+- action: api_followup
+  prompt: 我的猫叫什么？
+assertions:
+- kind: response_contains
+  keywords:
+  - 小黑
+  min_match: 1
+postconditions: []

@@ -1,0 +1,22 @@
+id: tc_know_p0_002
+title: 专业知识-技术
+source: 大模型测试用例集 v1 D09-P0-002：专业知识-技术
+req_ref: D09-P0-002
+priority: P0
+channel: api
+quad:
+  actor: 大模型
+  action: 回答知识问题
+  object: 知识问题
+steps:
+- action: api_call
+  prompt: RESTful API的核心设计原则是什么？列举至少3个。
+assertions:
+- kind: response_contains
+  keywords:
+  - '3'
+  - 无状态
+  - 统一接口
+  - 分层系统
+  min_match: 1
+postconditions: []
