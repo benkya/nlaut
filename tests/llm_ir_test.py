@@ -230,6 +230,30 @@ class TestDeterministicJudgeLlmModes:
         v = self.judge.judge(ev, q)
         assert v.value == 1.0
 
+    def test_response_json_schema_array_form(self):
+        """合法 JSON 但为数组形态（模型风格差异，如 Qwen3.8-Flash），不应判失败。"""
+        ev = self._ev(llm_response='```json\n[{"语言": "Python", "领域": "AI"}, {"语言": "Java"}]\n```')
+        q = self._q({"mode": "response_json_schema", "required_fields": ["语言"]})
+        v = self.judge.judge(ev, q)
+        assert v.value == 1.0
+        assert v.raw.get("json_form") == "array"
+
+    def test_response_json_schema_array_missing_field(self):
+        """数组形态：required_fields 在元素级检查，全部元素缺该字段才 fail。"""
+        ev = self._ev(llm_response='[{"a": 1}, {"a": 2}]')
+        q = self._q({"mode": "response_json_schema", "required_fields": ["name"]})
+        v = self.judge.judge(ev, q)
+        assert v.value == 0.0
+        assert v.raw.get("missing") == ["name"]
+
+    def test_response_json_schema_truncated_json(self):
+        """真正截断的 JSON（语法错误）必须 fail——容错不等于放水。"""
+        ev = self._ev(llm_response='```json\n[{"name": "Python",\n')
+        q = self._q({"mode": "response_json_schema", "required_fields": []})
+        v = self.judge.judge(ev, q)
+        assert v.value == 0.0
+        assert "not valid JSON" in v.raw.get("error", "")
+
     def test_response_json_schema_not_json(self):
         ev = self._ev(llm_response="这不是JSON")
         q = self._q({"mode": "response_json_schema", "required_fields": ["name"]})

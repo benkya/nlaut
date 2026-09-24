@@ -113,7 +113,7 @@ def _call_api(
         tool_calls_accum: dict[int, dict] = {}
 
         with (
-            httpx.Client(timeout=timeout) as client,
+            httpx.Client(timeout=timeout, trust_env=False) as client,
             client.stream("POST", url, headers=headers, json=body) as resp,
         ):
             resp.raise_for_status()
@@ -161,7 +161,9 @@ def _call_api(
         return response, latency_ms
 
     # 非流式
-    with httpx.Client(timeout=timeout) as client:
+    # trust_env=False：内网推理服务（如 10.x IP）必须绕过系统代理直连，
+    # 否则 http_proxy 环境变量会把请求转发给代理导致连接失败（2026-09-24 实测坑）
+    with httpx.Client(timeout=timeout, trust_env=False) as client:
         resp = client.post(url, headers=headers, json=body)
         resp.raise_for_status()
     latency_ms = (time.time() - t0) * 1000

@@ -1,6 +1,7 @@
 id: tc_nlu_p0_003
 title: 复杂指令理解
-source: 大模型测试用例集 v1 D01-P0-003：复杂指令理解
+source: '大模型测试用例集 v1 D01-P0-003：复杂指令理解 [数据修复 v1.2: 原占位符"[插入一篇500字文章]"未填真实文章，
+    模型合理拒绝导致假失败——填入固定测试文章使其可判定]'
 req_ref: D01-P0-003
 priority: P0
 channel: api
@@ -8,13 +9,21 @@ quad:
   actor: 大模型
   action: 理解用户意图
   object: 自然语言输入
+  preconditions: []
+data_ref: null
 steps:
 - action: api_call
-  prompt: 请用3个要点总结以下文章，每个要点不超过20字：[插入一篇500字文章]
+  prompt: "请用3个要点总结以下文章，每个要点不超过20字：\n\n远程办公正在改变企业的协作方式。调查显示，超过六成的科技公司已允许员工每周至少两天居家办公。管理者发现，灵活的工作安排显著提升了员工满意度，但也带来了沟通效率下降的挑战。为此，许多团队引入了异步协作工具，用文档和录屏替代即时会议。同时，公司开始重新审视办公室的角色，将其改造为团队协作与创意碰撞的场所，而非日常工位。未来五年，混合办公模式预计将成为科技行业的主流形态。"
+  system_prompt: null
 assertions:
 - kind: response_contains
   keywords:
-  - '3'
-  - '20'
+  - 远程
+  - 办公
+  - 协作
   min_match: 2
+- kind: noul
+  question: 回答是否恰好包含3个要点，且每个要点不超过20字？只答 yes 或 no。
+  threshold: 0.9
+  judge: systemone
 postconditions: []

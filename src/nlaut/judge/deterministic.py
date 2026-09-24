@@ -183,11 +183,50 @@ class DeterministicJudge:
                     "response_preview": text[:200],
                 },
             )
+        if isinstance(parsed, list):
+            # 合法 JSON 但为数组形态（模型风格差异，非缺陷）：
+            # - 数组元素为对象时，required_fields 在元素级检查
+            # - expected_values 只对对象形态有意义，数组形态跳过
+            if parsed and all(isinstance(item, dict) for item in parsed):
+                missing = []
+                for f in required_fields:
+                    if not any(f in item for item in parsed):
+                        missing.append(f)
+                matched = len(missing) == 0 and not expected_values
+                return Verdict(
+                    engine=self.engine,
+                    kind="noul",
+                    value=1.0 if matched else 0.0,
+                    confidence=1.0,
+                    evidence_refs=[evidence.case_id],
+                    raw={
+                        "mode": "response_json_schema",
+                        "json_form": "array",
+                        "item_count": len(parsed),
+                        "required_fields": required_fields,
+                        "missing": missing,
+                        "note": "数组形态 JSON，字段在元素级校验（expected_values 仅对象形态生效）",
+                    },
+                )
+            # 空数组或元素非对象：仍算合法 JSON（是否合语义由 noul 断言补充判定）
+            return Verdict(
+                engine=self.engine,
+                kind="noul",
+                value=1.0,
+                confidence=1.0,
+                evidence_refs=[evidence.case_id],
+                raw={
+                    "mode": "response_json_schema",
+                    "json_form": "array",
+                    "item_count": len(parsed),
+                    "note": "数组形态 JSON（元素非对象或空），合法性通过",
+                },
+            )
         if not isinstance(parsed, dict):
             return Verdict(
                 engine=self.engine, kind="noul", value=0.0, confidence=1.0,
                 evidence_refs=[evidence.case_id],
-                raw={"mode": "response_json_schema", "error": "JSON is not an object",
+                raw={"mode": "response_json_schema", "error": "JSON is neither object nor array",
                      "response_preview": text[:200]},
             )
         missing = [f for f in required_fields if f not in parsed]

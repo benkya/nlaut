@@ -4,6 +4,18 @@
 # 新接入模型时在 models 节下追加一个条目即可
 
 models:
+  # --- 内部部署模型（Qwen3.8-Flash-Next，2026-09-24 实测接入）---
+
+  qwen3.8-flash-next:
+    provider: internal
+    base_url: "http://10.62.64.38:30808/inference/v1"
+    api_key_env: "QWEN38_FLASH_KEY"
+    model_id: "Qwen3.8-Flash-Next"
+    type: local_deployment
+    supports_streaming: true
+    supports_function_calling: false  # [推测] 内部推理服务，工具调用能力未探测
+    context_window: 32768  # [推测] 未从服务端获取，按 Qwen3 系默认
+
   # --- Aliyun MAAS token-plan（本机已配置 CUSTOM_API_KEY，实测 26 模型可用）---
 
   glm-5.2:
