@@ -14,7 +14,7 @@ from pydantic import ValidationError
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from nlaut.ir.model import TestCaseIR  # noqa: E402
+from nlaut.ir.model import TestCaseIR
 
 FIXES: dict[str, dict] = {
     # 代码生成用例：json_schema → 代码要素 contains + noul 语义
