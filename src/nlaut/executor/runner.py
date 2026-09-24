@@ -96,6 +96,18 @@ def _question_for(a, ir: TestCaseIR):
             text="",
             context={"mode": "response_time", "max_seconds": a.max_seconds},
         )
+    if a.kind == "response_ttft":
+        return Question(
+            kind="noul",
+            text="",
+            context={"mode": "response_ttft", "max_ms": a.max_ms},
+        )
+    if a.kind == "response_length":
+        return Question(
+            kind="noul",
+            text="",
+            context={"mode": "response_length", "min_chars": a.min_chars, "max_chars": a.max_chars},
+        )
 
     # --- AI 判定断言（原有）---
     if a.kind == "visual_state":
@@ -117,6 +129,7 @@ def _engine_name(a) -> str:
         "text_visible", "attribute",
         "response_exact", "response_contains", "response_not_contains",
         "response_json_schema", "tool_call_params", "response_time",
+        "response_ttft", "response_length",
     ):
         return "deterministic"
     # VLM 判定

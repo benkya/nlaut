@@ -111,6 +111,8 @@ def _call_api(
         full_content = ""
         finish_reason = None
         tool_calls_accum: dict[int, dict] = {}
+        ttft_ms: float | None = None  # 首 token 延迟（首个含 content 的 chunk）
+        stream_chunks = 0
 
         with (
             httpx.Client(timeout=timeout, trust_env=False) as client,
@@ -134,7 +136,10 @@ def _call_api(
                     continue
                 delta = choices[0].get("delta", {}) or {}
                 if delta.get("content"):
+                    if ttft_ms is None:
+                        ttft_ms = (time.time() - t0) * 1000
                     full_content += delta["content"]
+                    stream_chunks += 1
                 if delta.get("tool_calls"):
                     for tc in delta["tool_calls"]:
                         idx = tc.get("index", 0)
@@ -162,6 +167,8 @@ def _call_api(
                 "finish_reason": finish_reason or "stop",
             }],
             "streamed": True,
+            "ttft_ms": round(ttft_ms, 1) if ttft_ms is not None else None,
+            "stream_chunks": stream_chunks,
         }
         return response, latency_ms
 
@@ -237,6 +244,8 @@ def execute(
         "llm_response_json": llm_response_json,
         "tool_calls": tool_calls,
         "latency_ms": latency_ms,
+        "ttft_ms": response.get("ttft_ms"),
+        "stream_chunks": response.get("stream_chunks"),
         "conversation": messages,
         # web 通道字段留空
         "screenshot": None,

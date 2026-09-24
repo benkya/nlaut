@@ -1,0 +1,25 @@
+id: tc_stream_p0_001
+title: 流式输出-首token延迟
+source: '大模型测试用例集 v1 D14-P0-001：流式输出-首token延迟 [Phase 5 v0.2.4 新建：响应完整性与 TTFT 双断言，
+    api_stream step + response_ttft + response_length]'
+req_ref: D14-P0-001
+priority: P0
+channel: api
+quad:
+  actor: 测试工程师
+  action: 通过流式接口发送中等复杂度请求，验证流式通路正常
+  object: 首token延迟(TTFT)≤3000ms且输出完整非空
+  preconditions:
+  - 流式链路异常导致用户端长时间无反馈
+steps:
+- action: api_stream
+  prompt: 用三句话介绍软件测试金字塔模型。
+assertions:
+- kind: response_ttft
+  max_ms: 3000
+- kind: response_length
+  min_chars: 30
+  max_chars: 3000
+- kind: noul
+  question: 回答是否为关于软件测试金字塔的三句话介绍（提及单元/接口/UI三层级）？只答 yes 或 no。
+  threshold: 0.9

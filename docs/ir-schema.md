@@ -84,6 +84,8 @@ assertions:
 | `response_json_schema` | deterministic | required_fields, expected_values | L3 JSON 结构 |
 | `tool_call_params` | deterministic | expected_function, expected_params | 工具调用参数 |
 | `response_time` | deterministic | max_seconds | 性能延迟断言 |
+| `response_ttft` | deterministic | max_ms=3000 | 流式首 token 延迟（D14；非流式调用转人工） |
+| `response_length` | deterministic | min_chars, max_chars | 回答字符数区间（D15 字数约束） |
 
 ## 规则
 

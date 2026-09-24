@@ -223,8 +223,47 @@ class TestDeterministicJudgeLlmModes:
         v = self.judge.judge(ev, q)
         assert v.value == 1.0
 
+    # --- v0.2.4 Phase 5：TTFT / 响应长度断言 ---
+
+    def test_response_ttft_pass(self):
+        """流式 TTFT 达标 → 通过。"""
+        ev = self._ev(llm_response="x", ttft_ms=850.0)
+        q = self._q({"mode": "response_ttft", "max_ms": 3000.0})
+        v = self.judge.judge(ev, q)
+        assert v.value == 1.0
+        assert v.raw["ttft_ms"] == 850.0
+
+    def test_response_ttft_fail(self):
+        """流式 TTFT 超标 → 失败。"""
+        ev = self._ev(llm_response="x", ttft_ms=5800.0)
+        q = self._q({"mode": "response_ttft", "max_ms": 3000.0})
+        v = self.judge.judge(ev, q)
+        assert v.value == 0.0
+
+    def test_response_ttft_missing_turns_human(self):
+        """非流式调用无 TTFT → 转人工而非直接失败（缺失数据 ≠ 性能不达标）。"""
+        ev = self._ev(llm_response="x", ttft_ms=None)
+        q = self._q({"mode": "response_ttft", "max_ms": 3000.0})
+        v = self.judge.judge(ev, q)
+        assert v.value == 0.5
+        assert v.confidence == 0.5
+
+    def test_response_length_in_range(self):
+        """字符数在区间内 → 通过。"""
+        ev = self._ev(llm_response="机器学习是让计算机从数据中学习规律的技术。" * 3)
+        q = self._q({"mode": "response_length", "min_chars": 40, "max_chars": 80})
+        v = self.judge.judge(ev, q)
+        assert v.value == 1.0
+        assert v.raw["length"] == len(ev.llm_response)
+
+    def test_response_length_out_of_range(self):
+        """字符数超出区间 → 失败。"""
+        ev = self._ev(llm_response="太短")
+        q = self._q({"mode": "response_length", "min_chars": 40, "max_chars": 80})
+        v = self.judge.judge(ev, q)
+        assert v.value == 0.0
+
     def test_response_json_schema_code_fence_stripped(self):
-        """LLM 输出 JSON 带 ```json 围栏（通用行为），判定必须容错。"""
         ev = self._ev(llm_response='```json\n{"name": "Python", "items": 3}\n```')
         q = self._q({"mode": "response_json_schema", "required_fields": ["name", "items"]})
         v = self.judge.judge(ev, q)

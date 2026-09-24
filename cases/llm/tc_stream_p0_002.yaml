@@ -1,0 +1,21 @@
+id: tc_stream_p0_002
+title: 流式输出-内容完整不截断
+source: '大模型测试用例集 v1 D14-P0-002：流式输出-内容完整性 [Phase 5 v0.2.4 新建：长输出流式聚合正确性，
+    验证 chunk 聚合无丢字、finish=stop]'
+req_ref: D14-P0-002
+priority: P0
+channel: api
+quad:
+  actor: 测试工程师
+  action: 通过流式接口请求长结构化输出
+  object: 聚合后内容完整（JSON解析成功且字段齐全）、finish_reason=stop
+  preconditions:
+  - 流式聚合丢 chunk 导致用户端显示残缺
+steps:
+- action: api_stream
+  prompt: 生成一个包含8个编程语言的JSON数组，每个元素含language(语言名)和paradigm(编程范式)两个字段，直接输出JSON，不要其他解释。
+assertions:
+- kind: response_json_schema
+  required_fields:
+  - language
+  - paradigm

@@ -1,0 +1,23 @@
+id: tc_perf_p0_001
+title: 性能-单请求响应时间
+source: '大模型测试用例集 v1 D18-P0-001：性能-响应时间 [Phase 5 v0.2.4 新建：response_time 确定性断言，
+    短问题应在10s内返回]'
+req_ref: D18-P0-001
+priority: P0
+channel: api
+quad:
+  actor: 测试工程师
+  action: 发送简单知识问题测量端到端延迟
+  object: 响应时间≤10秒
+  preconditions:
+  - 延迟超标影响用户体验
+steps:
+- action: api_call
+  prompt: '中国最长的河流是哪条？只回答河流名称。'
+assertions:
+- kind: response_contains
+  keywords:
+  - 长江
+  min_match: 1
+- kind: response_time
+  max_seconds: 10

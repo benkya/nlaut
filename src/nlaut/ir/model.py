@@ -214,10 +214,34 @@ class AssertResponseTime(BaseModel):
     judge: Literal["deterministic"] = "deterministic"
 
 
+class AssertResponseTtft(BaseModel):
+    """流式性能断言：首 token 延迟（TTFT）不超过 max_ms。
+
+    判定逻辑：evidence.ttft_ms <= max_ms（仅流式调用有 ttft_ms；缺失时转人工）。
+    v0.2.4 Phase 5 新增（D14 流式维度）。
+    """
+    kind: Literal["response_ttft"]
+    max_ms: float = Field(default=3000.0, ge=100.0)
+    judge: Literal["deterministic"] = "deterministic"
+
+
+class AssertResponseLength(BaseModel):
+    """长度断言：回答字符数在 [min_chars, max_chars] 区间（含标点、含空白）。
+
+    判定逻辑：min_chars <= len(evidence.llm_response) <= max_chars。
+    v0.2.4 Phase 5 新增（D15 字数约束的确定性表达，替代"恰50字"的不可判定描述）。
+    """
+    kind: Literal["response_length"]
+    min_chars: int = Field(default=1, ge=0)
+    max_chars: int = Field(default=10000, ge=1)
+    judge: Literal["deterministic"] = "deterministic"
+
+
 Assertion = Annotated[
     AssertTextVisible | AssertAttribute | AssertVisualState | AssertNoul | AssertChoice | AssertScore
     | AssertResponseExact | AssertResponseContains | AssertResponseNotContains
-    | AssertResponseJsonSchema | AssertToolCallParams | AssertResponseTime,
+    | AssertResponseJsonSchema | AssertToolCallParams | AssertResponseTime
+    | AssertResponseTtft | AssertResponseLength,
     Field(discriminator="kind"),
 ]
 

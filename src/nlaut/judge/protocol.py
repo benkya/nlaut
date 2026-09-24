@@ -36,6 +36,9 @@ class Evidence(BaseModel):
     tool_calls: list[dict] | None = None  # 工具调用列表（OpenAI tool_calls 格式）
     latency_ms: float | None = None  # 响应延迟（毫秒）
     conversation: list[dict] | None = None  # 多轮对话消息历史
+    # --- v0.2.3 Phase 5 流式指标 ---
+    ttft_ms: float | None = None  # 首 token 延迟（毫秒，仅流式调用有值）
+    stream_chunks: int | None = None  # 流式 chunk 数（仅流式调用有值）
 
 
 class Question(BaseModel):

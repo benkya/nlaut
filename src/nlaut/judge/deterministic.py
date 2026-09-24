@@ -48,6 +48,10 @@ class DeterministicJudge:
             return self._judge_tool_call_params(evidence, question, ctx)
         if mode == "response_time":
             return self._judge_response_time(evidence, question, ctx)
+        if mode == "response_ttft":
+            return self._judge_response_ttft(evidence, question, ctx)
+        if mode == "response_length":
+            return self._judge_response_length(evidence, question, ctx)
 
         raise ValueError(f"DeterministicJudge 未知判定模式: {mode!r}")
 
@@ -324,5 +328,61 @@ class DeterministicJudge:
                 "latency_ms": round(latency_ms, 1),
                 "max_ms": round(max_ms, 1),
                 "max_seconds": max_seconds,
+            },
+        )
+
+    # --- 流式 TTFT 断言（v0.2.4 Phase 5）---
+
+    def _judge_response_ttft(self, evidence: Evidence, question: Question, ctx: dict) -> Verdict:
+        max_ms = ctx.get("max_ms", 3000.0)
+        ttft_ms = evidence.ttft_ms
+        # 非流式调用没有 TTFT——不能直接判失败，转人工（缺失数据 ≠ 性能不达标）
+        if ttft_ms is None:
+            return Verdict(
+                engine=self.engine,
+                kind="noul",
+                value=0.5,
+                confidence=0.5,
+                evidence_refs=[evidence.case_id],
+                raw={
+                    "mode": "response_ttft",
+                    "ttft_ms": None,
+                    "max_ms": round(max_ms, 1),
+                    "note": "非流式调用无 TTFT，转人工",
+                },
+            )
+        matched = ttft_ms <= max_ms
+        return Verdict(
+            engine=self.engine,
+            kind="noul",
+            value=1.0 if matched else 0.0,
+            confidence=1.0,
+            evidence_refs=[evidence.case_id],
+            raw={
+                "mode": "response_ttft",
+                "ttft_ms": round(ttft_ms, 1),
+                "max_ms": round(max_ms, 1),
+            },
+        )
+
+    # --- 响应长度断言（v0.2.4 Phase 5）---
+
+    def _judge_response_length(self, evidence: Evidence, question: Question, ctx: dict) -> Verdict:
+        min_chars = ctx.get("min_chars", 1)
+        max_chars = ctx.get("max_chars", 10000)
+        text = evidence.llm_response or ""
+        length = len(text)
+        matched = min_chars <= length <= max_chars
+        return Verdict(
+            engine=self.engine,
+            kind="noul",
+            value=1.0 if matched else 0.0,
+            confidence=1.0,
+            evidence_refs=[evidence.case_id],
+            raw={
+                "mode": "response_length",
+                "length": length,
+                "min_chars": min_chars,
+                "max_chars": max_chars,
             },
         )

@@ -1,0 +1,20 @@
+id: tc_instruct_p0_004
+title: 字数限制-确定性区间断言
+source: '大模型测试用例集 v1 D15-P0-002：字数硬约束 [Phase 5 v0.2.4 新建：response_length 确定性断言，
+    替代 P1 中"恰50字"的不可判定 noul 描述]'
+req_ref: D15-P0-002
+priority: P0
+channel: api
+quad:
+  actor: 测试工程师
+  action: 要求模型输出固定字数区间的内容
+  object: 字符数落在容忍区间内（40-60字符）
+  preconditions:
+  - 字数约束失效导致下游依赖长度的流程出错
+steps:
+- action: api_call
+  prompt: 请用恰好50个字（含标点，不要多也不要少）描述机器学习的概念。只输出这50个字，不要任何解释。
+assertions:
+- kind: response_length
+  min_chars: 40
+  max_chars: 60
