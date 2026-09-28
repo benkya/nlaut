@@ -39,6 +39,9 @@ class Evidence(BaseModel):
     # --- v0.2.3 Phase 5 流式指标 ---
     ttft_ms: float | None = None  # 首 token 延迟（毫秒，仅流式调用有值）
     stream_chunks: int | None = None  # 流式 chunk 数（仅流式调用有值）
+    # --- v0.2.7 P95 TTFT 维度（v0.2.7 TASK-001）---
+    ttft_samples: list[float] = Field(default_factory=list)  # 多次采样的 TTFT 列表
+    ttft_p95_ms: float | None = None  # P95 算子输出的 P95 值（毫秒）
 
 
 class Question(BaseModel):

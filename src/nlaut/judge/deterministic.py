@@ -50,6 +50,8 @@ class DeterministicJudge:
             return self._judge_response_time(evidence, question, ctx)
         if mode == "response_ttft":
             return self._judge_response_ttft(evidence, question, ctx)
+        if mode == "response_ttft_p95":
+            return self._judge_response_ttft_p95(evidence, question, ctx)
         if mode == "response_length":
             return self._judge_response_length(evidence, question, ctx)
 
@@ -380,6 +382,46 @@ class DeterministicJudge:
                 "mode": "response_ttft",
                 "ttft_ms": round(ttft_ms, 1),
                 "max_ms": round(max_ms, 1),
+            },
+        )
+
+    # --- P95 TTFT 断言（v0.2.7 TASK-002）---
+
+    def _judge_response_ttft_p95(self, evidence: Evidence, question: Question, ctx: dict) -> Verdict:
+        max_p95_ms = ctx.get("max_p95_ms", 3000.0)
+        # 优先用 evidence.ttft_p95_ms（API channel 已计算）；否则用 samples 重算
+        p95_ms = evidence.ttft_p95_ms
+        if p95_ms is None and evidence.ttft_samples:
+            from nlaut.metrics.percentile import p95_or_none
+            p95_ms = p95_or_none(evidence.ttft_samples)
+        if p95_ms is None:
+            # 全部缺失 → 转人工（与单次 ttft 缺失语义一致）
+            return Verdict(
+                engine=self.engine,
+                kind="noul",
+                value=0.5,
+                confidence=0.5,
+                evidence_refs=[evidence.case_id],
+                raw={
+                    "mode": "response_ttft_p95",
+                    "p95_ms": None,
+                    "max_p95_ms": round(max_p95_ms, 1),
+                    "note": "无采样数据，转人工",
+                    "samples_count": len(evidence.ttft_samples),
+                },
+            )
+        matched = p95_ms <= max_p95_ms
+        return Verdict(
+            engine=self.engine,
+            kind="noul",
+            value=1.0 if matched else 0.0,
+            confidence=1.0,
+            evidence_refs=[evidence.case_id],
+            raw={
+                "mode": "response_ttft_p95",
+                "p95_ms": round(p95_ms, 1),
+                "max_p95_ms": round(max_p95_ms, 1),
+                "samples_count": len(evidence.ttft_samples),
             },
         )
 

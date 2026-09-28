@@ -1,0 +1,21 @@
+id: tc_stream_p95_p0_001
+title: 流式输出-P95首token延迟（v0.2.7 新维度）
+source: '大模型测试用例集 v1 D14-P0-003：流式输出-P95首token延迟 [v0.2.7 llm-ttft-p95 delivery 新建：
+    repeat=5 跑 N 次取 P95，与阈值 3000ms 比对，替代单次 response_ttft 在边缘阈值的 flaky。]'
+req_ref: D14-P0-003
+priority: P0
+channel: api
+quad:
+  actor: 大模型
+  action: 流式首token延迟
+  object: P95稳定性
+steps:
+- action: api_stream
+  prompt: 用一句话介绍 Python。
+  repeat: 5
+assertions:
+- kind: response_ttft_p95
+  max_p95_ms: 3000
+- kind: noul
+  question: '回答是否为关于 Python 的一句话介绍？只答 yes 或 no。'
+  threshold: 0.9

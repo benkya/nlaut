@@ -263,6 +263,49 @@ class TestDeterministicJudgeLlmModes:
         v = self.judge.judge(ev, q)
         assert v.value == 0.0
 
+    # --- v0.2.7 TASK-002 P95 TTFT 判定模式 ---
+
+    def test_response_ttft_p95_pass(self):
+        """P95 TTFT 达标 → 通过。"""
+        ev = self._ev(llm_response="x", ttft_p95_ms=850.0)
+        q = self._q({"mode": "response_ttft_p95", "max_p95_ms": 3000.0})
+        v = self.judge.judge(ev, q)
+        assert v.value == 1.0
+        assert v.raw["p95_ms"] == 850.0
+
+    def test_response_ttft_p95_fail(self):
+        """P95 TTFT 超标 → 失败。"""
+        ev = self._ev(llm_response="x", ttft_p95_ms=5800.0)
+        q = self._q({"mode": "response_ttft_p95", "max_p95_ms": 3000.0})
+        v = self.judge.judge(ev, q)
+        assert v.value == 0.0
+
+    def test_response_ttft_p95_missing_turns_human(self):
+        """无 samples 且无 p95 → 转人工而非直接失败。"""
+        ev = self._ev(llm_response="x")
+        q = self._q({"mode": "response_ttft_p95", "max_p95_ms": 3000.0})
+        v = self.judge.judge(ev, q)
+        assert v.value == 0.5
+        assert v.confidence == 0.5
+
+    def test_response_ttft_p95_derive_from_samples(self):
+        """samples 存在但 ttft_p95_ms 缺失 → 算子重算 P95。"""
+        ev = self._ev(llm_response="x", ttft_samples=[100, 200, 300, 400, 5000])
+        q = self._q({"mode": "response_ttft_p95", "max_p95_ms": 3000.0})
+        v = self.judge.judge(ev, q)
+        # P95 = 5000 > 3000 → fail
+        assert v.value == 0.0
+        assert v.raw["p95_ms"] == 5000.0
+
+    def test_evidence_ttft_samples_field(self):
+        """Evidence schema 默认 ttft_samples=空列表，可设置。"""
+        ev = Evidence(case_id="tc_t1")
+        assert ev.ttft_samples == []
+        assert ev.ttft_p95_ms is None
+        ev2 = Evidence(case_id="tc_t2", ttft_samples=[100.0, 200.0], ttft_p95_ms=200.0)
+        assert ev2.ttft_samples == [100.0, 200.0]
+        assert ev2.ttft_p95_ms == 200.0
+
     def test_response_json_schema_code_fence_stripped(self):
         ev = self._ev(llm_response='```json\n{"name": "Python", "items": 3}\n```')
         q = self._q({"mode": "response_json_schema", "required_fields": ["name", "items"]})
@@ -402,3 +445,19 @@ class TestLayaRenderState:
         )
         state = render_state(ev)
         assert "工具调用: get_weather(" in state
+
+    # --- v0.2.7 TASK-003 P95 渲染 ---
+
+    def test_laya_render_ttft_p95(self):
+        """Evidence 含 ttft_p95_ms 时，render_state 输出 P95 行。"""
+        from nlaut.judge.laya import render_state
+
+        ev = Evidence(
+            case_id="tc_stream_p95_p0_001",
+            llm_response="Python 是一种解释型语言。",
+            ttft_p95_ms=1500.0,
+            ttft_samples=[850.0, 1100.0, 950.0, 1500.0, 1450.0],
+        )
+        state = render_state(ev)
+        assert "P95 TTFT" in state
+        assert "1500" in state

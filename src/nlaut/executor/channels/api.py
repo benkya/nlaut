@@ -38,7 +38,7 @@ def _build_messages(
     steps: list,
     data: dict[str, str],
     messages: list[dict] | None = None,
-) -> tuple[list[dict], dict | None, list[dict] | None]:
+) -> tuple[list[dict], list[dict] | None, tuple[bool, str | None] | None]:
     """从 steps 构建请求 messages + tools + stream 标记。
 
     返回 (messages, tools, stream_flag_info)
@@ -87,6 +87,7 @@ def _call_api(
     tools: list[dict] | None = None,
     stream: bool = False,
     timeout: float = 60.0,
+    repeat: int = 1,
 ) -> tuple[dict, float]:
     """调用 OpenAI-compatible API，返回 (response_json, latency_ms)。
 
@@ -217,15 +218,71 @@ def execute(
     logger(f"[{ir.id}] API 调用: model={model} messages={len(messages)} "
            f"tools={len(tools) if tools else 0} stream={is_stream}")
 
-    response, latency_ms = _call_api(
-        base_url=base_url,
-        api_key=api_key,
-        model=model,
-        messages=messages,
-        tools=tools,
-        stream=is_stream,
-        timeout=timeout,
-    )
+    # v0.2.7 TASK-002: 当 stream 时支持 repeat 多次采样
+    # 优先取最后一个 stream step 的 repeat 字段（同一用例多 step 取最大）
+    repeat = 1
+    if is_stream:
+        from nlaut.ir.model import StepApiStream
+        stream_steps = [s for s in ir.steps if isinstance(s, StepApiStream)]
+        if stream_steps:
+            repeat = max(s.repeat for s in stream_steps)
+
+    if is_stream and repeat > 1:
+        # 多次采样：每次单独计时，累积 ttft_samples 到 evidence
+        from nlaut.metrics.percentile import p95_or_none
+        ttft_samples: list[float] = []
+        aggregated_content = ""
+        aggregated_tool_calls: list[dict] = []
+        aggregated_latency = 0.0
+        last_response: dict = {}
+        for i in range(repeat):
+            response_i, latency_i = _call_api(
+                base_url=base_url,
+                api_key=api_key,
+                model=model,
+                messages=messages,
+                tools=tools,
+                stream=True,
+                timeout=timeout,
+            )
+            last_response = response_i
+            aggregated_latency += latency_i
+            ttft_i = response_i.get("ttft_ms")
+            if ttft_i is not None:
+                ttft_samples.append(ttft_i)
+            msg_i = response_i.get("choices", [{}])[0].get("message", {})
+            aggregated_content = msg_i.get("content") or aggregated_content
+            if msg_i.get("tool_calls"):
+                aggregated_tool_calls = msg_i["tool_calls"]
+        p95_ms = p95_or_none(ttft_samples)
+        logger(f"[{ir.id}] 重复采样 {repeat} 次: 有效 TTFT 样本 {len(ttft_samples)} 个, P95={p95_ms}ms")
+        response = {
+            "choices": [{
+                "message": {
+                    "role": "assistant",
+                    "content": aggregated_content,
+                    "tool_calls": aggregated_tool_calls or None,
+                },
+                "finish_reason": last_response.get("choices", [{}])[0].get("finish_reason", "stop"),
+            }],
+            "streamed": True,
+            "ttft_ms": ttft_samples[-1] if ttft_samples else None,
+            "stream_chunks": last_response.get("stream_chunks"),
+        }
+        latency_ms = aggregated_latency
+        # 把 samples 和 p95 附加到 response 之外的全局变量，execute 函数后面会读
+        response["__ttft_samples__"] = ttft_samples  # type: ignore[assignment]
+        response["__ttft_p95_ms__"] = p95_ms  # type: ignore[assignment]
+    else:
+        response, latency_ms = _call_api(
+            base_url=base_url,
+            api_key=api_key,
+            model=model,
+            messages=messages,
+            tools=tools,
+            stream=is_stream,
+            timeout=timeout,
+        )
 
     # 提取 assistant message
     choice = response.get("choices", [{}])[0]
@@ -254,6 +311,8 @@ def execute(
         "ttft_ms": response.get("ttft_ms"),
         "stream_chunks": response.get("stream_chunks"),
         "reasoning_len": response.get("reasoning_len"),
+        "ttft_samples": response.get("__ttft_samples__", []),
+        "ttft_p95_ms": response.get("__ttft_p95_ms__"),
         "conversation": messages,
         # web 通道字段留空
         "screenshot": None,

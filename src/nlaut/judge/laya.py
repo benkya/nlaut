@@ -43,6 +43,13 @@ def render_state(evidence: Evidence) -> str:
         parts.append(f"工具调用: {calls}")
     if evidence.latency_ms is not None:
         parts.append(f"响应延迟: {evidence.latency_ms:.0f}ms")
+    # v0.2.7 TASK-003: P95 TTFT 渲染
+    if evidence.ttft_p95_ms is not None:
+        n = len(evidence.ttft_samples)
+        parts.append(f"P95 TTFT: {evidence.ttft_p95_ms:.0f}ms（{n} 次采样）")
+        # 单次 TTFT 在 P95 块下显示（与 P95 配合便于诊断单次 vs P95 波动）
+        if evidence.ttft_ms is not None:
+            parts.append(f"最近一次 TTFT: {evidence.ttft_ms:.0f}ms")
     # Web 通道原有渲染
     if evidence.dom_state:
         dom = "; ".join(f"{sel} -> {txt[:80]}" for sel, txt in evidence.dom_state.items())

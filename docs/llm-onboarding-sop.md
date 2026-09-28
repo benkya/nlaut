@@ -1,4 +1,4 @@
-# 大模型上线测试 SOP（nlaut v0.2.1）
+# 大模型上线测试 SOP（nlaut v0.2.7）
 
 > **适用场景**：公司 AI Agent 应用每次接入新大模型，上线前的标准化能力验证。
 > **工具**：nlaut 框架（`~/workspace/nlaut`）· 88 条标准用例 · 18 维度 · 3 优先级
@@ -104,13 +104,37 @@ cd ~/workspace/nlaut && set -a; source ~/.hermes/.env; set +a
 
 ## 七、已知坑（踩过的，写死在框架里）
 
-1. **内网 IP 必须绕过系统代理**：api 通道已内置 `trust_env=False`，勿改回
-2. **shell 必须先 source key**：`set -a; source ~/.hermes/.env; set +a`，否则报"缺少 API Key"
-3. **`--api-only` 会过滤 web 用例**：跑大模型测试必须带（否则会拉起浏览器跑 UI 用例）
-4. **key 永远不进 git**：`config/models.yaml` 只写环境变量名，值在 `~/.hermes/.env`
-5. **创意类用例天然波动**：失败先重放 3 次再定性，勿直接判模型缺陷
+1. 内网 IP 绕系统代理：api 通道 `trust_env=False` 勿改回
+2. shell 先 source key 否则报缺 Key
+3. 大模型测试必带 `--api-only`（否则拉起浏览器跑 UI 用例）
+4. 创意类失败先重放再定性
+5. JSON 数组形态（Qwen 风格）非缺陷，判定引擎已容错
 
-## 八、扩展
+## 八、P95 TTFT 维度（v0.2.7 新增）
+
+**背景**：单次 `response_ttft` 在 3000ms 阈值附近偶发 flaky（实测 qwen3.8-flash-next 单次跑 1.2s、2.7s、5.8s 各一次）。
+业务调用方应按 P95 监控而非单次断言。
+
+**用法**：用例 yaml 声明 `repeat: N`（1-20）+ `response_ttft_p95` 断言：
+
+```yaml
+steps:
+- action: api_stream
+  prompt: 用一句话介绍 Python。
+  repeat: 5   # 跑 5 次取 P95
+assertions:
+- kind: response_ttft_p95
+  max_p95_ms: 3000
+```
+
+**算子**：`nlaut.metrics.percentile.p95(samples)` 排序取最末位（N >= 1 时等价 ceil(N*0.95)-1 = N-1）。
+**Evidence 字段**：`ttft_samples: list[float]` + `ttft_p95_ms: float | None`（`api_stream repeat=N` 自动填充）。
+**报告渲染**：laya `render_state` 输出 `P95 TTFT: <value>ms（N 次采样）` + `最近一次 TTFT: <value>ms`。
+**判定缺失降级**：ttft_samples 与 ttft_p95_ms 都缺时 value=0.5/conf=0.5 转人工（同 response_ttft）。
+
+**示例 baseline**（qwen3.8-flash-next，2026-09-24 实测）：5 次采样 P95=990ms，单次最大值~1.5s。
+
+## 九、扩展
 
 - **P1 批次**：`--priority P0,P1`（36 条更深能力用例）
 - **模型对比**：`scripts/compare_models.py` 生成两模型 diff 报告

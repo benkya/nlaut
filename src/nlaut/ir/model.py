@@ -75,6 +75,7 @@ class StepApiStream(BaseModel):
     action: Literal["api_stream"]
     prompt: str
     system_prompt: str | None = None
+    repeat: int = Field(default=1, ge=1, le=20)  # v0.2.7：采样次数（1-20）
 
 
 Step = Annotated[
@@ -237,11 +238,24 @@ class AssertResponseLength(BaseModel):
     judge: Literal["deterministic"] = "deterministic"
 
 
+class AssertResponseTtftP95(BaseModel):
+    """P95 首 token 延迟断言：跑 N 次取 P95 与阈值比对（替代单次 response_ttft 的边缘波动）。
+
+    判定逻辑：evidence.ttft_p95_ms（由 api_stream 重复采样后计算）≤ max_p95_ms；
+    若 ttft_p95_ms 缺失但 ttft_samples 存在，则用算子重算；
+    全部缺失时转人工（value=0.5 conf=0.5）。
+    v0.2.7 TASK-002 新增（D14 流式维度扩展）。
+    """
+    kind: Literal["response_ttft_p95"]
+    max_p95_ms: float = Field(default=3000.0, ge=100.0)
+    judge: Literal["deterministic"] = "deterministic"
+
+
 Assertion = Annotated[
     AssertTextVisible | AssertAttribute | AssertVisualState | AssertNoul | AssertChoice | AssertScore
     | AssertResponseExact | AssertResponseContains | AssertResponseNotContains
     | AssertResponseJsonSchema | AssertToolCallParams | AssertResponseTime
-    | AssertResponseTtft | AssertResponseLength,
+    | AssertResponseTtft | AssertResponseLength | AssertResponseTtftP95,
     Field(discriminator="kind"),
 ]
 

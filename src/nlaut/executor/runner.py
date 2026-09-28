@@ -102,6 +102,12 @@ def _question_for(a, ir: TestCaseIR):
             text="",
             context={"mode": "response_ttft", "max_ms": a.max_ms},
         )
+    if a.kind == "response_ttft_p95":
+        return Question(
+            kind="noul",
+            text="",
+            context={"mode": "response_ttft_p95", "max_p95_ms": a.max_p95_ms},
+        )
     if a.kind == "response_length":
         return Question(
             kind="noul",
@@ -129,7 +135,7 @@ def _engine_name(a) -> str:
         "text_visible", "attribute",
         "response_exact", "response_contains", "response_not_contains",
         "response_json_schema", "tool_call_params", "response_time",
-        "response_ttft", "response_length",
+        "response_ttft", "response_length", "response_ttft_p95",
     ):
         return "deterministic"
     # VLM 判定

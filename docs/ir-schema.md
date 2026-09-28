@@ -68,7 +68,7 @@ assertions:
 | `api_call` | prompt, system_prompt? | api | 单轮 LLM 调用；`$var` 引用数据集字段 |
 | `api_followup` | prompt | api | 多轮对话追加用户消息（复用上文 messages） |
 | `api_tool_call` | prompt, tools | api | 带工具定义调用（OpenAI function schema） |
-| `api_stream` | prompt, system_prompt? | api | 流式调用（stream=true，收完比对） |
+| `api_stream` | prompt, system_prompt?, repeat=1 | api | 流式调用（stream=true，收完比对）；v0.2.7 加 `repeat` 字段（1-20，多样本 P95） |
 
 ## 断言类型（assertions）
 
@@ -85,6 +85,7 @@ assertions:
 | `tool_call_params` | deterministic | expected_function, expected_params | 工具调用参数 |
 | `response_time` | deterministic | max_seconds | 性能延迟断言 |
 | `response_ttft` | deterministic | max_ms=3000 | 流式首 token 延迟（D14；非流式调用转人工） |
+| `response_ttft_p95` | deterministic | max_p95_ms=3000 | 流式 P95 首 token 延迟（D14 扩展；v0.2.7 多次采样 1-20 次） |
 | `response_length` | deterministic | min_chars, max_chars | 回答字符数区间（D15 字数约束） |
 
 ## 规则
