@@ -54,6 +54,8 @@ class TestIRStore:
             "tc_giencwb_001", "tc_giencwb_002", "tc_giencwb_003",
             "tc_giencwb_004", "tc_giencwb_005", "tc_giencwb_006",
             "tc_giencwb_007",
+            # v0.3.0 Electron CDP 通道
+            "tc_electron_cdp_001",
             # v0.2.0 LLM 用例
             "tc_d01_p0_001", "tc_d02_p0_001", "tc_d04_p0_001",
             "tc_d06_p0_001", "tc_d07_p0_001", "tc_d07_p0_002", "tc_d09_p0_001",

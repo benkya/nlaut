@@ -68,6 +68,9 @@ def main() -> int:
     parser.add_argument("--api-base", default="", help="API 基址（或从 config/models.yaml 读取）")
     parser.add_argument("--api-only", action="store_true",
                         help="只跑 API 通道用例（跳过 web 演示系统）")
+    parser.add_argument("--cdp-url", default="",
+                        help="Electron CDP 连接地址（如 http://127.0.0.1:9222，"
+                             "需 app 以 --remote-debugging-port 启动）")
     parser.add_argument("--priority", default="",
                         help="优先级过滤（如 P0 只跑 P0；空 = 全部优先级）")
     parser.add_argument("--timeout", type=float, default=60.0, help="API 调用超时（秒）")
@@ -120,6 +123,7 @@ def main() -> int:
         channels=["api"] if args.api_only else None,
         priorities=[p.strip() for p in args.priority.split(",") if p.strip()] or None,
         base_url=base_url,
+        cdp_url=args.cdp_url,
         use_vlm=not args.no_vlm,
         headless=not args.headed,
         session_log_path="artifacts/session/run.jsonl",

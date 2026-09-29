@@ -1,0 +1,27 @@
+id: tc_electron_cdp_001
+title: Electron-CDP-DSH首页验证
+source: |
+  口述: 通过 CDP 直连 Electron 应用（DeepSeek Harness / DSH），验证首页可见。
+  验证 electron 通道（connect_over_cdp）全链路：连接 → DOM 采集 → 截图 → 断言。
+  前提：DSH 以 --inspect=127.0.0.1:9222 启动（开发模式自动开）。
+req_ref: null
+priority: P1
+channel: electron
+quad:
+  actor: CDP 直连
+  action: 连接已运行 Electron 应用并验证 DOM
+  object: 首页关键元素可见性
+  preconditions:
+    - "Electron app 开了 CDP 端口 9222"
+    - "app 已加载到首页"
+data_ref: null
+steps:
+  - {action: wait_visible, selector: 'text=新会话', timeout_ms: 10000}
+assertions:
+  - kind: text_visible
+    selector: 'body'
+    expected: "新会话"
+  - kind: text_visible
+    selector: 'body'
+    expected: "工作区"
+postconditions: []

@@ -149,6 +149,7 @@ def run_case(
     ir: TestCaseIR,
     data: dict[str, str] | None = None,
     base_url: str = "",
+    cdp_url: str = "",
     screenshot_dir: str | Path = "artifacts/screenshots",
     headless: bool = True,
     use_vlm: bool = True,
@@ -160,6 +161,8 @@ def run_case(
 
     api_config: API 通道配置 dict，包含 base_url / api_key / model / timeout。
                 为 None 时走 web 通道（原有行为）。
+    cdp_url: Electron 通道的 CDP 连接地址（如 http://127.0.0.1:9222）。
+             用 channel: electron 的用例走此通道。
     session_log: 可选 SessionLog——传入则每次执行全程留痕（harness 层审计材料），
     append-only JSONL 可回放。
     """
@@ -178,7 +181,8 @@ def run_case(
 
     t0 = time.time()
 
-    # 通道路由：api 通道走 channels/api.py，其余走 web
+    # 通道路由：api 通道走 channels/api.py，electron 通道走 channels/electron.py，
+    # 其余走 web 通道
     if ir.channel == "api" and api_config:
         from .channels import api as api_channel
         ev_kw = api_channel.execute(
@@ -187,6 +191,15 @@ def run_case(
             api_key=api_config.get("api_key", ""),
             model=api_config.get("model", ""),
             timeout=api_config.get("timeout", 60.0),
+            logger=logger,
+        )
+    elif ir.channel == "electron":
+        from .channels import electron as electron_channel
+        ev_kw = electron_channel.execute(
+            ir, data=data,
+            cdp_url=cdp_url,
+            base_url=base_url,
+            screenshot_dir=screenshot_dir,
             logger=logger,
         )
     else:
