@@ -12,7 +12,7 @@
 | **大模型 API** | httpx（OpenAI 兼容） | 93 条（18 维度 × P0/P1/P2） | 安全/代码/推理/工具调用/流式/RAG/对话 |
 | **Electron/IDE 插件** | CDP | 7 条 | GienCoderWorkbench 桌面端 |
 
-**框架规模**：~3,200 行 Python · 125 条用例 IR · 99 项元测试全绿 · 13 个模型预配置 · 7 篇工程文档
+**框架规模**：~4,000 行 Python · 125 条用例 IR · 99 项元测试全绿 · 13 个模型预配置 · 9 篇 GitHub Wiki · 统一报告（对话+4P12S+上线结论卡）
 
 ## 快速开始
 
@@ -34,6 +34,19 @@ cd ~/workspace/nlaut
     --api-key sk-xxx --api-only --priority P0
 ```
 
+### 统一能力报告（对话能力 + 4P12S 交付能力合并）
+
+```bash
+# 同一份 HTML 报告：P0 对话 45 条 + 4P12S 交付 9 步，含上线结论卡
+.venv/bin/python scripts/combined_report.py --model deepseek-v4-flash
+
+# 只跑对话能力 / 只跑 4P12S
+.venv/bin/python scripts/combined_report.py --model deepseek-v4-flash --skip-4p12s
+.venv/bin/python scripts/combined_report.py --model deepseek-v4-flash --skip-llm
+```
+
+报告顶部自动给出 **上线结论卡**（✅ 推荐上线 / ⚠️ 有条件上线 / ❌ 暂不上线），失败和转人工的用例可折叠查看**请求（system+user）和模型返回全文**，便于人工定性。
+
 ### 飞书口述零动作测模型（最终形态）
 
 在飞书「口述测试需求表」填一行：
@@ -49,6 +62,7 @@ cron 每 5 分钟扫描 → 自动识别 → 跑 P0 批次 → 报告发群 → 
 | 跑全部 Web 用例（演示系统自动拉起） | `.venv/bin/python -m nlaut.cli` |
 | 测大模型 P0 能力 | `.venv/bin/python -m nlaut.cli --model <名> --api-only --priority P0` |
 | 测大模型全量（P0+P1，81 条） | `.venv/bin/python -m nlaut.cli --model <名> --api-only --priority P0,P1` |
+| **统一能力报告（对话+4P12S 合并）** | `.venv/bin/python scripts/combined_report.py --model <名>` |
 | 只跑某条用例 | `.venv/bin/python -m nlaut.cli --case tc_login_001` |
 | 打真实被测系统 | `.venv/bin/python -m nlaut.cli --external --base-url http://你的地址` |
 | 有头模式（看浏览器操作） | `.venv/bin/python -m nlaut.cli --headed` |
@@ -203,8 +217,10 @@ L6 报告层   report/（HTML + 证据链：截图/判定明细/置信度/口述
 | [docs/judge-protocol.md](docs/judge-protocol.md) | 判定协议、置信度路由规则、引擎接入门槛 |
 | [docs/verbal-to-ir-protocol.md](docs/verbal-to-ir-protocol.md) | 口述→IR 生成协议（团队操作手册） |
 | [docs/llm-onboarding-sop.md](docs/llm-onboarding-sop.md) | 大模型上线测试 SOP（注册→P0→定性→决策） |
+| [docs/4p12s-probe-testcases.md](docs/4p12s-probe-testcases.md) | 4P12S 交付能力探针设计（9 步端到端） |
 | [docs/roadmap.md](docs/roadmap.md) | 演进规划（M0.5→M3） |
 | [AGENTS.md](AGENTS.md) | Agent 行为规范（命令矩阵/策略/禁止事项） |
+| [GitHub Wiki](https://github.com/benkya/nlaut/wiki) | 9 页在线 Wiki（架构/IR/判定/口述/SOP/飞书/路线图/Agent 约定） |
 
 ## 路线图
 
@@ -215,6 +231,7 @@ L6 报告层   report/（HTML + 证据链：截图/判定明细/置信度/口述
 | M1-半 | 口述→IR 生成协议 + 飞书链路 + LLM 通道 | ✅ 2026-09-24 |
 | v0.2.7 | P95 TTFT + 推理模型 TTFT 语义修正 + 否定语境豁免 | ✅ 2026-09-28 |
 | v0.2.8 | 口述携带地址+key（临时模型零预配置） | ✅ 2026-09-24 |
+| v0.2.9 | 统一报告：对话能力+4P12S 合并 + 上线结论卡 + 失败用例请求/返回展示 | ✅ 2026-09-29 |
 | M1 | `pipeline/` 框架内自动生成（接模型 API） | 待做 |
 | M2 | IR→pytest 代码生成 + 环境矩阵 + 自愈 | 待做 |
 | M3 | 趋势报告 + 并行执行 + MCP server | 待做 |
