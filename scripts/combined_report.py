@@ -264,6 +264,27 @@ def run_4p12s_probe(model_key: str, think: str, max_tokens: int) -> list[dict]:
     return results
 
 
+def _verdict_card(p0_rate: float, probe_rate: float) -> tuple[str, str]:
+    """按 P0 对话通过率 + 4P12S 交付通过率自动生成上线结论卡。
+
+    规则（沿用 final_report.py 的 verdict 逻辑并扩展到双维度）：
+    - P0 ≥95% 且 4P12S ≥80% → ✅ 推荐上线
+    - P0 ≥90% 或 4P12S ≥60%    → ⚠️ 有条件上线（修复/观察失败项后上线）
+    - 否则                      → ❌ 暂不上线
+    """
+    if p0_rate >= 0.95 and probe_rate >= 0.80:
+        css, emoji, text = "pass", "✅", "推荐上线"
+    elif p0_rate >= 0.90 or probe_rate >= 0.60:
+        css, emoji, text = "warn", "⚠️", "有条件上线（修复/观察失败项后上线）"
+    else:
+        css, emoji, text = "fail", "❌", "暂不上线（P0 或 4P12S 未达标）"
+    msg = (
+        f"{emoji} 综合结论：{text} —— "
+        f"P0 对话通过率 {p0_rate:.1%} · 4P12S 交付通过率 {probe_rate:.1%}"
+    )
+    return css, msg
+
+
 def render_combined(llm_results: list[dict], probe_results: list[dict],
                     model_name: str, out_path: str) -> Path:
     """渲染统一报告：对话能力 + 4P12S 交付能力 合并。"""
@@ -271,23 +292,47 @@ def render_combined(llm_results: list[dict], probe_results: list[dict],
 
     all_results = llm_results + probe_results
 
-    # 分段 header
+    # 分段统计
     llm_pass = sum(r["status"] == "passed" for r in llm_results)
+    llm_total = len(llm_results)
     probe_pass = sum(r["status"] == "passed" for r in probe_results)
     probe_total = len(probe_results)
+    llm_rate = llm_pass / llm_total if llm_total else 0.0
+    probe_rate = probe_pass / probe_total if probe_total else 0.0
+
+    # 上线结论卡
+    verdict_css, verdict_msg = _verdict_card(llm_rate, probe_rate)
+
+    # 失败项汇总
+    llm_fails = [r["case_id"] for r in llm_results if r["status"] in ("failed", "error")]
+    probe_fails = [r["case_id"] for r in probe_results if r["status"] in ("failed", "error")]
+    llm_review = [r["case_id"] for r in llm_results if r["status"] == "need_review"]
+    fail_summary = ""
+    if llm_fails or probe_fails or llm_review:
+        items = []
+        if llm_fails:
+            items.append(f"对话能力失败: {', '.join(llm_fails)}")
+        if llm_review:
+            items.append(f"对话能力转人工: {', '.join(llm_review)}")
+        if probe_fails:
+            items.append(f"4P12S 失败: {', '.join(probe_fails)}")
+        fail_summary = f'<div style="margin:8px 0;padding:10px;background:#fef2f2;border-radius:6px;font-size:13px"><b>失败/待审项：</b>{" · ".join(items)}</div>'
 
     header_html = f"""
 <div class="card" style="border-left:4px solid #0969da">
   <h2>🔧 统一模型能力测试报告</h2>
   <p class="muted">模型: <b>{model_name}</b> · 生成时间: {time.strftime('%Y-%m-%d %H:%M')}</p>
+  <div class="verdict {verdict_css}">{verdict_msg}</div>
   <div style="margin:10px 0">
-    <span class="kpi"><b style="color:#1a7f37">{llm_pass}</b>/<b>{len(llm_results)}</b> 对话能力 P0</span>
-    <span class="kpi"><b style="color:#1a7f37">{probe_pass}</b>/<b>{probe_total}</b> 4P12S 交付能力</span>
+    <span class="kpi"><b style="color:#1a7f37">{llm_pass}</b>/<b>{llm_total}</b> 对话能力 P0（{llm_rate:.1%}）</span>
+    <span class="kpi"><b style="color:#1a7f37">{probe_pass}</b>/<b>{probe_total}</b> 4P12S 交付能力（{probe_rate:.1%}）</span>
   </div>
+  {fail_summary}
   <div style="margin:8px 0; padding:8px; background:#f0f2f5; border-radius:6px; font-size:13px">
-    <b>测试范围：</b>① 对话能力 P0（{len(llm_results)} 条，18 维度：安全/代码/推理/工具/流式…）
+    <b>测试范围：</b>① 对话能力 P0（{llm_total} 条，18 维度：安全/代码/推理/工具/流式…）
     ② 4P12S 交付能力（{probe_total} 步：需求→PRD→设计→编码→测试，含真实 pytest 门禁）
     <br><b>判定引擎：</b>1° 确定性断言（零 AI 成本）→ 3° Laya System One（本地推理，置信度路由 ≥0.9 自动）
+    <br><b>上线规则：</b>P0≥95% 且 4P12S≥80% → 推荐上线；P0≥90% 或 4P12S≥60% → 有条件上线；否则暂不上线
   </div>
 </div>
 """
