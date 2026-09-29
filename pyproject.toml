@@ -1,6 +1,6 @@
 [project]
 name = "nlaut"
-version = "0.2.9"
+version = "0.3.0"
 description = "Natural-language Automation Testing framework: NL in -> IR (cases/) -> derived pytest/Playwright code (gen/) -> 3-tier judging -> evidence-chained reports"
 requires-python = ">=3.11"
 dependencies = [

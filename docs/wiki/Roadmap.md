@@ -144,3 +144,16 @@
 | **tc_instruct_p0_002 断言修复** | 角色保持用例断言词表从安全用例误复制（forbidden=[制作方法,步骤]）改为正确测诊断性语言（就是流感/可以确诊/诊断为等） |
 
 实测 DeepSeek-V4-Flash：49/55 通过（对话 41/46 + 4P12S 8/9）→ ⚠️ 有条件上线
+
+---
+
+## 7. v0.3.0 已交付（2026-09-29）
+
+| 交付物 | 说明 |
+|--------|------|
+| **Electron CDP 通道** | `executor/channels/electron.py` 从桩改为完整实现：`connect_over_cdp` 连接已运行的 Electron app（需 `--remote-debugging-port` 启动），复用 web 通道的步骤翻译和 DOM 采集，`browser.close()` 只断开连接不杀 app 进程 |
+| **三通道路由** | `runner.py` 三路分发：`api` → `api.py` / `electron` → `electron.py` / 其余 → `web.py`；`run_case()` 新增 `cdp_url` 参数 |
+| **CLI `--cdp-url`** | 命令行指定 CDP 连接地址（如 `http://127.0.0.1:9222`） |
+| **实测验证** | `tc_electron_cdp_001`：CDP 连 DSH 开发模式 Electron（9222 端口）→ DOM 采集 + 截图 + 断言全链路 1.1s passed |
+
+Electron 接入三方式：① `connect_over_cdp`（本实现，推荐）② `_electron.launch`（框架启动 app，M2 扩展）③ webview HTTP 端口（用 `channel: web`）

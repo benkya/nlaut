@@ -10,7 +10,7 @@
 | --- | --- | --- | --- |
 | **Web 应用** | Playwright（系统 Chrome） | 32 条 | 登录/任务列表/查询/翻页/新增 |
 | **大模型 API** | httpx（OpenAI 兼容） | 93 条（18 维度 × P0/P1/P2） | 安全/代码/推理/工具调用/流式/RAG/对话 |
-| **Electron/IDE 插件** | CDP | 7 条 | GienCoderWorkbench 桌面端 |
+| **Electron/IDE 插件** | CDP（connect_over_cdp） | 8 条 | GienCoderWorkbench / DSH 桌面端 |
 
 **框架规模**：~4,000 行 Python · 125 条用例 IR · 99 项元测试全绿 · 13 个模型预配置 · 9 篇 GitHub Wiki · 统一报告（对话+4P12S+上线结论卡）
 
@@ -63,6 +63,7 @@ cron 每 5 分钟扫描 → 自动识别 → 跑 P0 批次 → 报告发群 → 
 | 测大模型 P0 能力 | `.venv/bin/python -m nlaut.cli --model <名> --api-only --priority P0` |
 | 测大模型全量（P0+P1，81 条） | `.venv/bin/python -m nlaut.cli --model <名> --api-only --priority P0,P1` |
 | **统一能力报告（对话+4P12S 合并）** | `.venv/bin/python scripts/combined_report.py --model <名>` |
+| **Electron CDP 测试** | `.venv/bin/python -m nlaut.cli --cdp-url http://127.0.0.1:9222` |
 | 只跑某条用例 | `.venv/bin/python -m nlaut.cli --case tc_login_001` |
 | 打真实被测系统 | `.venv/bin/python -m nlaut.cli --external --base-url http://你的地址` |
 | 有头模式（看浏览器操作） | `.venv/bin/python -m nlaut.cli --headed` |
@@ -235,6 +236,7 @@ L6 报告层   report/（HTML + 证据链：截图/判定明细/置信度/口述
 | v0.2.7 | P95 TTFT + 推理模型 TTFT 语义修正 + 否定语境豁免 | ✅ 2026-09-28 |
 | v0.2.8 | 口述携带地址+key（临时模型零预配置） | ✅ 2026-09-24 |
 | v0.2.9 | 统一报告：对话能力+4P12S 合并 + 上线结论卡 + 失败用例请求/返回展示 | ✅ 2026-09-29 |
+| v0.3.0 | Electron CDP 通道实现（connect_over_cdp，三通道全部可用） | ✅ 2026-09-29 |
 | M1 | `pipeline/` 框架内自动生成（接模型 API） | 待做 |
 | M2 | IR→pytest 代码生成 + 环境矩阵 + 自愈 | 待做 |
 | M3 | 趋势报告 + 并行执行 + MCP server | 待做 |
