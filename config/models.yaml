@@ -18,6 +18,40 @@ models:
 
   # --- Aliyun MAAS token-plan（本机已配置 CUSTOM_API_KEY，实测 26 模型可用）---
 
+  # --- 内网部署模型（DeepSeek-V4-Flash，2026-09-28 实测接入）---
+
+  deepseek-v4-flash:
+    provider: internal
+    base_url: "http://10.62.64.38:30841/inference/ljcp9fuk/v1"
+    api_key_env: "DEEPSEEK_V4_FLASH_KEY"
+    model_id: "DeepSeek-V4-Flash"
+    type: local_deployment
+    supports_streaming: true        # 2026-09-28 实测：非流式 chat 200；流式待测
+    supports_function_calling: false # 2026-09-28 实测：响应含 tool_calls 字段但未见调用；待工具用例实测
+    context_window: 32768  # [推测] 按网关默认，未从服务端确认
+    notes: "30841 端口 ljcp9fuk 网关；⚠️ 参数语义与 30808 相反：传 enable_thinking=False 反而把思考泄漏进 content，默认参数干净；step6 小预算思考会耗尽 token，需 12000 预算或重试"
+
+  deepseek-v4-pro-0813:
+    provider: aliyun_maas
+    base_url: "https://ws-nwkjyfml4umflgj1.cn-beijing.maas.aliyuncs.com/compatible-mode/v1"
+    api_key_env: "HERMES_CUSTOM_DEEPSEEK_V4_PRO_API_KEY"
+    model_id: "deepseek-v4-pro-0813"
+    type: commercial_api
+    supports_streaming: true         # 2026-09-28 探针实测前置冒烟
+    supports_function_calling: true  # [推测] 按系列默认，待工具用例实测
+    context_window: 131072
+    notes: "模型专用 key（403 限制只能调本模型）；思考型，小 max_tokens 会思考耗尽导致空 content"
+
+  glm-5.3:
+    provider: aliyun_maas
+    base_url: "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1"
+    api_key_env: "CUSTOM_API_KEY"
+    model_id: "glm-5.3"
+    type: commercial_api
+    supports_streaming: true
+    supports_function_calling: true
+    context_window: 131072
+
   glm-5.2:
     provider: aliyun_maas
     base_url: "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1"
