@@ -10,10 +10,8 @@
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import re
-import subprocess
 import sys
 import time
 from pathlib import Path
@@ -94,7 +92,7 @@ def run_4p12s_probe(model_key: str, think: str, max_tokens: int) -> list[dict]:
     laya = None
     try:
         laya = get_judge("laya")
-    except Exception:
+    except Exception:  # noqa: BLE001  # noqa: BLE001  # noqa: BLE001
         print("[4P12S] Laya 引擎不可用，跳过 noul 判定")
 
     results: list[dict] = []
@@ -121,7 +119,7 @@ def run_4p12s_probe(model_key: str, think: str, max_tokens: int) -> list[dict]:
                 content, usage = chat_fn(base_url, api_key, model_id,
                                          step["system"], user, budget, think)
                 err = ""
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 content, usage, err = "", {}, f"{type(e).__name__}: {e}"[:200]
             elapsed = time.monotonic() - t0
 
@@ -223,7 +221,7 @@ def run_4p12s_probe(model_key: str, think: str, max_tokens: int) -> list[dict]:
                     "status": decision.status,
                     "detail": decision.reason[:120] if decision.reason else "",
                 })
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 assertions.append({
                     "assertion": "noul_quality",
                     "engine": "laya",
