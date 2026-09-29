@@ -201,6 +201,8 @@ L6 报告层   report/（HTML + 证据链：截图/判定明细/置信度/口述
 - 需联网下载模型时走系统代理 `127.0.0.1:7897`（HF 域名直连不通）
 - 大模型测试需 API Key（存环境变量，不进 git）
 
+> **全新部署？** 参阅 [**安装指南**](INSTALL.md)（4 步 / 30 分钟，含权重下载）或 [GitHub Wiki: Installation](https://github.com/benkya/nlaut/wiki/Installation)。
+
 ## 质量门禁
 
 - 任何框架改动：`make verify` 全绿（lint + 99 项测试）
@@ -212,6 +214,7 @@ L6 报告层   report/（HTML + 证据链：截图/判定明细/置信度/口述
 
 | 文档 | 内容 |
 | --- | --- |
+| [**INSTALL.md**](INSTALL.md) | **安装指南**（4 步 / 30 分钟，含权重下载 + key 配置 + 验证） |
 | [docs/architecture.md](docs/architecture.md) | 六层架构、Harness 角色映射、双通道注意、路线图 |
 | [docs/ir-schema.md](docs/ir-schema.md) | IR 字段规范、步骤类型、断言类型完整表 |
 | [docs/judge-protocol.md](docs/judge-protocol.md) | 判定协议、置信度路由规则、引擎接入门槛 |
