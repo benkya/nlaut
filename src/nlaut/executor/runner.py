@@ -248,6 +248,12 @@ def run_case(
         "assertions": results,
         "screenshot": ev_kw.get("screenshot"),
         "duration_s": round(time.time() - t0, 1),
+        # 请求与返回（失败/转人工时报告展示，便于人工定性）
+        "llm_response": evidence.llm_response,
+        "conversation": evidence.conversation,
+        "tool_calls": evidence.tool_calls,
+        "latency_ms": evidence.latency_ms,
+        "response_raw": evidence.response,
     }
 
 

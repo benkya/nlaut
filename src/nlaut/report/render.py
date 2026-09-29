@@ -66,7 +66,7 @@ def render_html(
         img_html = (
             f'<img src="data:image/png;base64,{img}" style="max-width:720px;'
             'border:1px solid #ddd;border-radius:6px;margin:8px 0">'
-            if img else "<p class='muted'>（无截图）</p>"
+            if img else ""
         )
         assertion_rows = "".join(
             f"<tr><td>{_esc(a.get('assertion'))}</td>"
@@ -78,6 +78,53 @@ def render_html(
             f"<td class='muted'>{_esc(a.get('detail', ''))[:120]}</td></tr>"
             for a in r.get("assertions", [])
         )
+        # 失败/转人工时展示请求与返回（便于人工定性）
+        evidence_html = ""
+        if r["status"] in ("failed", "need_review", "error"):
+            parts = []
+            # 请求（conversation 含 system+user messages）
+            conv = r.get("conversation")
+            if conv:
+                req_lines = []
+                for msg in conv:
+                    role = msg.get("role", "?")
+                    content = (msg.get("content") or "")[:500]
+                    if content:
+                        req_lines.append(f"[{role}] {content}")
+                if req_lines:
+                    parts.append(
+                        f'<details><summary>📥 请求（{len(conv)} 条消息）</summary>'
+                        f'<pre style="white-space:pre-wrap;font-size:12px;background:#f6f8fa;'
+                        f'padding:10px;border-radius:6px;overflow-x:auto">'
+                        f'{_esc(chr(10).join(req_lines))}</pre></details>'
+                    )
+            # LLM 返回
+            llm_resp = r.get("llm_response")
+            if llm_resp:
+                truncated = llm_resp[:2000]
+                suffix = f"\n…（共 {len(llm_resp)} 字符，截断显示前 2000）" if len(llm_resp) > 2000 else ""
+                parts.append(
+                    f'<details><summary>📤 模型返回（{len(llm_resp)} 字符）</summary>'
+                    f'<pre style="white-space:pre-wrap;font-size:12px;background:#fef3f2;'
+                    f'padding:10px;border-radius:6px;overflow-x:auto">'
+                    f'{_esc(truncated)}{_esc(suffix)}</pre></details>'
+                )
+            # 工具调用
+            tc = r.get("tool_calls")
+            if tc:
+                import json as _json
+                parts.append(
+                    f'<details><summary>🔧 工具调用（{len(tc)} 个）</summary>'
+                    f'<pre style="white-space:pre-wrap;font-size:12px;background:#f6f8fa;'
+                    f'padding:10px;border-radius:6px;overflow-x:auto">'
+                    f'{_esc(_json.dumps(tc, ensure_ascii=False, indent=2)[:1500])}</pre></details>'
+                )
+            # 延迟
+            lat = r.get("latency_ms")
+            if lat:
+                parts.append(f'<p class="muted">响应延迟: {lat:.0f}ms</p>')
+            if parts:
+                evidence_html = f'<div style="margin:8px 0">{"&nbsp;".join(parts)}</div>'
         rows.append(f"""
 <div class="card">
   <h3 style="color:{color}">{_esc(r['case_id'])} — [{_esc(r['status'])}] {_esc(r['title'])}</h3>
@@ -87,6 +134,7 @@ def render_html(
     <tr><th>断言</th><th>引擎</th><th>value</th><th>置信度</th><th>状态</th><th>说明</th></tr>
     {assertion_rows}
   </table>
+  {evidence_html}
 </div>""")
 
     default_kpi = (

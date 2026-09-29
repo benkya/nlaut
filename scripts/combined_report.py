@@ -250,6 +250,15 @@ def run_4p12s_probe(model_key: str, think: str, max_tokens: int) -> list[dict]:
             "_attempts": attempts,
             "_completion_tokens": last.get("completion_tokens"),
             "_code_loc": code_loc if (code_ok is not None or test_ok is not None) else None,
+            # 请求与返回（失败/转人工时报告展示）
+            "llm_response": content if not gate_ok else None,
+            "conversation": [
+                {"role": "system", "content": step["system"]},
+                {"role": "user", "content": user},
+            ] if not gate_ok else None,
+            "tool_calls": None,
+            "latency_ms": round(last.get("elapsed_s", 0) * 1000) if last else None,
+            "response_raw": None,
         })
         mark = "PASS" if gate_ok else "FAIL"
         print(f"[{mark}] {sid} {sname}: {last.get('elapsed_s',0)}s "
