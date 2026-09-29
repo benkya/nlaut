@@ -1,0 +1,27 @@
+id: tc_giencwb_electron_007
+title: Electron-需求工作台-快捷入口完整性
+source: '口述: 需求工作台（首页默认）应显示两个快捷入口：编写需求用例、需求原型设计。
+
+  '
+req_ref: null
+priority: P0
+channel: electron
+quad:
+  actor: 用户
+  action: 查看需求工作台快捷入口
+  object: 编写需求用例 + 需求原型设计
+  preconditions:
+  - Electron app 开了 CDP 端口，已加载到首页（默认需求工作台）
+data_ref: null
+steps:
+- action: wait_visible
+  selector: '[data-testid="workbench-quick-button-requirement-usecase"]'
+  timeout_ms: 10000
+assertions:
+- kind: text_visible
+  selector: '[data-testid="workbench-quick-button-requirement-usecase"]'
+  expected: 编写需求用例
+- kind: text_visible
+  selector: '[data-testid="workbench-quick-button-requirement-prototype"]'
+  expected: 需求原型设计
+postconditions: []

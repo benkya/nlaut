@@ -1,0 +1,35 @@
+id: tc_giencwb_electron_002
+title: Electron-工作台Tab切换-设计工作台
+source: '口述: 点击「设计工作台」tab，应切换到设计工作台，显示概要设计/详细设计/程序设计三个快捷入口。
+
+  '
+req_ref: null
+priority: P0
+channel: electron
+quad:
+  actor: 用户
+  action: 点击工作台 tab 切换
+  object: 设计工作台
+  preconditions:
+  - Electron app 开了 CDP 端口，已加载到首页（需求工作台）
+data_ref: null
+steps:
+- action: wait_visible
+  selector: '[data-testid="workbench-tab-design"]'
+  timeout_ms: 10000
+- action: click
+  selector: '[data-testid="workbench-tab-design"]'
+- action: wait_visible
+  selector: '[data-testid="workbench-quick-button-design-overview"]'
+  timeout_ms: 5000
+assertions:
+- kind: text_visible
+  selector: '[data-testid="workbench-quick-button-design-overview"]'
+  expected: 概要设计
+- kind: text_visible
+  selector: '[data-testid="workbench-quick-button-design-detail"]'
+  expected: 详细设计
+- kind: text_visible
+  selector: '[data-testid="workbench-quick-button-design-program"]'
+  expected: 程序设计
+postconditions: []

@@ -1,0 +1,24 @@
+id: tc_giencwb_electron_005
+title: Electron-侧边栏-数字分身入口
+source: '口述: 侧边栏应显示「数字分身」导航入口，且 data-testid="sidebar-nav-数字分身" 可见。
+
+  '
+req_ref: null
+priority: P1
+channel: electron
+quad:
+  actor: 用户
+  action: 查看侧边栏导航
+  object: 数字分身入口
+  preconditions:
+  - Electron app 开了 CDP 端口，已加载到首页
+data_ref: null
+steps:
+- action: wait_visible
+  selector: '[data-testid="sidebar-normal-mode"]'
+  timeout_ms: 10000
+assertions:
+- kind: text_visible
+  selector: '[data-testid="sidebar-nav-数字分身"]'
+  expected: 数字分身
+postconditions: []

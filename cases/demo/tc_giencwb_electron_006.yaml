@@ -1,0 +1,25 @@
+id: tc_giencwb_electron_006
+title: Electron-首页输入框-描述你想要构建的内容
+source: '口述: 首页应有输入框，placeholder 为「描述你想要构建的内容」，用户可在此输入需求开始工作。
+
+  '
+req_ref: null
+priority: P1
+channel: electron
+quad:
+  actor: 用户
+  action: 查看首页输入区
+  object: 需求输入框
+  preconditions:
+  - Electron app 开了 CDP 端口，已加载到首页
+data_ref: null
+steps:
+- action: wait_visible
+  selector: textarea[placeholder*="构建"]
+  timeout_ms: 10000
+assertions:
+- kind: attribute
+  selector: textarea[placeholder*="构建"]
+  name: placeholder
+  expected: 描述你想要构建的内容
+postconditions: []
