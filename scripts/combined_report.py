@@ -276,17 +276,17 @@ def run_4p12s_probe(model_key: str, think: str, max_tokens: int) -> list[dict]:
 def _verdict_card(p0_rate: float, probe_rate: float) -> tuple[str, str]:
     """按 P0 对话通过率 + 4P12S 交付通过率自动生成上线结论卡。
 
-    规则（沿用 final_report.py 的 verdict 逻辑并扩展到双维度）：
+    规则：
     - P0 ≥95% 且 4P12S ≥80% → ✅ 推荐上线
-    - P0 ≥90% 或 4P12S ≥60%    → ⚠️ 有条件上线（修复/观察失败项后上线）
-    - 否则                      → ❌ 暂不上线
+    - P0 ≥90% 且 4P12S ≥60%  → ⚠️ 有条件上线（修复/观察失败项后上线）
+    - 否则                     → ❌ 不建议上线
     """
     if p0_rate >= 0.95 and probe_rate >= 0.80:
         css, emoji, text = "pass", "✅", "推荐上线"
-    elif p0_rate >= 0.90 or probe_rate >= 0.60:
+    elif p0_rate >= 0.90 and probe_rate >= 0.60:
         css, emoji, text = "warn", "⚠️", "有条件上线（修复/观察失败项后上线）"
     else:
-        css, emoji, text = "fail", "❌", "暂不上线（P0 或 4P12S 未达标）"
+        css, emoji, text = "fail", "❌", "不建议上线（P0 或 4P12S 未达标）"
     msg = (
         f"{emoji} 综合结论：{text} —— "
         f"P0 对话通过率 {p0_rate:.1%} · 4P12S 交付通过率 {probe_rate:.1%}"
@@ -341,7 +341,7 @@ def render_combined(llm_results: list[dict], probe_results: list[dict],
     <b>测试范围：</b>① 对话能力 P0（{llm_total} 条，18 维度：安全/代码/推理/工具/流式…）
     ② 4P12S 交付能力（{probe_total} 步：需求→PRD→设计→编码→测试，含真实 pytest 门禁）
     <br><b>判定引擎：</b>1° 确定性断言（零 AI 成本）→ 3° Laya System One（本地推理，置信度路由 ≥0.9 自动）
-    <br><b>上线规则：</b>P0≥95% 且 4P12S≥80% → 推荐上线；P0≥90% 或 4P12S≥60% → 有条件上线；否则暂不上线
+    <br><b>上线规则：</b>P0≥95% 且 4P12S≥80% → 推荐上线；P0≥90% 且 4P12S≥60% → 有条件上线；否则不建议上线
   </div>
 </div>
 """

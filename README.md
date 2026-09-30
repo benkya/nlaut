@@ -45,7 +45,7 @@ cd ~/workspace/nlaut
 .venv/bin/python scripts/combined_report.py --model deepseek-v4-flash --skip-llm
 ```
 
-报告顶部自动给出 **上线结论卡**（✅ 推荐上线 / ⚠️ 有条件上线 / ❌ 暂不上线），失败和转人工的用例可折叠查看**请求（system+user）和模型返回全文**，便于人工定性。
+报告顶部自动给出 **上线结论卡**（✅ 推荐上线 / ⚠️ 有条件上线 / ❌ 不建议上线），失败和转人工的用例可折叠查看**请求（system+user）和模型返回全文**，便于人工定性。
 
 ### 飞书口述零动作测模型（最终形态）
 

@@ -18,6 +18,19 @@ models:
 
   # --- Aliyun MAAS token-plan（本机已配置 CUSTOM_API_KEY，实测 26 模型可用）---
 
+  # --- 内网部署模型（GLM-5.3-Flash，2026-09-29 实测接入，10.62.79.254 网关）---
+
+  glm-5.3-flash:
+    provider: internal
+    base_url: "http://10.62.79.254:32528/inference/h4dp1kr9/v1"
+    api_key_env: "GLM53_FLASH_KEY"
+    model_id: "GLM-5.3-Flash"
+    type: local_deployment
+    supports_streaming: true        # 2026-09-29 实测：非流式 chat 200；流式待测
+    supports_function_calling: false # 2026-09-29 实测：响应 keys 只见 content，工具调用待测
+    context_window: 32768  # [推测] 按网关默认，未从服务端确认
+    notes: "默认参数干净（响应无 reasoning 字段）；与 DS-Flash 30841 形态一致——思考参数语义同（不传即可）；冒烟 13-15s（含思考但服务端剥离）"
+
   # --- 内网部署模型（DeepSeek-V4-Flash，2026-09-28 实测接入）---
 
   deepseek-v4-flash:
