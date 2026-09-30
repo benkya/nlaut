@@ -62,11 +62,13 @@ def build_client(model_key: str) -> tuple[str, str, dict]:
 
 
 def chat(base_url: str, api_key: str, model_name: str, system: str, user: str,
-         max_tokens: int = 6000, think: str = "default") -> tuple[str, dict]:
+         max_tokens: int = 6000, think: str = "default",
+         reasoning_effort: str = "") -> tuple[str, dict]:
     """单轮调用，返回 (content, usage)。推理模型剥离 reasoning_content。
 
     think: "default" 不传思考参数（DS-Flash 30841 网关干净）；
            "off" 传 chat_template_kwargs.enable_thinking=False（Qwen 30808 网关必须）。
+    reasoning_effort: 推理模型思考强度（如 "low"），空串不传。
     """
     payload = {
         "model": model_name,
@@ -79,6 +81,8 @@ def chat(base_url: str, api_key: str, model_name: str, system: str, user: str,
     }
     if think == "off":
         payload["chat_template_kwargs"] = {"enable_thinking": False}
+    if reasoning_effort:
+        payload["reasoning_effort"] = reasoning_effort
     with httpx.Client(trust_env=False, timeout=300.0) as c:
         r = c.post(f"{base_url}/chat/completions",
                    headers={"Authorization": f"Bearer {api_key}"}, json=payload)

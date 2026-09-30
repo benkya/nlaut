@@ -74,6 +74,8 @@ def main() -> int:
     parser.add_argument("--priority", default="",
                         help="优先级过滤（如 P0 只跑 P0；空 = 全部优先级）")
     parser.add_argument("--timeout", type=float, default=60.0, help="API 调用超时（秒）")
+    parser.add_argument("--reasoning-effort", default="", choices=["", "low", "medium", "high"],
+                        help="推理模型思考强度（如 low）")
     args = parser.parse_args()
 
     from nlaut.executor.runner import run_store
@@ -103,6 +105,7 @@ def main() -> int:
             "api_key": api_key,
             "model": args.model,
             "timeout": args.timeout,
+            "reasoning_effort": args.reasoning_effort,
         }
         print(f"[cli] API 通道: model={args.model} base_url={api_base}")
 

@@ -88,10 +88,12 @@ def _call_api(
     stream: bool = False,
     timeout: float = 60.0,
     repeat: int = 1,
+    reasoning_effort: str = "",
 ) -> tuple[dict, float]:
     """调用 OpenAI-compatible API，返回 (response_json, latency_ms)。
 
     支持 stream=true：收集所有 chunk 拼成完整 response。
+    reasoning_effort: 推理模型思考强度（如 "low"/"medium"/"high"），空串不传。
     """
     url = f"{base_url.rstrip('/')}/chat/completions"
     headers = {
@@ -105,6 +107,8 @@ def _call_api(
     }
     if tools:
         body["tools"] = tools
+    if reasoning_effort:
+        body["reasoning_effort"] = reasoning_effort
 
     t0 = time.time()
 
@@ -197,11 +201,13 @@ def execute(
     api_key: str = "",
     model: str = "",
     timeout: float = 60.0,
+    reasoning_effort: str = "",
     logger: Callable[[str], None] = print,
 ) -> dict:
     """执行一条 API 通道 IR 用例，返回 Evidence 字段。
 
     必须提供 base_url, api_key, model（由 runner 从模型配置注入）。
+    reasoning_effort: 推理模型思考强度（如 "low"），空串不传。
     返回 dict 直接喂 Evidence(case_id=ir.id, **result)。
     """
     data = data or {}
@@ -244,6 +250,7 @@ def execute(
                 tools=tools,
                 stream=True,
                 timeout=timeout,
+                reasoning_effort=reasoning_effort,
             )
             last_response = response_i
             aggregated_latency += latency_i
@@ -282,6 +289,7 @@ def execute(
             tools=tools,
             stream=is_stream,
             timeout=timeout,
+            reasoning_effort=reasoning_effort,
         )
 
     # 提取 assistant message

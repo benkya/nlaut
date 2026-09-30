@@ -22,7 +22,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 
-def run_llm_batch(model_key: str) -> list[dict]:
+def run_llm_batch(model_key: str, reasoning_effort: str = "") -> list[dict]:
     """跑对话能力 P0 批次，返回 run_store 格式的 results。"""
     from nlaut.executor.runner import run_store
 
@@ -49,6 +49,7 @@ def run_llm_batch(model_key: str) -> list[dict]:
             "api_key": api_key,
             "model": model_id,
             "timeout": 120,
+            "reasoning_effort": reasoning_effort,
         },
         session_log_path=str(ROOT / "artifacts" / "session" / "run_combined.jsonl"),
     )
@@ -61,7 +62,7 @@ def run_llm_batch(model_key: str) -> list[dict]:
     return results
 
 
-def run_4p12s_probe(model_key: str, think: str, max_tokens: int) -> list[dict]:
+def run_4p12s_probe(model_key: str, think: str, max_tokens: int, reasoning_effort: str = "") -> list[dict]:
     """跑 4P12S 探针，把结果转成 run_store 格式的 results（含 assertions + confidence）。"""
     # 读模型配置
     cfg_path = ROOT / "config" / "models.yaml"
@@ -117,7 +118,8 @@ def run_4p12s_probe(model_key: str, think: str, max_tokens: int) -> list[dict]:
             t0 = time.monotonic()
             try:
                 content, usage = chat_fn(base_url, api_key, model_id,
-                                         step["system"], user, budget, think)
+                                         step["system"], user, budget, think,
+                                         reasoning_effort=reasoning_effort)
                 err = ""
             except Exception as e:  # noqa: BLE001
                 content, usage, err = "", {}, f"{type(e).__name__}: {e}"[:200]
@@ -357,6 +359,8 @@ def main():
     ap.add_argument("--model", required=True, help="models.yaml 中的 key")
     ap.add_argument("--think", default="default", choices=["default", "off"])
     ap.add_argument("--max-tokens", type=int, default=6000)
+    ap.add_argument("--reasoning-effort", default="", choices=["", "low", "medium", "high"],
+                    help="推理模型思考强度（如 low），空串不传")
     ap.add_argument("--out", default="", help="报告输出路径")
     ap.add_argument("--skip-llm", action="store_true", help="跳过对话能力批次")
     ap.add_argument("--skip-4p12s", action="store_true", help="跳过 4P12S 探针")
@@ -370,9 +374,9 @@ def main():
     probe_results = []
 
     if not args.skip_llm:
-        llm_results = run_llm_batch(args.model)
+        llm_results = run_llm_batch(args.model, args.reasoning_effort)
     if not args.skip_4p12s:
-        probe_results = run_4p12s_probe(args.model, args.think, args.max_tokens)
+        probe_results = run_4p12s_probe(args.model, args.think, args.max_tokens, args.reasoning_effort)
 
     out_path = args.out or f"artifacts/report_combined_{re.sub(r'[^a-z0-9]', '_', args.model.lower())}.html"
     path = render_combined(llm_results, probe_results, model_name, out_path)

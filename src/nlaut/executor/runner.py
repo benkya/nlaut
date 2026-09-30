@@ -191,6 +191,7 @@ def run_case(
             api_key=api_config.get("api_key", ""),
             model=api_config.get("model", ""),
             timeout=api_config.get("timeout", 60.0),
+            reasoning_effort=api_config.get("reasoning_effort", ""),
             logger=logger,
         )
     elif ir.channel == "electron":
