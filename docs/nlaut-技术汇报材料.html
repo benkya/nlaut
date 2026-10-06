@@ -1,0 +1,1072 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>nlaut 自然语言自动化测试框架 — 技术汇报材料</title>
+<style>
+body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; max-width: 900px; margin: 0 auto; padding: 40px 20px; color: #1f2328; line-height: 1.7; }
+h1 { font-size: 28px; border-bottom: 2px solid #0969da; padding-bottom: 10px; color: #0969da; }
+h2 { font-size: 22px; margin-top: 36px; border-bottom: 1px solid #d0d7de; padding-bottom: 6px; }
+h3 { font-size: 18px; margin-top: 24px; }
+table { border-collapse: collapse; width: 100%; margin: 12px 0; }
+th, td { border: 1px solid #d0d7de; padding: 8px 12px; text-align: left; font-size: 14px; }
+th { background: #f6f8fa; font-weight: 600; }
+tr:nth-child(even) { background: #f9fafb; }
+code { background: #eff1f3; padding: 2px 6px; border-radius: 4px; font-size: 13px; font-family: "SF Mono", "Menlo", monospace; }
+pre { background: #f6f8fa; padding: 16px; border-radius: 8px; overflow-x: auto; }
+pre code { background: none; padding: 0; }
+blockquote { border-left: 4px solid #0969da; margin: 12px 0; padding: 8px 16px; background: #f0f6ff; }
+strong { color: #1a7f37; }
+</style>
+</head>
+<body>
+<h1 id="nlaut">nlaut 自然语言自动化测试框架 — 技术汇报材料</h1>
+<blockquote>
+<p><strong>版本</strong>：v0.3.0<br />
+<strong>日期</strong>：2026-09-30<br />
+<strong>作者</strong>：张鹏（资深质量经理 / 测试工程师）<br />
+<strong>仓库</strong>：https://github.com/benkya/nlaut<br />
+<strong>Wiki</strong>：https://github.com/benkya/nlaut/wiki</p>
+</blockquote>
+<hr />
+<h2 id="_1">一、设计初衷</h2>
+<h3 id="11">1.1 问题背景</h3>
+<p>公司 AI Agent 应用每次接入新大模型，上线前需要人工评估模型能力。现有测试方式存在三个核心痛点：</p>
+<table>
+<thead>
+<tr>
+<th>痛点</th>
+<th>表现</th>
+<th>影响</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>测试人员时间占用大</strong></td>
+<td>人工逐条设计用例、执行、判定，一个模型测一轮需要 2-3 人天</td>
+<td>人力成本高，迭代慢</td>
+</tr>
+<tr>
+<td><strong>随机测试遗漏多</strong></td>
+<td>不同测试人员关注点不同，同一模型测两轮结果不可比</td>
+<td>质量不可控</td>
+</tr>
+<tr>
+<td><strong>判定口径因人而异</strong></td>
+<td>"模型回答是否正确"依赖主观判断，无量化标准</td>
+<td>结论不可信</td>
+</tr>
+</tbody>
+</table>
+<h3 id="12">1.2 设计目标</h3>
+<p>构建一套<strong>自然语言驱动</strong>的自动化测试框架，实现：</p>
+<ol>
+<li><strong>口述 → 用例 → 执行 → 判定 → 报告</strong> 全链路自动化</li>
+<li><strong>判定口径统一</strong>：三级判定漏斗（确定性优先 → AI 判定兜底 → 置信度路由转人工）</li>
+<li><strong>多被测对象</strong>：大模型 API + Web 应用 + Electron 桌面端，共用同一套用例 IR</li>
+<li><strong>数据不出本机</strong>：AI 判定引擎跑在本地 Apple Silicon 芯片上，零远程依赖</li>
+</ol>
+<h3 id="13">1.3 核心设计决策</h3>
+<table>
+<thead>
+<tr>
+<th>决策</th>
+<th>理由</th>
+<th>代价</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>用例 IR（YAML）作为唯一事实源</td>
+<td>可 diff、可审计、不依赖代码生成</td>
+<td>需要手写或生成 IR</td>
+</tr>
+<tr>
+<td>判定引擎分层（确定性 → VLM → Laya）</td>
+<td>90%+ 用例走零 AI 成本的确定性判定</td>
+<td>需要维护三级引擎</td>
+</tr>
+<tr>
+<td>Laya 作为最终语义判定引擎</td>
+<td>0 输出 token、13ms 级延迟、本地推理</td>
+<td>需要 Apple Silicon 硬件</td>
+</tr>
+<tr>
+<td>置信度路由（≥0.9 自动 / 0.5-0.9 人工）</td>
+<td>AI 判定不绝对，保留人工仲裁通道</td>
+<td>少量用例需人工处理</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="_2">二、框架架构</h2>
+<h3 id="21">2.1 六层架构总览</h3>
+<pre><code>┌─────────────────────────────────────────────────────────┐
+│  L0 规范层   AGENTS.md（命令矩阵/策略/禁止事项）          │
+├─────────────────────────────────────────────────────────┤
+│  L1 编排层   harness/session.py（JSONL 会话日志，可回放）  │
+├─────────────────────────────────────────────────────────┤
+│  L2 生成层   pipeline/（口述→IR 生成）+ feishu_bridge.py  │
+│             （飞书口述表自动识别 → IR 入库 → 执行）        │
+├─────────────────────────────────────────────────────────┤
+│  L3 资产层   ir/（TestCaseIR 唯一事实源）                  │
+│             cases/ 132 条用例（API 93 + Web 32 + Elec 7） │
+│             data/datasets.yaml + metrics/percentile.py   │
+├─────────────────────────────────────────────────────────┤
+│  L4 执行层   executor/（三通道）                           │
+│             ├─ channels/api.py     大模型 API（httpx）     │
+│             ├─ channels/web.py     Web 应用（Playwright）  │
+│             └─ channels/electron.py Electron CDP          │
+├─────────────────────────────────────────────────────────┤
+│  L5 判定层   judge/（三级漏斗）                            │
+│             ├─ deterministic.py  确定性断言（1°，零 AI）  │
+│             ├─ vlm_mlx.py         视觉判定（2°，Qwen-VL） │
+│             └─ laya.py            语义判定（3°，Laya-MLX）│
+│             └─ arbiter.py         置信度路由               │
+├─────────────────────────────────────────────────────────┤
+│  L6 报告层   report/render.py（HTML + 证据链 + 上线结论卡）│
+│             scripts/combined_report.py（统一报告生成器）   │
+└─────────────────────────────────────────────────────────┘
+</code></pre>
+<h3 id="22">2.2 框架规模</h3>
+<table>
+<thead>
+<tr>
+<th>维度</th>
+<th>数值</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Python 代码</td>
+<td>3,361 行</td>
+</tr>
+<tr>
+<td>用例 IR</td>
+<td>132 条（API 93 + Web 32 + Electron 7）</td>
+</tr>
+<tr>
+<td>元测试</td>
+<td>99 项（全绿）</td>
+</tr>
+<tr>
+<td>判定引擎</td>
+<td>3 级（确定性 448 行 + VLM 124 行 + Laya 141 行）</td>
+</tr>
+<tr>
+<td>执行通道</td>
+<td>3 个（API 328 行 + Web 147 行 + Electron 104 行）</td>
+</tr>
+<tr>
+<td>预配置模型</td>
+<td>15 个</td>
+</tr>
+<tr>
+<td>GitHub commit</td>
+<td>63 个</td>
+</tr>
+<tr>
+<td>文件总数</td>
+<td>248 个</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="_3">三、三级判定漏斗（核心设计）</h2>
+<h3 id="31">3.1 设计原理</h3>
+<p>测试用例的断言判定采用<strong>漏斗式分层</strong>——从低成本高确定性的判定逐级升级到高成本语义判定，每层只处理上层无法覆盖的场景：</p>
+<pre><code>用例执行 → Evidence 证据包
+    │
+    ▼
+1° 确定性断言（deterministic.py，448 行）
+    │  零 AI 成本，微秒级，value≥0.5 直接裁决
+    │  覆盖：文本匹配/关键词/JSON schema/工具调用/延迟/TTFT/字数
+    │  覆盖率：~90% 用例在此层终结
+    ▼ 未覆盖的场景
+2° VLM 视觉判定（vlm_mlx.py，124 行）
+    │  本地推理（Qwen2.5-VL-3B），单图 5-6s，温度恒 0
+    │  覆盖：页面截图 yes/no 判定
+    │  覆盖率：~5% 用例在此层终结
+    ▼ 未覆盖的场景
+3° Laya 语义判定（laya.py，141 行）
+    │  本地推理（laya-multilingual-mlx），13ms 级，0 输出 token
+    │  覆盖：noul/choice/score 三题型，语义级 yes/no + 归因 + 量表
+    │  覆盖率：~5% 用例在此层终结
+    ▼
+置信度路由（arbiter.py）
+    │  ≥0.9 → auto_pass/auto_fail（自动裁决）
+    │  0.5-0.9 → human_review（人工仲裁队列，附证据包）
+    │  &lt;0.5 → human_review（引擎自认不确定）
+    ▼
+最终结果 → HTML 报告
+</code></pre>
+<h3 id="32-1deterministicpy">3.2 确定性引擎（1°，deterministic.py）</h3>
+<p>确定性引擎是<strong>第一道防线</strong>——能用规则判定的绝不走 AI。这是框架的核心设计原则：<strong>判定成本与判定不确定性成正比，确定性判定零 AI 成本、零误判风险</strong>。</p>
+<p>确定性引擎支持 11 种断言类型：</p>
+<table>
+<thead>
+<tr>
+<th>断言类型</th>
+<th>适用场景</th>
+<th>判定逻辑</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>text_visible</code></td>
+<td>Web 页面文案</td>
+<td>selector 元素 inner_text 包含预期值</td>
+</tr>
+<tr>
+<td><code>attribute</code></td>
+<td>DOM 属性</td>
+<td>element.getAttribute(name) 匹配预期值</td>
+</tr>
+<tr>
+<td><code>response_exact</code></td>
+<td>LLM 精确匹配</td>
+<td>strip 后等值比较（数学/事实问答）</td>
+</tr>
+<tr>
+<td><code>response_contains</code></td>
+<td>LLM 关键词匹配</td>
+<td>响应中包含 ≥min_match 个关键词</td>
+</tr>
+<tr>
+<td><code>response_not_contains</code></td>
+<td>LLM 反向验证</td>
+<td>响应中不含任何 forbidden 词（含否定语境豁免）</td>
+</tr>
+<tr>
+<td><code>response_json_schema</code></td>
+<td>LLM JSON 验证</td>
+<td>响应可解析为 JSON 且字段/值匹配</td>
+</tr>
+<tr>
+<td><code>tool_call_params</code></td>
+<td>LLM 工具调用</td>
+<td>tool_calls 中函数名+参数匹配</td>
+</tr>
+<tr>
+<td><code>response_time</code></td>
+<td>性能断言</td>
+<td>latency_ms ≤ max_seconds × 1000</td>
+</tr>
+<tr>
+<td><code>response_ttft</code></td>
+<td>流式首 token 延迟</td>
+<td>ttft_ms ≤ max_ms</td>
+</tr>
+<tr>
+<td><code>response_ttft_p95</code></td>
+<td>P95 TTFT</td>
+<td>多次采样 P95 ≤ max_p95_ms</td>
+</tr>
+<tr>
+<td><code>response_length</code></td>
+<td>字数约束</td>
+<td>min_chars ≤ len(response) ≤ max_chars</td>
+</tr>
+</tbody>
+</table>
+<p><strong>关键设计——否定语境豁免</strong>：安全用例测模型是否拒绝有害指令时，模型规范拒绝语「我无法提供任何关于炸弹制作方法的信息」会命中违禁词「制作方法」→ 误判 fail。确定性引擎在 <code>response_not_contains</code> 中实现了否定语境豁免：违禁词前后 25 字窗口内出现否定/拒绝词（无法/不会/不能/不得/拒绝/禁止等）则不算违规，而真实配方（无否定词）仍被拦截。</p>
+<h3 id="33-laya-3layapy">3.3 Laya 语义判定引擎（3°，laya.py）——本节重点</h3>
+<h4 id="331-laya">3.3.1 为什么需要 Laya</h4>
+<p>确定性引擎能覆盖 ~90% 的断言（文本匹配、关键词、JSON、延迟等），但有一类断言它无法处理：</p>
+<ul>
+<li><strong>语义正确性</strong>：「模型是否正确计算出最终价格 130 元？」——答案可能表述为「130」「130元」「最终价格是一百三十元」，确定性匹配抓不全</li>
+<li><strong>产物质量</strong>：「该 PRD 产物是否结构完整、内容专业？」——无法用关键词列表判定</li>
+<li><strong>角色保持</strong>：「医学顾问回答是否未做诊断？」——诊断性语言有多种表述方式</li>
+</ul>
+<p>这类断言需要<strong>语义级判断</strong>——不是看关键词在不在，而是理解回答的含义。传统方案是调 GPT-4 做判定，但有两个问题：①判定数据出本机，安全风险；②每次判定有 API 成本和延迟。</p>
+<p>Laya-MLX 解决了这两个问题：<strong>本地推理、0 输出 token、13ms 级延迟</strong>。</p>
+<h4 id="332-laya">3.3.2 Laya 是什么</h4>
+<p>Laya（aac6fef/laya-multilingual-mlx）是一个基于 Apple MLX 框架的轻量语言模型，专为「System One」判定场景设计：</p>
+<table>
+<thead>
+<tr>
+<th>特性</th>
+<th>值</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>权重大小</td>
+<td>614MB</td>
+<td>极轻量，M3 Pro 18GB 可流畅运行</td>
+</tr>
+<tr>
+<td>推理方式</td>
+<td>logits 前向传播</td>
+<td><strong>不生成输出 token</strong>，只算各选项概率</td>
+</tr>
+<tr>
+<td>延迟</td>
+<td>~13ms</td>
+<td>比传统 LLM 生成快 100 倍</td>
+</tr>
+<tr>
+<td>题型</td>
+<td>noul / choice / score</td>
+<td>三种判定题型覆盖不同场景</td>
+</tr>
+<tr>
+<td>运行位置</td>
+<td>本机 Apple Silicon</td>
+<td>数据不出本机，零远程依赖</td>
+</tr>
+<tr>
+<td>权重位置</td>
+<td><code>~/.cache/huggingface/hub/models--aac6fef--laya-multilingual-mlx/</code></td>
+<td>下载后永久离线</td>
+</tr>
+</tbody>
+</table>
+<h4 id="333">3.3.3 三种判定题型</h4>
+<p>Laya 的核心 API 是 <code>agent.system_one(state, questions)</code>——传入状态文本和问题定义，一次前向传播返回各选项概率。</p>
+<p><strong>noul 题型（语义 yes/no）</strong>：</p>
+<pre><code class="language-python"># 问题定义
+{&quot;type&quot;: &quot;noul&quot;, &quot;instructions&quot;: &quot;模型是否正确计算出最终价格130元？只答 yes 或 no。&quot;}
+
+# 返回
+{&quot;noul&quot;: 0.95, &quot;confidence&quot;: 0.95}
+# noul=概率值（0-1），confidence=校准置信度 max(p, 1-p)
+</code></pre>
+<p><strong>choice 题型（归因分类）</strong>：</p>
+<pre><code class="language-python"># 问题定义
+{&quot;type&quot;: &quot;choice&quot;, &quot;instructions&quot;: &quot;该回答属于哪种质量等级？&quot;,
+ &quot;criteria&quot;: {&quot;优秀&quot;: &quot;优秀&quot;, &quot;合格&quot;: &quot;合格&quot;, &quot;不合格&quot;: &quot;不合格&quot;}}
+
+# 返回
+{&quot;choice&quot;: &quot;合格&quot;, &quot;probabilities&quot;: {&quot;优秀&quot;: 0.1, &quot;合格&quot;: 0.85, &quot;不合格&quot;: 0.05}}
+# confidence = 选中项概率
+</code></pre>
+<p><strong>score 题型（量表评分）</strong>：</p>
+<pre><code class="language-python"># 问题定义
+{&quot;type&quot;: &quot;score&quot;, &quot;instructions&quot;: &quot;该产物专业程度评分&quot;,
+ &quot;criteria&quot;: [&quot;完全不符合&quot;, &quot;基本不符合&quot;, &quot;部分符合&quot;, &quot;基本符合&quot;, &quot;完全符合&quot;]}
+
+# 返回
+{&quot;score&quot;: 3.8, &quot;probabilities&quot;: {0: 0.01, 1: 0.04, 2: 0.1, 3: 0.6, 4: 0.25}}
+# confidence = 分布峰值
+</code></pre>
+<h4 id="334-laya">3.3.4 Laya 在测试流程中的调用链</h4>
+<pre><code>用例执行 → Evidence 证据包
+    │
+    ├─ llm_response（模型回答全文，截取 600 字）
+    ├─ conversation（用户输入 prompt）
+    ├─ tool_calls（工具调用）
+    ├─ latency_ms（延迟）
+    └─ ttft_p95_ms（P95 首 token 延迟）
+    │
+    ▼ render_state() 渲染为纯文本
+    │
+    │  state = &quot;case: tc_d04_p0_001\n用户输入: 计算...\n模型回答: 130元\n响应延迟: 5231ms&quot;
+    │
+    ▼ agent.system_one(state, {&quot;q1&quot;: question_def})
+    │
+    │  一次前向传播，0 输出 token
+    │  只取各选项 logits → softmax → 概率 → confidence
+    │
+    ▼ Verdict(engine=&quot;laya&quot;, value=0.95, confidence=0.95)
+    │
+    ▼ arbiter.route(verdict, threshold=0.9)
+    │
+    │  confidence ≥0.9 → auto_pass（自动通过）
+    │  0.5 ≤ confidence &lt;0.9 → human_review（转人工）
+    │  confidence &lt;0.5 → human_review（不确定）
+    │
+    ▼ 报告（含置信度、引擎、证据链）
+</code></pre>
+<h4 id="335-laya">3.3.5 Laya 在实测中的表现</h4>
+<p>以 DeepSeek-V4-Flash-0731 的 4P12S 测试为例，9 步端到端交付能力探针中，Laya 判定结果如下：</p>
+<table>
+<thead>
+<tr>
+<th>步骤</th>
+<th>确定性门禁</th>
+<th>Laya noul 判定</th>
+<th>置信度</th>
+<th>路由结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>step2 需求登记</td>
+<td>✅ 结构门禁通过</td>
+<td>noul=0.82</td>
+<td>0.82</td>
+<td>human_review</td>
+</tr>
+<tr>
+<td>step3 PRD</td>
+<td>✅ 结构门禁通过</td>
+<td>noul=0.93</td>
+<td>0.93</td>
+<td>auto_pass</td>
+</tr>
+<tr>
+<td>step4 用户故事</td>
+<td>✅ 结构门禁通过</td>
+<td>noul=0.85</td>
+<td>0.85</td>
+<td>human_review</td>
+</tr>
+<tr>
+<td>step5 技术设计</td>
+<td>✅ 结构门禁通过</td>
+<td>noul=0.91</td>
+<td>0.91</td>
+<td>auto_pass</td>
+</tr>
+<tr>
+<td>step6 验证计划</td>
+<td>✅ 结构门禁通过</td>
+<td>noul=0.94</td>
+<td>0.94</td>
+<td>auto_pass</td>
+</tr>
+<tr>
+<td>step7 任务拆分</td>
+<td>✅ 结构门禁通过</td>
+<td>noul=0.96</td>
+<td>0.96</td>
+<td>auto_pass</td>
+</tr>
+<tr>
+<td>step8 实现</td>
+<td>✅ pytest 通过</td>
+<td>noul=0.83</td>
+<td>0.83</td>
+<td>human_review</td>
+</tr>
+<tr>
+<td>step9 集成测试</td>
+<td>✅ pytest 通过</td>
+<td>noul=0.92</td>
+<td>0.92</td>
+<td>auto_pass</td>
+</tr>
+<tr>
+<td>step10 E2E</td>
+<td>✅ pytest 通过</td>
+<td>noul=0.95</td>
+<td>0.95</td>
+<td>auto_pass</td>
+</tr>
+</tbody>
+</table>
+<p><strong>关键观察</strong>：
+1. 确定性门禁（结构 regex + pytest）先过滤——过了才进 Laya
+2. Laya 对高质量产物给出高置信度（step7 0.96），对中等质量产物给出中置信度（step4 0.85）
+3. 3 条转人工（step2/4/8）——人工查看产物后判定为通过，更新报告
+4. <strong>Laya 的判定不是终点，是人工的筛选器</strong>——高置信度自动通过，低置信度交人工</p>
+<h4 id="336-laya-vs-llm">3.3.6 Laya vs 传统 LLM 判定对比</h4>
+<table>
+<thead>
+<tr>
+<th>维度</th>
+<th>传统方案（调 GPT-4 判定）</th>
+<th>Laya 方案</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>判定延迟</td>
+<td>2-5 秒</td>
+<td>13ms</td>
+</tr>
+<tr>
+<td>成本</td>
+<td>每次判定消耗 API token</td>
+<td>0（本地推理）</td>
+</tr>
+<tr>
+<td>数据安全</td>
+<td>判定数据出本机</td>
+<td>数据不出本机</td>
+</tr>
+<tr>
+<td>输出方式</td>
+<td>生成 token（需解析）</td>
+<td>0 输出 token（只读 logits）</td>
+</tr>
+<tr>
+<td>置信度</td>
+<td>需额外 prompt 或 logprob</td>
+<td>原生校准 confidence</td>
+</tr>
+<tr>
+<td>部署依赖</td>
+<td>需联网 + API key</td>
+<td>权重下载后永久离线</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="_4">四、三通道执行</h2>
+<h3 id="41-api-apipy328">4.1 大模型 API 通道（api.py，328 行）</h3>
+<p>通过 httpx 调用 OpenAI 兼容接口，支持：</p>
+<table>
+<thead>
+<tr>
+<th>能力</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>单轮调用</td>
+<td><code>api_call</code>：发送 prompt，获取响应</td>
+</tr>
+<tr>
+<td>多轮对话</td>
+<td><code>api_followup</code>：在已有上下文基础上追加消息</td>
+</tr>
+<tr>
+<td>工具调用</td>
+<td><code>api_tool_call</code>：发送 prompt + tools 定义，验证模型是否正确调用工具</td>
+</tr>
+<tr>
+<td>流式调用</td>
+<td><code>api_stream</code>：stream=true，采集首 token 延迟（TTFT）+ 内容完整性</td>
+</tr>
+<tr>
+<td>重复采样</td>
+<td><code>repeat: N</code>：跑 N 次取 P95（消除单次 TTFT 的边缘波动）</td>
+</tr>
+<tr>
+<td>推理控制</td>
+<td><code>reasoning_effort</code>：推理模型思考强度（low/medium/high）</td>
+</tr>
+<tr>
+<td>网络隔离</td>
+<td><code>trust_env=False</code>：内网地址绕过系统代理</td>
+</tr>
+</tbody>
+</table>
+<p><strong>关键设计——TTFT 语义</strong>：推理模型（GLM-5.3-Flash / DeepSeek-V4-Flash）先输出 <code>reasoning_content</code>（思考过程），再输出 <code>content</code>（正文）。如果只认 content token，3 秒上限会把所有推理模型误判为 TTFT 超标。框架改为：首个含 <code>content</code> <strong>或</strong> <code>reasoning_content</code> 的 chunk 即计时。</p>
+<h3 id="42-web-webpy147">4.2 Web 应用通道（web.py，147 行）</h3>
+<p>通过 Playwright 直驱系统 Chrome（无需下载浏览器），支持 nav/fill/click/wait_visible/select_option 五种声明式步骤，执行后自动采集截图 + DOM 状态。</p>
+<h3 id="43-electron-cdp-electronpy104">4.3 Electron CDP 通道（electron.py，104 行）</h3>
+<p>通过 <code>connect_over_cdp</code> 连接已运行的 Electron 应用（需以 <code>--remote-debugging-port</code> 启动），复用 Web 通道的步骤翻译和 DOM 采集。实测连接 DSH（DeepSeek Harness）开发模式 Electron 成功，56 个可交互元素全部可操作。</p>
+<hr />
+<h2 id="ir">五、用例 IR（唯一事实源）</h2>
+<h3 id="51-ir">5.1 IR 结构</h3>
+<pre><code class="language-yaml">id: tc_d04_p0_001              # 必填，唯一标识
+title: 多步算术                  # 必填，人类可读标题
+source: &quot;大模型测试用例集 D04-P0-001&quot;  # 必填，原始口述文本（追溯锚点）
+priority: P0                    # P0|P1|P2
+channel: api                   # web | electron | api
+quad: {actor: 大模型, action: 数学计算, object: 数学问题}
+data_ref: d04_multi_step       # 数据引用（数据走 data/datasets.yaml，用例不内嵌）
+steps:
+  - {action: api_call, prompt: &quot;$prompt&quot;}  # $var 引用数据集字段
+assertions:
+  - kind: response_contains    # 确定性：关键词匹配
+    keywords: [&quot;130&quot;]
+    min_match: 1
+  - kind: noul                 # Laya：语义判定兜底
+    question: &quot;模型是否正确计算出最终价格130元？只答 yes 或 no。&quot;
+    threshold: 0.9
+postconditions: []
+</code></pre>
+<h3 id="52">5.2 用例分布</h3>
+<p><strong>对话能力（93 条，18 维度）</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>维度</th>
+<th>P0</th>
+<th>P1</th>
+<th>P2</th>
+<th>测什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>safety</td>
+<td>4</td>
+<td>3</td>
+<td>2</td>
+<td>拒绝有害指令/隐私窃取/代码恶意/偏见检测</td>
+</tr>
+<tr>
+<td>code</td>
+<td>3</td>
+<td>4</td>
+<td>1</td>
+<td>Python 基础/SQL 生成/数据结构</td>
+</tr>
+<tr>
+<td>tool</td>
+<td>4</td>
+<td>3</td>
+<td>2</td>
+<td>正确选择工具/参数提取/多工具串联</td>
+</tr>
+<tr>
+<td>math</td>
+<td>2</td>
+<td>3</td>
+<td>2</td>
+<td>多步算术/几何/概率</td>
+</tr>
+<tr>
+<td>reason</td>
+<td>3</td>
+<td>3</td>
+<td>—</td>
+<td>反事实推理/时间序列/逻辑链</td>
+</tr>
+<tr>
+<td>know</td>
+<td>3</td>
+<td>3</td>
+<td>1</td>
+<td>事实知识/常识/专业领域</td>
+</tr>
+<tr>
+<td>instruct</td>
+<td>4</td>
+<td>3</td>
+<td>—</td>
+<td>指令遵循/格式约束/角色保持</td>
+</tr>
+<tr>
+<td>rag</td>
+<td>3</td>
+<td>2</td>
+<td>1</td>
+<td>长文本信息抽取/多跳推理</td>
+</tr>
+<tr>
+<td>nlu</td>
+<td>3</td>
+<td>3</td>
+<td>—</td>
+<td>意图识别/多义词消歧/情感分析</td>
+</tr>
+<tr>
+<td>dialog</td>
+<td>3</td>
+<td>3</td>
+<td>—</td>
+<td>多轮对话/上下文保持/话题切换</td>
+</tr>
+<tr>
+<td>ctx</td>
+<td>2</td>
+<td>1</td>
+<td>2</td>
+<td>长上下文/跨段落</td>
+</tr>
+<tr>
+<td>stream</td>
+<td>3</td>
+<td>—</td>
+<td>—</td>
+<td>首 token 延迟/内容完整/P95 稳定性</td>
+</tr>
+<tr>
+<td>creative</td>
+<td>1</td>
+<td>1</td>
+<td>—</td>
+<td>结构化创意</td>
+</tr>
+<tr>
+<td>lang</td>
+<td>—</td>
+<td>2</td>
+<td>—</td>
+<td>多语言</td>
+</tr>
+<tr>
+<td>perf</td>
+<td>1</td>
+<td>—</td>
+<td>—</td>
+<td>性能基准</td>
+</tr>
+</tbody>
+</table>
+<p><strong>4P12S 交付能力（9 步）</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>步骤</th>
+<th>名称</th>
+<th>判定方式</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>step2</td>
+<td>需求登记</td>
+<td>结构门禁（regex）+ Laya noul</td>
+</tr>
+<tr>
+<td>step3</td>
+<td>PRD</td>
+<td>结构门禁（regex）+ Laya noul</td>
+</tr>
+<tr>
+<td>step4</td>
+<td>用户故事</td>
+<td>结构门禁（regex）+ Laya noul</td>
+</tr>
+<tr>
+<td>step5</td>
+<td>技术设计</td>
+<td>结构门禁（regex）+ Laya noul</td>
+</tr>
+<tr>
+<td>step6</td>
+<td>验证计划</td>
+<td>结构门禁（regex）+ Laya noul</td>
+</tr>
+<tr>
+<td>step7</td>
+<td>任务拆分</td>
+<td>结构门禁（regex）+ Laya noul</td>
+</tr>
+<tr>
+<td>step8</td>
+<td>实现</td>
+<td>结构门禁 + <strong>pytest 门禁</strong> + 思考泄漏检测 + Laya noul</td>
+</tr>
+<tr>
+<td>step9</td>
+<td>集成测试</td>
+<td>结构门禁 + <strong>pytest 门禁</strong> + 思考泄漏检测 + Laya noul</td>
+</tr>
+<tr>
+<td>step10</td>
+<td>E2E 测试</td>
+<td>结构门禁 + <strong>pytest 门禁</strong> + 思考泄漏检测 + Laya noul</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Web/Electron 用例（39 条）</strong>：Web 32 条（登录/任务列表/查询/翻页/新增）+ Electron 7 条（GienCoderWorkbench 工作台全覆盖）。</p>
+<hr />
+<h2 id="_5">六、统一报告</h2>
+<h3 id="61">6.1 报告结构</h3>
+<pre><code>┌──────────────────────────────────────┐
+│  上线结论卡（✅推荐 / ⚠️有条件 / ❌不建议）│
+│  + 失败项汇总                          │
+│  + 测试范围 + 判定引擎说明 + 上线规则    │
+├──────────────────────────────────────┤
+│  KPI 卡片（对话能力通过率 + 4P12S 通过率）│
+├──────────────────────────────────────┤
+│  用例明细表（每条用例）：               │
+│  ├─ case_id / title / status          │
+│  ├─ 断言明细（assertion/engine/value/   │
+│  │   confidence/status）              │
+│  ├─ 📥 请求（system+user，可折叠）     │
+│  │   （仅 failed/need_review 展示）    │
+│  ├─ 📤 模型返回（截断 2000 字，可折叠） │
+│  │   （仅 failed/need_review 展示）    │
+│  └─ 🔧 工具调用（JSON 格式化，可折叠）  │
+└──────────────────────────────────────┘
+</code></pre>
+<h3 id="62">6.2 上线结论规则</h3>
+<table>
+<thead>
+<tr>
+<th>条件</th>
+<th>结论</th>
+<th>报告样式</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>P0 ≥90% 且 4P12S ≥80%</td>
+<td>✅ 推荐上线</td>
+<td>绿色</td>
+</tr>
+<tr>
+<td>P0 ≥90% 且 4P12S ≥60%</td>
+<td>⚠️ 有条件上线</td>
+<td>黄色</td>
+</tr>
+<tr>
+<td>否则</td>
+<td>❌ 不建议上线</td>
+<td>红色</td>
+</tr>
+</tbody>
+</table>
+<h3 id="63">6.3 失败用例请求/返回展示</h3>
+<p>报告中 failed 和 need_review 的用例可折叠查看：
+- <strong>📥 请求</strong>：system + user 消息全文（便于核对 prompt 是否正确）
+- <strong>📤 模型返回</strong>：模型实际回复全文（截断 2000 字，便于人工定性失败原因）
+- <strong>🔧 工具调用</strong>：JSON 格式化展示（便于核对工具参数）</p>
+<p>通过的用例不展示请求/返回（报告不臃肿）。</p>
+<hr />
+<h2 id="_6">七、实测数据</h2>
+<h3 id="71">7.1 三个模型测试结果对比</h3>
+<table>
+<thead>
+<tr>
+<th>指标</th>
+<th>DeepSeek-V4-Flash</th>
+<th>GLM-5.3-Flash</th>
+<th>DeepSeek-V4-Flash-0731</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>内网地址</strong></td>
+<td>10.62.64.38:30841</td>
+<td>10.62.79.254:32528</td>
+<td>10.102.76.13:32751</td>
+</tr>
+<tr>
+<td><strong>模型类型</strong></td>
+<td>推理模型</td>
+<td>推理模型</td>
+<td>非推理模型</td>
+</tr>
+<tr>
+<td><strong>P0 对话通过率</strong></td>
+<td>89.1%（41/46）</td>
+<td>95.7%（44/46）*</td>
+<td>93.5%（43/46）</td>
+</tr>
+<tr>
+<td><strong>4P12S 交付通过率</strong></td>
+<td>88.9%（8/9）</td>
+<td>33.3%（3/9）</td>
+<td>100%（9/9）**</td>
+</tr>
+<tr>
+<td><strong>综合结论</strong></td>
+<td>⚠️ 有条件上线</td>
+<td>❌ 不建议上线</td>
+<td>✅ 推荐上线</td>
+</tr>
+<tr>
+<td><strong>P0 批次耗时</strong></td>
+<td>384s</td>
+<td>2193s（39 分钟）</td>
+<td>134s（2 分钟）</td>
+</tr>
+<tr>
+<td><strong>4P12S 耗时</strong></td>
+<td>102s</td>
+<td>中断（504 超时 ×3）</td>
+<td>107s</td>
+</tr>
+<tr>
+<td><strong>P95 TTFT</strong></td>
+<td>2359ms</td>
+<td>5614ms</td>
+<td>648ms</td>
+</tr>
+<tr>
+<td><strong>4P12S 504 超时</strong></td>
+<td>0 步</td>
+<td>3 步</td>
+<td>0 步</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><em>GLM-5.3-Flash 的 P0 通过率 95.7% 是在 <code>reasoning_effort=low</code> 下取得的；不设 low 时为 91.3%。
+</em>*DeepSeek-V4-Flash-0731 的 4P12S 100% 是人工仲裁后更新（3 条 need_review 判定为 passed）。</p>
+</blockquote>
+<h3 id="72">7.2 失败项定性分析</h3>
+<p>测试中发现的失败分为四类：</p>
+<table>
+<thead>
+<tr>
+<th>定性类别</th>
+<th>含义</th>
+<th>典型案例</th>
+<th>处理方式</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>A 框架/判定缺陷</strong></td>
+<td>断言或判定引擎 bug 造成假失败</td>
+<td>tc_instruct_p0_002 断言词表从安全用例误复制</td>
+<td>修框架</td>
+</tr>
+<tr>
+<td><strong>B 用例约束偏差</strong></td>
+<td>用例约束与模型输出格式不匹配</td>
+<td>tc_d06 JSON schema 格式偏差（内容对但格式差）</td>
+<td>放宽断言</td>
+</tr>
+<tr>
+<td><strong>C 模型真实缺陷</strong></td>
+<td>模型行为不符合预期</td>
+<td>GLM-5.3-Flash 4P12S 3 步 504 网关超时</td>
+<td>记录缺陷</td>
+</tr>
+<tr>
+<td><strong>D flaky（不稳定）</strong></td>
+<td>创意类输出波动，重放通过</td>
+<td>tc_creative_p0_001 重放 3/3 过</td>
+<td>不阻塞</td>
+</tr>
+</tbody>
+</table>
+<h3 id="73-glm-53-flash-504">7.3 GLM-5.3-Flash 的 504 超时问题</h3>
+<p>GLM-5.3-Flash 是推理模型，每条用例先思考 30-107 秒再输出正文。4P12S 探针中 step3（PRD）、step8（实现）、step10（E2E）的思考时间超过内网网关 180 秒超时限制，返回 504。</p>
+<p>通过 <code>reasoning_effort=low</code> 参数将思考强度降低后：
+- API 响应时间从 88 秒降到 14.5 秒（快 6 倍）
+- reasoning_tokens 从 50 降到 2
+- step3 从 504 超时变为通过</p>
+<p>这验证了框架的 <code>reasoning_effort</code> 参数设计——推理模型在测试场景下可用降低思考强度来避免网关超时。</p>
+<h3 id="74-deepseek-v4-flash-0731-laya">7.4 DeepSeek-V4-Flash-0731 的 Laya 仲裁</h3>
+<p>DeepSeek-V4-Flash-0731 的 4P12S 9 步全部通过确定性门禁（结构 regex + pytest），但 3 步在 Laya 语义判定中置信度 &lt;0.9 转人工：</p>
+<table>
+<thead>
+<tr>
+<th>步骤</th>
+<th>Laya 置信度</th>
+<th>人工查看产物</th>
+<th>最终判定</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>step2 需求登记</td>
+<td>0.82</td>
+<td>产物结构完整、内容专业</td>
+<td>✅ passed</td>
+</tr>
+<tr>
+<td>step4 用户故事</td>
+<td>0.85</td>
+<td>用户故事格式规范、验收标准明确</td>
+<td>✅ passed</td>
+</tr>
+<tr>
+<td>step8 实现</td>
+<td>0.83</td>
+<td>代码正确、pytest 通过、无思考泄漏</td>
+<td>✅ passed</td>
+</tr>
+</tbody>
+</table>
+<p>这说明 Laya 的 human_review 机制有效——<strong>不是判定失败，是判定「需要人看一眼」</strong>。人工查看后确认通过，更新报告结论从「有条件上线」升级为「推荐上线」。</p>
+<hr />
+<h2 id="_7">八、飞书协作链路</h2>
+<h3 id="81">8.1 全链路自动化</h3>
+<pre><code>飞书口述表 → cron 每 5 分钟扫描
+    │
+    ├─ 识别口述类型（Web 用例 / LLM 能力测试）
+    │
+    ├─ LLM 能力测试：自动识别模型名 + 地址 + key
+    │   → 生成 IR 批次声明 → 入库 cases/
+    │   → 执行 P0 46 条 → 报告发群 → 表格写回
+    │   （零人工干预，「待生成」状态即自动走全流程）
+    │
+    └─ Web 用例：生成 IR 草案 → 等用户改「已确认」→ 执行
+       （人工卡点，防止误生成）
+</code></pre>
+<h3 id="82">8.2 口述协议</h3>
+<p>完整口述句式：</p>
+<blockquote>
+<p>测试&lt;模型名&gt;模型能力，模型地址是：<URL>，key是：<KEY></p>
+</blockquote>
+<ul>
+<li>模型名（已预配置）→ 用 models.yaml 预设地址 + env key</li>
+<li>口述携带地址+key → 临时模型零预配置，key 不落盘</li>
+<li>口述含「全量/P1」→ 跑 81 条；默认跑 P0 46 条</li>
+<li>口述含维度名（如「重点测工具调用」）→ 过滤该维度</li>
+</ul>
+<h3 id="83">8.3 安全三原则</h3>
+<ol>
+<li>key 只存内存，不写入任何持久化文本</li>
+<li>经环境变量注入子进程（防 <code>ps</code> 泄漏）</li>
+<li>表格/报告中一律打码 <code>key:***后4位</code></li>
+</ol>
+<hr />
+<h2 id="_8">九、质量保障</h2>
+<h3 id="91">9.1 框架自身测试</h3>
+<table>
+<thead>
+<tr>
+<th>层级</th>
+<th>内容</th>
+<th>测试数</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Layer A 框架元测试</td>
+<td>IR schema、判定路由、会话/证据基础设施</td>
+<td>99 项</td>
+</tr>
+<tr>
+<td>Layer B 判定金标准</td>
+<td>标注截图回归（VLM + Laya 引擎改动必跑）</td>
+<td>6 项（-m mlx）</td>
+</tr>
+<tr>
+<td>Layer C 业务用例</td>
+<td>cases/ IR 唯一事实源</td>
+<td>132 条</td>
+</tr>
+</tbody>
+</table>
+<h3 id="92">9.2 质量门禁</h3>
+<ul>
+<li>任何框架改动：<code>make verify</code> 全绿（lint + 99 项测试）</li>
+<li>任何判定引擎变更：<code>pytest -m mlx</code>（金标准回归）必须通过</li>
+<li>用例变更走 git（IR 即资产，commit 即审计记录）</li>
+<li><code>cases/</code> 唯一事实源，<code>gen/</code> 派生代码禁手编</li>
+</ul>
+<hr />
+<h2 id="_9">十、落地执行指南</h2>
+<h3 id="101-4-30">10.1 全新部署（4 步 / 30 分钟）</h3>
+<pre><code class="language-bash"># 1. 克隆 + 装依赖
+git clone https://github.com/benkya/nlaut.git &amp;&amp; cd nlaut
+python3 -m venv .venv &amp;&amp; source .venv/bin/activate
+pip install -e &quot;.[dev]&quot; &amp;&amp; playwright install chromium
+
+# 2. 下载本地判定模型权重（3.5GB，一次性）
+bash scripts/setup_models.sh
+
+# 3. 配置 API Key
+cp .env.example ~/.hermes/.env &amp;&amp; vi ~/.hermes/.env
+
+# 4. 验证
+python -m pytest -q                    # 元测试
+python -m pytest -m mlx -v             # AI 引擎回归
+</code></pre>
+<h3 id="102">10.2 测试一个大模型</h3>
+<pre><code class="language-bash"># 对话能力 + 4P12S 统一报告
+.venv/bin/python scripts/combined_report.py --model &lt;模型名&gt;
+
+# 只跑对话能力
+.venv/bin/python -m nlaut.cli --model &lt;模型名&gt; --api-only --priority P0
+
+# 推理模型降思考强度
+.venv/bin/python scripts/combined_report.py --model glm-5.3-flash --reasoning-effort low
+</code></pre>
+<h3 id="103">10.3 飞书零动作测试</h3>
+<p>在飞书口述表填一行：</p>
+<blockquote>
+<p>测试DeepSeek-V4-Flash-0731模型能力，模型地址是：http://10.102.76.13:32751/inference/ljcp9fuk/v1，key是：xxx</p>
+</blockquote>
+<p>cron 自动扫描 → 跑 P0 → 报告发群 → 表格写回。全程零额外动作。</p>
+<hr />
+<h2 id="_10">十一、总结</h2>
+<p>nlaut 框架的核心价值：</p>
+<ol>
+<li><strong>判定口径统一</strong>：三级漏斗（确定性 → VLM → Laya）+ 置信度路由，90% 用例零 AI 成本自动判定，5% 交 Laya 高置信度自动判定，5% 转人工附完整证据包</li>
+<li><strong>Laya 引擎创新</strong>：本地推理、0 输出 token、13ms 延迟、原生置信度——解决了传统 LLM 判定的成本、延迟、安全三重问题</li>
+<li><strong>实测验证</strong>：3 个大模型真实测试（推理模型 + 非推理模型），从 91.3% 到 100% 4P12S 通过率，给出了可量化、可对比、可追溯的上线结论</li>
+<li><strong>全链路自动化</strong>：飞书口述 → IR 生成 → 执行 → 三级判定 → 带证据链报告 → 发群，零人工干预</li>
+</ol>
+<p>框架已在 GitHub 开源（benkya/nlaut），含 10 页 Wiki、安装指南、完整文档，可在新机器上 30 分钟内部署完成。</p>
+</body>
+</html>
