@@ -8,7 +8,7 @@ models:
 
   qwen3.8-flash-next:
     provider: internal
-    base_url: "http://10.62.64.38:30808/inference/v1"
+    base_url: "https://token-api.gientech.com/inference/0rsjal14/v1"
     api_key_env: "QWEN38_FLASH_KEY"
     model_id: "Qwen3.8-Flash-Next"
     type: local_deployment

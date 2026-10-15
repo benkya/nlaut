@@ -1,0 +1,170 @@
+# 大模型配置模板
+# 用法：CLI --model deepseek-chat --api-key sk-xxx
+# models.yaml 中预设的 base_url 会自动补全，api_key 从环境变量读取
+# 新接入模型时在 models 节下追加一个条目即可
+
+models:
+  # --- 内部部署模型（Qwen3.8-Flash-Next，2026-09-24 实测接入）---
+
+  qwen3.8-flash-next:
+    provider: internal
+    base_url: "http://10.62.64.38:30808/inference/v1"
+    api_key_env: "QWEN38_FLASH_KEY"
+    model_id: "Qwen3.8-Flash-Next"
+    type: local_deployment
+    supports_streaming: true        # 2026-09-24 实测：流式正常，finish=stop，空choices chunk 已容错
+    supports_function_calling: true  # 2026-09-24 实测：正确调用 get_weather({"city": "北京"})
+    context_window: 32768  # [推测] 未从服务端获取，按 Qwen3 系默认
+
+  # --- Aliyun MAAS token-plan（本机已配置 CUSTOM_API_KEY，实测 26 模型可用）---
+
+  # --- 内网部署模型（GLM-5.3-Flash，2026-09-29 实测接入，10.62.79.254 网关）---
+
+  glm-5.3-flash:
+    provider: internal
+    base_url: "http://10.62.79.254:32528/inference/h4dp1kr9/v1"
+    api_key_env: "GLM53_FLASH_KEY"
+    model_id: "GLM-5.3-Flash"
+    type: local_deployment
+    supports_streaming: true        # 2026-09-29 实测：非流式 chat 200；流式待测
+    supports_function_calling: false # 2026-09-29 实测：响应 keys 只见 content，工具调用待测
+    context_window: 32768  # [推测] 按网关默认，未从服务端确认
+    notes: "默认参数干净（响应无 reasoning 字段）；与 DS-Flash 30841 形态一致——思考参数语义同（不传即可）；冒烟 13-15s（含思考但服务端剥离）"
+
+  # --- 内网部署模型（DeepSeek-V4-Flash，2026-09-28 实测接入）---
+
+  deepseek-v4-flash:
+    provider: internal
+    base_url: "http://10.62.64.38:30841/inference/ljcp9fuk/v1"
+    api_key_env: "DEEPSEEK_V4_FLASH_KEY"
+    model_id: "DeepSeek-V4-Flash"
+    type: local_deployment
+    supports_streaming: true        # 2026-09-28 实测：非流式 chat 200；流式待测
+    supports_function_calling: false # 2026-09-28 实测：响应含 tool_calls 字段但未见调用；待工具用例实测
+    context_window: 32768  # [推测] 按网关默认，未从服务端确认
+    notes: "30841 端口 ljcp9fuk 网关；⚠️ 参数语义与 30808 相反：传 enable_thinking=False 反而把思考泄漏进 content，默认参数干净；step6 小预算思考会耗尽 token，需 12000 预算或重试"
+
+  deepseek-v4-pro-0813:
+    provider: aliyun_maas
+    base_url: "https://ws-nwkjyfml4umflgj1.cn-beijing.maas.aliyuncs.com/compatible-mode/v1"
+    api_key_env: "HERMES_CUSTOM_DEEPSEEK_V4_PRO_API_KEY"
+    model_id: "deepseek-v4-pro-0813"
+    type: commercial_api
+    supports_streaming: true         # 2026-09-28 探针实测前置冒烟
+    supports_function_calling: true  # [推测] 按系列默认，待工具用例实测
+    context_window: 131072
+    notes: "模型专用 key（403 限制只能调本模型）；思考型，小 max_tokens 会思考耗尽导致空 content"
+
+  glm-5.3:
+    provider: aliyun_maas
+    base_url: "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1"
+    api_key_env: "CUSTOM_API_KEY"
+    model_id: "glm-5.3"
+    type: commercial_api
+    supports_streaming: true
+    supports_function_calling: true
+    context_window: 131072
+
+  glm-5.2:
+    provider: aliyun_maas
+    base_url: "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1"
+    api_key_env: "CUSTOM_API_KEY"
+    model_id: "glm-5.2"
+    type: commercial_api
+    supports_streaming: true
+    supports_function_calling: true
+    context_window: 131072
+
+  glm-5:
+    provider: aliyun_maas
+    base_url: "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1"
+    api_key_env: "CUSTOM_API_KEY"
+    model_id: "glm-5"
+    type: commercial_api
+    supports_streaming: true
+    supports_function_calling: true
+    context_window: 131072
+
+  qwen3.7-max:
+    provider: aliyun_maas
+    base_url: "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1"
+    api_key_env: "CUSTOM_API_KEY"
+    model_id: "qwen3.7-max"
+    type: commercial_api
+    supports_streaming: true
+    supports_function_calling: true
+    context_window: 131072
+
+  deepseek-v4-pro:
+    provider: aliyun_maas
+    base_url: "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1"
+    api_key_env: "CUSTOM_API_KEY"
+    model_id: "deepseek-v4-pro"
+    type: commercial_api
+    supports_streaming: true
+    supports_function_calling: true
+    context_window: 131072
+
+  # --- 商用 API（其他渠道，需自行配置 key）---
+
+  deepseek-chat:
+    provider: deepseek
+    base_url: "https://api.deepseek.com/v1"
+    api_key_env: "DEEPSEEK_API_KEY"
+    model_id: "deepseek-chat"
+    type: commercial_api
+    supports_streaming: true
+    supports_function_calling: true
+    context_window: 65536
+
+  qwen-max:
+    provider: alibaba
+    base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    api_key_env: "DASHSCOPE_API_KEY"
+    model_id: "qwen-max"
+    type: commercial_api
+    supports_streaming: true
+    supports_function_calling: true
+    context_window: 32768
+
+  gpt-4o:
+    provider: openai
+    base_url: "https://api.openai.com/v1"
+    api_key_env: "OPENAI_API_KEY"
+    model_id: "gpt-4o"
+    type: commercial_api
+    supports_streaming: true
+    supports_function_calling: true
+    context_window: 128000
+
+  glm-4-plus:
+    provider: zhipu
+    base_url: "https://open.bigmodel.cn/api/paas/v4"
+    api_key_env: "ZHIPU_API_KEY"
+    model_id: "glm-4-plus"
+    type: commercial_api
+    supports_streaming: true
+    supports_function_calling: true
+    context_window: 128000
+
+  # --- 本地部署（示例，按实际地址修改）---
+
+  qwen-local:
+    provider: local
+    base_url: "http://10.0.1.100:8000/v1"
+    api_key_env: "LOCAL_LLM_KEY"  # 本地推理通常不需要 key，用占位
+    model_id: "Qwen2.5-72B-Instruct"
+    type: local_deployment
+    supports_streaming: true
+    supports_function_calling: true
+    context_window: 32768
+
+  deepseek-v4-flash-0731:
+    provider: internal
+    base_url: "http://10.102.76.13:32751/inference/ljcp9fuk/v1"
+    api_key_env: "DEEPSEEK_V4_FLASH_0731_KEY"
+    model_id: "DeepSeek-V4-Flash-0731"
+    type: local_deployment
+    supports_streaming: true
+    supports_function_calling: false
+    context_window: 32768

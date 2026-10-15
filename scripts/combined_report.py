@@ -335,8 +335,8 @@ def render_combined(llm_results: list[dict], probe_results: list[dict],
   <p class="muted">模型: <b>{model_name}</b> · 生成时间: {time.strftime('%Y-%m-%d %H:%M')}</p>
   <div class="verdict {verdict_css}">{verdict_msg}</div>
   <div style="margin:10px 0">
-    <span class="kpi"><b style="color:#1a7f37">{llm_pass}</b>/<b>{llm_total}</b> 对话能力 P0（{llm_rate:.1%}）</span>
-    <span class="kpi"><b style="color:#1a7f37">{probe_pass}</b>/<b>{probe_total}</b> 4P12S 交付能力（{probe_rate:.1%}）</span>
+    <span class="kpi"><b style="color:#1a7f37">{llm_pass}</b><span class="sep">/</span><b>{llm_total}</b> 对话能力 P0（{llm_rate:.1%}）</span>
+    <span class="kpi"><b style="color:#1a7f37">{probe_pass}</b><span class="sep">/</span><b>{probe_total}</b> 4P12S 交付能力（{probe_rate:.1%}）</span>
   </div>
   {fail_summary}
   <div style="margin:8px 0; padding:8px; background:#f0f2f5; border-radius:6px; font-size:13px">

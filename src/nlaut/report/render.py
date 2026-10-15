@@ -143,8 +143,8 @@ def render_html(
         f'<span class="kpi"><b style="color:#c0392b">{failed}</b>用例失败</span>'
         f'<span class="kpi"><b style="color:#b8860b">{need}</b>待人工仲裁</span>'
         f'<span class="kpi"><b>{total}</b>用例总数</span>'
-        f'<span class="kpi"><b>{det_pass}/{det_total}</b>确定性断言</span>'
-        f'<span class="kpi"><b>{ai_pass}/{ai_total}</b>AI 断言自动通过</span>'
+        f'<span class="kpi"><b>{det_pass}</b><span class="sep">/</span><b>{det_total}</b>确定性断言</span>'
+        f'<span class="kpi"><b>{ai_pass}</b><span class="sep">/</span><b>{ai_total}</b>AI 断言自动通过</span>'
         f'<span class="kpi"><b style="color:#b8860b">{review}</b>AI 断言转人工</span>'
         f'</div>'
     )
@@ -162,8 +162,9 @@ def render_html(
   th {{ background: #f0f2f5; }}
   .muted {{ color: #888; font-size: 12px; }}
   .kpi {{ display: inline-block; background: #fff; border-radius: 10px; padding: 14px 22px;
-          margin: 0 10px 10px 0; box-shadow: 0 2px 8px rgba(0,0,0,.06); }}
-  .kpi b {{ font-size: 22px; display: block; }}
+          margin: 0 10px 10px 0; box-shadow: 0 2px 8px rgba(0,0,0,.06); white-space: nowrap; }}
+  .kpi b {{ font-size: 22px; font-weight: 700; }}
+  .kpi .sep {{ font-size: 22px; color: #888; margin: 0 2px; }}
   .verdict {{ font-size: 18px; font-weight: 600; padding: 14px 18px; border-radius: 10px; margin: 14px 0; }}
   .verdict.pass {{ background:#ecfdf5; border:1px solid #a7f3d0; color:#065f46; }}
   .verdict.warn {{ background:#fffbeb; border:1px solid #fde68a; color:#92400e; }}
