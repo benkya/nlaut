@@ -47,6 +47,114 @@ cd ~/workspace/nlaut
 
 报告顶部自动给出 **上线结论卡**（✅ 推荐上线 / ⚠️ 有条件上线 / ❌ 不建议上线），失败和转人工的用例可折叠查看**请求（system+user）和模型返回全文**，便于人工定性。
 
+## 大模型能力测试：4 种运行方式
+
+根据「模型是否已预配置」和「测试深度」，有以下 4 种方式可选：
+
+### 方式一：预配置模型 + 统一报告（推荐，✅ 含 4P12S）
+
+模型已预配置在 `config/models.yaml` 时用，一行命令跑**对话能力 + 4P12S 交付能力合并报告**：
+
+```bash
+# 1. 设置 key（已预配置模型对应 env 名见 models.yaml 的 api_key_env 字段）
+export GLM53_FLASH_KEY="your-key-here"
+export DEEPSEEK_V4_FLASH_KEY="your-key-here"
+export DEEPSEEK_V4_FLASH_0731_KEY="your-key-here"
+
+# 2. 跑统一报告（含 4P12S）
+.venv/bin/python scripts/combined_report.py --model glm-5.3-flash
+
+# 推理模型降思考强度（避免网关 504 超时）
+.venv/bin/python scripts/combined_report.py --model glm-5.3-flash --reasoning-effort low
+
+# 自定义输出路径
+.venv/bin/python scripts/combined_report.py --model deepseek-v4-flash --out artifacts/my_report.html
+
+# 只跑对话能力 / 只跑 4P12S
+.venv/bin/python scripts/combined_report.py --model deepseek-v4-flash --skip-4p12s
+.venv/bin/python scripts/combined_report.py --model deepseek-v4-flash --skip-llm
+```
+
+> **支持的可选参数**：
+> - `--model`：models.yaml 中的 key（必填）
+> - `--reasoning-effort {low,medium,high}`：推理模型思考强度（low 防止 504）
+> - `--max-tokens 6000`：最大 token（默认 6000）
+> - `--out <path>`：报告输出路径（默认 artifacts/report_combined_<model>.html）
+> - `--skip-llm` / `--skip-4p12s`：只跑其中一项
+> - `--think {default,off}`：是否启用思考（仅部分模型支持）
+
+### 方式二：临时模型（零预配置，只跑对话能力）
+
+模型未预配置时用，直接传地址 + key，**适合临时测试新模型**：
+
+```bash
+.venv/bin/python -m nlaut.cli \
+  --model "DeepSeek-V4-Flash" \
+  --api-base "http://10.102.76.13:32751/inference/ljcp9fuk/v1" \
+  --api-key "8829ca94-e7e3-43fd-83a6-c8eba1182cf8" \
+  --api-only \
+  --priority P0 \
+  --report artifacts/temp_report.html
+```
+
+> ⚠️ **限制**：这种方式**只跑对话能力 46 条**，**不跑 4P12S 探针**（4P12S 需要在 `config/models.yaml` 预配置才能跑）。
+>
+> **安全提示**：key 直接在命令行里可能被 `ps` 看到。生产环境推荐：
+> ```bash
+> export TEMP_KEY="xxx"
+> .venv/bin/python -m nlaut.cli --model "X" --api-base "Y" --api-key "$TEMP_KEY" --api-only
+> ```
+
+### 方式三：CLI 单条/多条用例
+
+只跑指定用例（不跑全量 P0 46 条），适合快速验证：
+
+```bash
+# 单条用例
+.venv/bin/python -m nlaut.cli --case tc_d04_p0_001 --model glm-5.3-flash
+
+# 多条用例
+.venv/bin/python -m nlaut.cli --case tc_d04_p0_001 --case tc_code_p0_001 --model glm-5.3-flash
+
+# 通配符
+.venv/bin/python -m nlaut.cli --case "tc_instruct_p0_*" --model glm-5.3-flash
+
+# 全量
+.venv/bin/python -m nlaut.cli --model glm-5.3-flash --api-only
+```
+
+### 方式四：纯 Python 脚本（高级）
+
+集成到现有自动化流水线时用：
+
+```python
+from nlaut.executor.runner import run
+from nlaut.report.render import render_html
+
+results = run(
+    case_ids=["tc_d04_p0_001", "tc_code_p0_001"],
+    channels=["api"],
+    api_config={
+        "model": "DeepSeek-V4-Flash",
+        "base_url": "http://10.102.76.13:32751/inference/ljcp9fuk/v1",
+        "api_key": "your-key-here",
+    },
+)
+render_html(results, "artifacts/custom_report.html")
+```
+
+### 4 种方式对比
+
+| 维度 | 方式一（统一报告） | 方式二（临时模型） | 方式三（单用例） | 方式四（Python） |
+| --- | --- | --- | --- | --- |
+| 跑对话能力 | ✅ 46 条 | ✅ 46 条 | ✅ 选中条数 | ✅ 选中条数 |
+| 跑 4P12S | ✅ 9 步 | ❌ | ❌ | ❌ |
+| 上线结论卡 | ✅ 自动 | ❌ | ❌ | ❌ |
+| 预配置需求 | 需 models.yaml | 零配置 | 需 models.yaml | 需 models.yaml |
+| 命令长度 | 短 | 中 | 短 | 需写脚本 |
+| 推荐场景 | 正式上线评估 | 临时摸底 | 快速验证 | 集成/批处理 |
+| 用时（P0 46 条） | 2-30 分钟 | 2-30 分钟 | 按需 | 按需 |
+
 ### 飞书口述零动作测模型（最终形态）
 
 在飞书「口述测试需求表」填一行：
