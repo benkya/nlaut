@@ -55,9 +55,10 @@ def build_client(model_key: str) -> tuple[str, str, dict]:
     except (OSError, KeyError, ValueError, yaml.YAMLError):
         base_url = "http://10.62.64.38:30808/inference/v1"
         key_env, model_name = "QWEN38_FLASH_KEY", "Qwen3.8-Flash-Next"
-    api_key = os.environ.get(key_env, "")
-    if not api_key:
-        sys.exit(f"缺少 API key 环境变量: {key_env}")
+    api_key = os.environ.get(key_env, "") if key_env else ""
+    # 允许留空：部分内部测试模型无需 key
+    if not base_url:
+        sys.exit(f"模型 {model_key} 缺少 base_url 配置")
     return base_url, api_key, {"model": model_name, "internal": True}
 
 
@@ -83,9 +84,12 @@ def chat(base_url: str, api_key: str, model_name: str, system: str, user: str,
         payload["chat_template_kwargs"] = {"enable_thinking": False}
     if reasoning_effort:
         payload["reasoning_effort"] = reasoning_effort
+    headers = {"Content-Type": "application/json"}
+    if api_key:  # 允许留空（无需 key 的内部测试模型）
+        headers["Authorization"] = f"Bearer {api_key}"
     with httpx.Client(trust_env=False, timeout=300.0) as c:
         r = c.post(f"{base_url}/chat/completions",
-                   headers={"Authorization": f"Bearer {api_key}"}, json=payload)
+                   headers=headers, json=payload)
         r.raise_for_status()
         d = r.json()
     msg = d["choices"][0]["message"]

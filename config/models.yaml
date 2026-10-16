@@ -168,3 +168,15 @@ models:
     supports_streaming: true
     supports_function_calling: false
     context_window: 32768
+
+  deepseek-v4-flash-nvfp4:
+    provider: internal
+    base_url: "http://47.239.178.97:30021/v1"
+    api_key_env: "DEEPSEEK_V4_FLASH_NVFP4_KEY"  # 可留空（无需 key）
+    api_key: ""  # 留空即可访问
+    model_id: "deepseek-v4-flash-nvfp4"
+    type: local_deployment
+    supports_streaming: true
+    supports_function_calling: true
+    context_window: 1048576  # 从 /v1/models 接口读取
+    notes: "内部测试用，无需 key，推理模型（reasoning 字段），建议 max_tokens≥500 + reasoning_effort=low"

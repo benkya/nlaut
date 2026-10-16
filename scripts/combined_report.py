@@ -34,9 +34,10 @@ def run_llm_batch(model_key: str, reasoning_effort: str = "") -> list[dict]:
     base_url = mc.get("base_url", "")
     key_env = mc.get("api_key_env", "")
     model_id = mc.get("model_id", model_key)
-    api_key = os.environ.get(key_env, "")
-    if not api_key:
-        sys.exit(f"缺少环境变量 {key_env}")
+    api_key = os.environ.get(key_env, "") if key_env else ""
+    # 允许留空：部分内部测试模型无需 key（如 47.239.178.97:30021 的 vllm 部署）
+    if not base_url:
+        sys.exit(f"模型 {model_key} 缺少 base_url 配置")
 
     print(f"[对话能力] P0 批次: model={model_id} base={base_url}")
     t0 = time.time()
@@ -72,8 +73,10 @@ def run_4p12s_probe(model_key: str, think: str, max_tokens: int, reasoning_effor
     base_url = mc.get("base_url", "")
     key_env = mc.get("api_key_env", "")
     model_id = mc.get("model_id", model_key)
-    api_key = os.environ.get(key_env, "")
-    if not api_key:
+    api_key = os.environ.get(key_env, "") if key_env else ""
+    # 允许留空：部分内部测试模型无需 key（如 47.239.178.97:30021 的 vllm 部署）
+    if not base_url:
+        sys.exit(f"模型 {model_key} 缺少 base_url 配置")
         sys.exit(f"缺少环境变量 {key_env}")
 
     # 导入探针模块的函数和 STEPS

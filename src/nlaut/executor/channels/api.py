@@ -96,10 +96,9 @@ def _call_api(
     reasoning_effort: 推理模型思考强度（如 "low"/"medium"/"high"），空串不传。
     """
     url = f"{base_url.rstrip('/')}/chat/completions"
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {api_key}",
-    }
+    headers = {"Content-Type": "application/json"}
+    if api_key:  # 允许留空（无需 key 的内部测试模型）
+        headers["Authorization"] = f"Bearer {api_key}"
     body: dict = {
         "model": model,
         "messages": messages,
@@ -211,9 +210,9 @@ def execute(
     返回 dict 直接喂 Evidence(case_id=ir.id, **result)。
     """
     data = data or {}
-    if not base_url or not api_key or not model:
+    if not base_url or not model:
         raise ValueError(
-            f"API 通道需要 base_url / api_key / model，"
+            f"API 通道需要 base_url / model（api_key 可选），"
             f"得到: base_url={base_url!r} model={model!r} api_key={'***' if api_key else '空'}"
         )
 
