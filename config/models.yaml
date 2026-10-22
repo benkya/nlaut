@@ -180,3 +180,61 @@ models:
     supports_function_calling: true
     context_window: 1048576  # 从 /v1/models 接口读取
     notes: "内部测试用，无需 key，推理模型（reasoning 字段），建议 max_tokens≥500 + reasoning_effort=low"
+
+  qwen3.8-flash-next-nvfp4:
+    provider: internal
+    base_url: "http://47.239.178.97:30021/v1"
+    api_key_env: "QWEN38_FLASH_NVFP4_KEY"  # 服务端无需 key
+    api_key: ""
+    model_id: "qwen3.8-flash-next"
+    type: local_deployment
+    supports_streaming: true
+    supports_function_calling: true
+    context_window: 1048576
+    notes: "47.239.178.97:30021 内网部署，无需 key，推理模型（reasoning 字段），用户口述'Qwen3.8-Flash-Next-NVFP4'但 v1/models 实际只返回 qwen3.8-flash-next"
+
+  qwen3.8-27b-fp8:
+    provider: internal
+    base_url: "http://47.239.178.97:30021/v1"
+    api_key_env: "QWEN38_27B_FP8_KEY"  # 无需 key
+    api_key: ""
+    model_id: "qwen3.8-27b-fp8"
+    type: local_deployment
+    supports_streaming: true
+    supports_function_calling: true
+    context_window: 1048576
+    notes: "47.239.178.97:30021 内部部署，无需 key，推理模型（reasoning 字段）"
+
+  qwen3.8-27b-nvfp4:
+    provider: internal
+    base_url: "http://47.239.178.97:30021/v1"
+    api_key_env: "QWEN38_27B_NVFP4_KEY"  # 无需 key
+    api_key: ""
+    model_id: "qwen3.8-27b-nvfp4"
+    type: local_deployment
+    supports_streaming: true
+    supports_function_calling: true
+    context_window: 1048576
+    notes: "47.239.178.97:30021 内部部署，无需 key，推理模型（reasoning 字段）"
+
+  deepseek-v4.1-flash:
+    provider: aliyun_maas
+    base_url: "https://ws-nwkjyfml4umflgj1.cn-beijing.maas.aliyuncs.com/compatible-mode/v1"
+    api_key_env: "DEEPSEEK_V4_1_FLASH_KEY"
+    model_id: "deepseek-v4.1-flash"
+    type: api
+    supports_streaming: true
+    supports_function_calling: true
+    context_window: 32768
+    notes: "阿里云百炼推理模型（reasoning_content 字段），2026-10-17 实测"
+
+  deepseek-v4.1-flash-intra:
+    provider: internal
+    base_url: "http://10.102.78.254:30828/api/inference/v1"
+    api_key_env: "DEEPSEEK_V4_1_FLASH_INTRA_KEY"
+    model_id: "DeepSeek-V4.1-Flash"
+    type: local_deployment
+    supports_streaming: true
+    supports_function_calling: true
+    context_window: 131072
+    notes: "内网 10.102.78.254:30828 vllm-0.31.0-tp8 部署，需 Bearer key；reasoning 字段（非 reasoning_content）；用户口述 URL 省略端口，实际端口 30828；与阿里云百炼 deepseek-v4.1-flash 是不同端点同名模型"
