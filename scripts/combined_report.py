@@ -22,7 +22,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 
-def run_llm_batch(model_key: str, reasoning_effort: str = "") -> list[dict]:
+def run_llm_batch(model_key: str, reasoning_effort: str = "",
+                  disable_thinking: bool = False) -> list[dict]:
     """跑对话能力 P0 批次，返回 run_store 格式的 results。"""
     from nlaut.executor.runner import run_store
 
@@ -51,6 +52,7 @@ def run_llm_batch(model_key: str, reasoning_effort: str = "") -> list[dict]:
             "model": model_id,
             "timeout": 120,
             "reasoning_effort": reasoning_effort,
+            "disable_thinking": disable_thinking,
         },
         session_log_path=str(ROOT / "artifacts" / "session" / "run_combined.jsonl"),
     )
@@ -364,6 +366,9 @@ def main():
     ap.add_argument("--max-tokens", type=int, default=6000)
     ap.add_argument("--reasoning-effort", default="", choices=["", "low", "medium", "high"],
                     help="推理模型思考强度（如 low），空串不传")
+    ap.add_argument("--disable-thinking", action="store_true",
+                    help="关闭模型思考（P0 对话批次）。走 chat_template_kwargs.enable_thinking=False，\n"
+                         "实测 DeepSeek-V4.1-Flash 提速 6.3×（1.9s→0.3s）。4P12S 侧仍用 --think off")
     ap.add_argument("--out", default="", help="报告输出路径")
     ap.add_argument("--skip-llm", action="store_true", help="跳过对话能力批次")
     ap.add_argument("--skip-4p12s", action="store_true", help="跳过 4P12S 探针")
@@ -377,7 +382,8 @@ def main():
     probe_results = []
 
     if not args.skip_llm:
-        llm_results = run_llm_batch(args.model, args.reasoning_effort)
+        llm_results = run_llm_batch(args.model, args.reasoning_effort,
+                                   disable_thinking=args.disable_thinking)
     if not args.skip_4p12s:
         probe_results = run_4p12s_probe(args.model, args.think, args.max_tokens, args.reasoning_effort)
 

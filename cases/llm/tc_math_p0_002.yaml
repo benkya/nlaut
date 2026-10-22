@@ -13,8 +13,17 @@ steps:
   prompt: 甲乙两人同时从A地出发去B地，甲速60km/h，乙速40km/h，AB相距120km。甲到B地后立即返回，多久后和乙相遇？
 assertions:
 - kind: response_contains
+  # [资产修复 2026-10-20] 原 keywords['2.4','.'] 只认「2.4小时」这一种写法。
+  # 同一问题模型有两种等价正确表述：「24分钟后相遇」+「2小时24分钟后相遇」，
+  # 中文写法不含字符串"2.4" → 断言 flaky（实测同一用例一次 pass 一次 fail）。
+  # 改为接受两种表述：精确小数 / 「小时+分钟」组合。min_match=2 要求两种至少命中其一并附带单位。
   keywords:
   - '2.4'
-  - .
-  min_match: 2
+  - '2小时24'
+  - '24分钟'
+  min_match: 1
+- kind: noul
+  question: 回答是否正确算出甲到B后两人还需24分钟（或从出发算2小时24分钟）相遇？只答 yes 或 no。
+  threshold: 0.9
+  judge: systemone
 postconditions: []
