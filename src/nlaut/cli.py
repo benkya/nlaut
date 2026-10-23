@@ -101,7 +101,15 @@ def main() -> int:
             # 用 model_cfg 中的 model_id 覆盖
             args.model = model_cfg.get("model_id", args.model)
 
-        if not api_key:
+        # 允许无 key：部分内部测试模型服务端不校验鉴权
+        # （如 10.62.48.94:8866 的 Qwen3.8-27B、47.239.178.97:30021 系列）
+        # 判据：models.yaml 显式声明 api_key_env: "" 或 api_key: "" 时不视为缺配置。
+        # api_channel.execute() 已支持空 key（不加 Authorization 头）。
+        keyless = model_cfg and (
+            model_cfg.get("api_key_env", "") == ""
+            or model_cfg.get("api_key", "") == ""
+        )
+        if not api_key and not keyless:
             parser.error(f"模型 {args.model} 缺少 API Key（--api-key 或环境变量 LLM_API_KEY）")
 
         api_config = {
@@ -113,7 +121,8 @@ def main() -> int:
             "disable_thinking": args.disable_thinking,
         }
         print(f"[cli] API 通道: model={args.model} base_url={api_base}"
-              + ("  [思考已关闭]" if args.disable_thinking else ""))
+              + ("  [思考已关闭]" if args.disable_thinking else "")
+              + ("  [无 key]" if keyless and not api_key else ""))
 
     # Web 演示系统拉起逻辑：仅当非 api-only 且无 base-url 且无 external 时
     base_url = args.base_url

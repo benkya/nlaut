@@ -238,3 +238,15 @@ models:
     supports_function_calling: true
     context_window: 131072
     notes: "内网 10.102.78.254:30828 vllm-0.31.0-tp8 部署，需 Bearer key；reasoning 字段（非 reasoning_content）；用户口述 URL 省略端口，实际端口 30828；与阿里云百炼 deepseek-v4.1-flash 是不同端点同名模型"
+
+  qwen3.8-27b-w8a8-8866:
+    provider: internal
+    base_url: "http://10.62.48.94:8866/v1"
+    api_key_env: ""            # 该端点无需 key
+    api_key: ""
+    model_id: "Qwen3.8-27B"    # 服务端 /v1/models 原样大小写
+    type: local_deployment
+    supports_streaming: true
+    supports_function_calling: true
+    context_window: 128000
+    notes: "10.62.48.94:8866 vllm-0.23.0-tp2，W8A8 量化（root=/model/Qwen3.8-27B-w8a8），无需 key。🔴 默认参数下思考独白泄漏进 content（content 开头是推理腔+</think>），流式 delta 也无 reasoning 字段；必须传 chat_template_kwargs.enable_thinking=False 才能得到干净正文。reasoning_effort 不生效。与 47.239.178.97:30021 的 qwen3.8-27b-fp8/nvfp4 是不同部署"
