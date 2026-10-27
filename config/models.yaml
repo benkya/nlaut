@@ -250,3 +250,14 @@ models:
     supports_function_calling: true
     context_window: 128000
     notes: "10.62.48.94:8866 vllm-0.23.0-tp2，W8A8 量化（root=/model/Qwen3.8-27B-w8a8），无需 key。🔴 默认参数下思考独白泄漏进 content（content 开头是推理腔+</think>），流式 delta 也无 reasoning 字段；必须传 chat_template_kwargs.enable_thinking=False 才能得到干净正文。reasoning_effort 不生效。与 47.239.178.97:30021 的 qwen3.8-27b-fp8/nvfp4 是不同部署"
+
+  deepseek-v4.1-flash-int8-sglang:
+    provider: internal
+    base_url: "http://10.62.64.38:30089/v1"
+    api_key_env: "DS41F_SGLANG_KEY"
+    model_id: "/root/models/DeepSeek-V4.1-Flash-1017-INT8"
+    type: local_deployment
+    supports_streaming: true
+    supports_function_calling: true
+    context_window: 131072
+    notes: "10.62.64.38:30089 sglang 后端（非 vllm），INT8 量化，key=swardz。🔴 与 30828 端点行为相反：①思考字段是 reasoning_content（30828 是 reasoning）②chat_template_kwargs.enable_thinking=False 无效（rtok 不降）③reasoning_effort=low 无效④短 model_id DeepSeek-V4.1-Flash 也可调用⑤思考极重（裸请求 16-22s，rtok 50-57）⑥max_tokens 过小会思考吃光预算返回空 content。model_id 是路径形式（/root/models/...）"
