@@ -29,10 +29,16 @@ for w in $(seq 1 $((MAX_WAIT*2))); do
       rc=$?
       echo "[守候] 尝试 $attempt 结束 rc=$rc  $(date '+%H:%M:%S')"
       # 判定本轮是否被 502 污染
-      n502=$(grep -c "502 Bad Gateway" "/tmp/ds41f_v4_a${attempt}.log" 2>/dev/null || echo 0)
+      # 注意：grep -c 零匹配时退出码为 1，`|| echo 0` 会追加第二行变成 "0\n0"，
+      # 导致 [ "$n502" = "0" ] 判定失败（本脚本首版就踩了这个坑，3 次全部误判为污染）。
+      # 正确写法：|| true 后取首行，或用 grep -c ... | head -1。
+      n502=$(grep -c "502 Bad Gateway" "/tmp/ds41f_v4_a${attempt}.log" 2>/dev/null | head -1 || true)
+      [ -z "$n502" ] && n502=0
       np0=$(grep -oE "\[对话能力\] [0-9]+/[0-9]+" "/tmp/ds41f_v4_a${attempt}.log" 2>/dev/null | tail -1)
+      # P0 必须跑满 46 条才算有效（少一条说明批次被中断）
+      p0done=$(echo "$np0" | grep -oE "[0-9]+/46" | head -1)
       echo "[守候]   502出现次数=$n502   P0结果=${np0:-未完成}"
-      if [ "$n502" = "0" ] && [ -n "${np0:-}" ]; then
+      if [ "$n502" = "0" ] && [ -n "${p0done:-}" ]; then
         echo "[守候] ✅ 本轮无 502 污染，产物有效，结束守候"
         exit 0
       fi
