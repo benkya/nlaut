@@ -202,7 +202,8 @@ cron 每 5 分钟扫描 → 自动识别 → 跑 P0 批次 → 报告发群 → 
 
 **判定层自身是被测对象**：`tests/judge_golden/` 金标准回归防止 AI 误报进入报告；
 `tests/agent_judge_test.py` 另有 **20 样本金标准**（陷阱类占 45%）× 5 轮一致性度量
-（复现：`scripts/agent_judge_repeatability.py --repeats 5`）。
+—— 实测 **100/100 判对 · 翻转率 0.0%** · p95 18.9s（复现：
+`scripts/agent_judge_repeatability.py --repeats 5`）。
 
 ## 断言类型速查
 
