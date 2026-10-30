@@ -37,7 +37,7 @@ def _build_agent_judge() -> Judge:
     「agent judge 判定通过」）。
     """
     from .agent_judge import build_agent_judge_from_env
-    from .agent_tools import DEFAULT_TOOLS, build_env_tool_impls
+    from .agent_tools import DEFAULT_TOOLS, ToolPolicy, build_env_tool_impls
 
     model_key = os.environ.get("NLaut_AGENT_JUDGE_MODEL", "deepseek-v4-flash")
 
@@ -48,11 +48,16 @@ def _build_agent_judge() -> Judge:
     else:
         tools = list(DEFAULT_TOOLS)
 
-    impls = build_env_tool_impls()
+    # 作用域策略：默认拒绝式（http_probe / read_file / read_log 全部拒绝），
+    # 由 NLaut_AGENT_JUDGE_ALLOWED_HOSTS / _ALLOWED_PATHS 显式放行。
+    policy = ToolPolicy.from_env()
+
+    impls = build_env_tool_impls(policy=policy)
     return build_agent_judge_from_env(
         tools=tools,
         tool_impls=impls,
         model_key=model_key,
+        policy=policy,
     )
 
 

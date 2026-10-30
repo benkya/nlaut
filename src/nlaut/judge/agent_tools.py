@@ -7,6 +7,10 @@ agent judge 只做验证，不允许改动被测系统状态（软件工厂门�
 1. 信息获取 (information acquisition)：查接口、查表、翻日志、读文件
 2. 状态验证 (state verification)：读当前实际状态（表行、DOM、接口响应）
 3. 过程验证 (process verification)：翻执行轨迹（trace / tool_calls 历史）
+
+安全边界（v0.4.0）：`http_probe` 与 `read_file` 若无作用域限制，
+judge 可探测任意内网地址 / 读取任意路径（含密钥文件）。
+因此由 `ToolPolicy` 强制白名单，越界即拒绝并记账（scope_violations）。
 """
 
 from __future__ import annotations
@@ -14,7 +18,9 @@ from __future__ import annotations
 import json
 import os
 from collections.abc import Callable
+from dataclasses import dataclass, field
 from typing import Any
+from urllib.parse import urlparse
 
 # --- OpenAI tools schema 定义 ---
 
@@ -143,6 +149,98 @@ DEFAULT_TOOLS: list[dict] = [
 ]
 
 
+@dataclass
+class ToolPolicy:
+    """工具作用域白名单（安全边界）。
+
+    默认策略是**拒绝式**：
+    - `http_probe`：未显式放行 host 一律拒绝
+    - `read_file` / `read_log`：未显式放行根目录一律拒绝
+
+    这样「忘记配策略」不会退化成「judge 可以读全盘」。
+    越界不抛异常（不中断判定），而是返回结构化拒绝 + 记入 `violations`，
+    供框架侧在 Verdict.raw["scope_violations"] 中留痕。
+    """
+
+    allowed_hosts: set[str] = field(default_factory=set)
+    allowed_path_roots: set[str] = field(default_factory=set)
+    violations: list[dict] = field(default_factory=list)
+
+    # --- host 判定 ---
+
+    def host_allowed(self, url: str) -> bool:
+        try:
+            host = (urlparse(url).hostname or "").lower()
+        except ValueError:
+            return False
+        if not host:
+            return False
+        if not self.allowed_hosts:
+            return False  # 默认拒绝
+        for pattern in self.allowed_hosts:
+            p = pattern.lower()
+            if p == "*":
+                return True
+            if p.startswith("*."):
+                if host == p[2:] or host.endswith(p[1:]):
+                    return True
+            elif host == p:
+                return True
+        return False
+
+    # --- 路径判定 ---
+
+    def path_allowed(self, path: str) -> bool:
+        if not self.allowed_path_roots:
+            return False  # 默认拒绝
+        try:
+            real = os.path.realpath(os.path.expanduser(path))
+        except (OSError, ValueError):
+            return False
+        for root in self.allowed_path_roots:
+            try:
+                real_root = os.path.realpath(os.path.expanduser(root))
+            except (OSError, ValueError):
+                continue
+            if real == real_root or real.startswith(real_root + os.sep):
+                return True
+        return False
+
+    # --- 记账 ---
+
+    def record_violation(self, tool: str, target: str, reason: str) -> dict:
+        entry = {"tool": tool, "target": target[:300], "reason": reason}
+        self.violations.append(entry)
+        return {
+            "error": "scope_violation",
+            "tool": tool,
+            "target": target[:300],
+            "reason": reason,
+            "hint": "该目标不在允许的作用域内；请勿据此下结论",
+        }
+
+    # --- 便捷构造 ---
+
+    @classmethod
+    def from_env(cls) -> ToolPolicy:
+        """从环境变量构造策略。
+
+        - `NLaut_AGENT_JUDGE_ALLOWED_HOSTS`：逗号分隔，支持 `*.example.com` 与 `*`
+        - `NLaut_AGENT_JUDGE_ALLOWED_PATHS`：逗号分隔的目录根
+        """
+        hosts = {
+            h.strip().lower()
+            for h in os.environ.get("NLaut_AGENT_JUDGE_ALLOWED_HOSTS", "").split(",")
+            if h.strip()
+        }
+        roots = {
+            p.strip()
+            for p in os.environ.get("NLaut_AGENT_JUDGE_ALLOWED_PATHS", "").split(",")
+            if p.strip()
+        }
+        return cls(allowed_hosts=hosts, allowed_path_roots=roots)
+
+
 def build_tool_impls(
     db_state: dict | None = None,
     http_probe: Callable[[str, float], Any] | None = None,
@@ -150,6 +248,7 @@ def build_tool_impls(
     file_reader: Callable[[str, int], Any] | None = None,
     trace: list[dict] | None = None,
     registry: dict | None = None,
+    policy: ToolPolicy | None = None,
 ) -> dict[str, Callable[[dict], Any]]:
     """构造工具实现表。
 
@@ -161,8 +260,12 @@ def build_tool_impls(
     file_reader: 自定义文件读取 (path, max_bytes) -> str
     trace:      被测系统执行轨迹 list[dict]
     registry:   模块注册信息 dict
+    policy:     工具作用域白名单。为 None 时用**默认拒绝**策略
+                （http_probe / read_file / read_log 全部拒绝），
+                避免「忘记配策略」退化成 judge 可读全盘。
     """
     impls: dict[str, Callable[[dict], Any]] = {}
+    pol = policy if policy is not None else ToolPolicy()
 
     def _query_db(args: dict) -> Any:
         table = args.get("table", "")
@@ -182,6 +285,13 @@ def build_tool_impls(
     def _http_probe(args: dict) -> Any:
         url = args.get("url", "")
         timeout = float(args.get("timeout_s") or 15)
+        if not pol.host_allowed(url):
+            host = (urlparse(url).hostname or "") if url else ""
+            return pol.record_violation(
+                "http_probe",
+                url,
+                f"host {host!r} 不在允许列表 {sorted(pol.allowed_hosts)}",
+            )
         if http_probe is None:
             return {"error": "http_probe_not_configured", "url": url}
         return http_probe(url, timeout)
@@ -189,6 +299,12 @@ def build_tool_impls(
     def _read_log(args: dict) -> Any:
         path = args.get("path", "")
         tail = int(args.get("tail_lines") or 50)
+        if not pol.path_allowed(path):
+            return pol.record_violation(
+                "read_log",
+                path,
+                f"路径不在允许根目录 {sorted(pol.allowed_path_roots)}",
+            )
         if log_reader is None:
             return {"error": "log_reader_not_configured", "path": path}
         return log_reader(path, tail)
@@ -196,6 +312,12 @@ def build_tool_impls(
     def _read_file(args: dict) -> Any:
         path = args.get("path", "")
         max_bytes = int(args.get("max_bytes") or 8000)
+        if not pol.path_allowed(path):
+            return pol.record_violation(
+                "read_file",
+                path,
+                f"路径不在允许根目录 {sorted(pol.allowed_path_roots)}",
+            )
         if file_reader is None:
             return {"error": "file_reader_not_configured", "path": path}
         return file_reader(path, max_bytes)
@@ -295,21 +417,28 @@ def default_http_probe(url: str, timeout: float) -> dict:
 
 
 def build_env_tool_impls(**kwargs: Any) -> dict[str, Callable[[dict], Any]]:
-    """带默认实现（真实读文件/发 GET）的工具表。"""
-    base = build_tool_impls(**kwargs)
+    """带默认实现（真实读文件/发 GET）的工具表。
+
+    关键：**默认实现必须在作用域检查之后才执行**。
+    不能用 lambda 直接替换 build_tool_impls 里的 policy-aware 包装
+    （那会绕过作用域限制，让 judge 能读任意路径 / 探任意 host）。
+    因此这里只在「调用方未提供自定义实现」时，把默认实现注入到
+    build_tool_impls 内部，让 policy 检查仍然生效。
+    """
+    policy = kwargs.get("policy")
+    if policy is None:
+        policy = ToolPolicy()
+    kwargs["policy"] = policy
+
+    # 把默认实现注入 build_tool_impls 的入参（让它在 policy 检查通过后才调用）
     if kwargs.get("http_probe") is None:
-        base["http_probe"] = lambda a: default_http_probe(
-            a.get("url", ""), float(a.get("timeout_s") or 15)
-        )
+        kwargs["http_probe"] = lambda url, timeout: default_http_probe(url, timeout)
     if kwargs.get("log_reader") is None:
-        base["read_log"] = lambda a: default_log_reader(
-            a.get("path", ""), int(a.get("tail_lines") or 50)
-        )
+        kwargs["log_reader"] = lambda path, tail: default_log_reader(path, tail)
     if kwargs.get("file_reader") is None:
-        base["read_file"] = lambda a: default_file_reader(
-            a.get("path", ""), int(a.get("max_bytes") or 8000)
-        )
-    return base
+        kwargs["file_reader"] = lambda path, max_bytes: default_file_reader(path, max_bytes)
+
+    return build_tool_impls(**kwargs)
 
 
 def snapshot_registry_from_env(env_name: str = "NLautRegistry") -> dict:

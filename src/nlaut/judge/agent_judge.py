@@ -25,7 +25,7 @@ import json
 import os
 import time
 from collections.abc import Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .protocol import Evidence, Question, Verdict
 
@@ -37,6 +37,17 @@ CONFIDENCE_CAP = 0.85
 DEFAULT_MAX_STEPS = 6
 DEFAULT_TIMEOUT_S = 180.0
 DEFAULT_MAX_COST_USD = 0.50
+
+# 单次 HTTP 调用的硬上限（秒）。端点偶发长尾实测 p95 达 127s，
+# 超过此值即熔断 → 本次判定降级为 confidence=0（转人工），不再等待。
+DEFAULT_PER_CALL_TIMEOUT_S = 45.0
+
+# 成本估算单价（USD / 1k token）。默认 $0.6/1M token 属保守估计；
+# 仅用于 max_cost_usd 预算拦截，不是实际账单。
+DEFAULT_COST_PER_1K_TOKENS_USD = 0.0006
+
+if TYPE_CHECKING:  # pragma: no cover — 仅类型引用，避免运行时循环导入
+    from .agent_tools import ToolPolicy
 
 # 模型自评置信度的解析关键词（模型可自报 High/Medium/Low）
 _CONF_MAP = {
@@ -129,6 +140,9 @@ class AgentJudge:
         timeout_s: float = DEFAULT_TIMEOUT_S,
         max_cost_usd: float = DEFAULT_MAX_COST_USD,
         temperature: float = 0.0,
+        per_call_timeout_s: float = DEFAULT_PER_CALL_TIMEOUT_S,
+        cost_per_1k_tokens_usd: float = DEFAULT_COST_PER_1K_TOKENS_USD,
+        policy: ToolPolicy | None = None,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.model = model
@@ -139,8 +153,27 @@ class AgentJudge:
         self.timeout_s = timeout_s
         self.max_cost_usd = max_cost_usd
         self.temperature = temperature
+        # 单次 HTTP 调用的硬上限：端点偶发长尾（实测 p95 127s）时，
+        # 不能让一次判定卡住 2 分钟——超时即降级转人工（v0.4.0 延迟熔断）。
+        self.per_call_timeout_s = per_call_timeout_s
+        # 成本估算：按 token 单价折算 USD（默认 0.0006 USD/1k token，
+        # 即 $0.6/1M token；仅用于预算拦截，不是账单）。
+        self.cost_per_1k_tokens_usd = cost_per_1k_tokens_usd
+        # 作用域策略：与 tool_impls 共享同一实例（越界由工具实现记账）
+        self._policy = policy
 
     # --- 工具执行 ---
+
+    def _scope_violations(self) -> list[dict]:
+        """取出本次判定期间记录的作用域越界（若有）。
+
+        工具实现把越界记在共享的 ToolPolicy.violations 里（judge 层不直接
+        持有 policy，通过 tool_impls 的闭包共享同一个 policy 实例）。
+        """
+        policy = self._policy
+        if policy is None:
+            return []
+        return list(policy.violations)
 
     def _run_tool(self, name: str, args: dict) -> Any:
         """执行单个工具。未知工具 → 返回错误 dict（不抛异常，交给模型判断）。"""
@@ -157,7 +190,12 @@ class AgentJudge:
 
     # --- HTTP 调用 ---
 
-    def _call(self, messages: list[dict], with_tools: bool) -> dict:
+    def _call(self, messages: list[dict], with_tools: bool) -> tuple[dict, float]:
+        """调用端点，返回 (response_json, 本次调用估算成本 USD)。
+
+        超时用 min(per_call_timeout_s, 剩余整体预算)——
+        端点长尾时熔断，不让一次判定卡住数分钟。
+        """
         import httpx
 
         body: dict = {
@@ -175,12 +213,21 @@ class AgentJudge:
             f"{self.base_url}/chat/completions",
             json=body,
             headers=headers,
-            timeout=self.timeout_s,
+            timeout=self.per_call_timeout_s,
             trust_env=False,
         )
         if resp.status_code != 200:
             raise RuntimeError(f"agent judge 端点 HTTP {resp.status_code}: {resp.text[:200]}")
-        return resp.json()
+        data = resp.json()
+
+        usage = data.get("usage") or {}
+        tokens = int(usage.get("total_tokens") or 0)
+        if not tokens:
+            tokens = int(usage.get("prompt_tokens") or 0) + int(
+                usage.get("completion_tokens") or 0
+            )
+        cost = tokens / 1000.0 * self.cost_per_1k_tokens_usd
+        return data, cost
 
     # --- 主判定流程 ---
 
@@ -214,11 +261,33 @@ class AgentJudge:
         trace: list[dict] = []
         tool_calls_total = 0
         rounds = 0
+        cost_usd = 0.0
         t_start = time.time()
 
         try:
             for rounds in range(1, max_steps + 1):
-                data = self._call(messages, with_tools=True)
+                # 成本预算拦截：超预算立即降级（绝不继续烧钱）
+                if cost_usd >= self.max_cost_usd:
+                    return Verdict(
+                        engine=self.engine,
+                        kind="noul",
+                        value=0.5,
+                        confidence=0.0,
+                        evidence_refs=[evidence.case_id],
+                        raw={
+                            "degraded": "max_cost_exceeded",
+                            "cost_usd": round(cost_usd, 6),
+                            "max_cost_usd": self.max_cost_usd,
+                            "rounds": rounds,
+                            "tool_calls_total": tool_calls_total,
+                            "elapsed_ms": round((time.time() - t_start) * 1000, 1),
+                            "trace": trace,
+                            "model": self.model,
+                        },
+                    )
+
+                data, call_cost = self._call(messages, with_tools=True)
+                cost_usd += call_cost
                 msg = (data.get("choices") or [{}])[0].get("message", {})
                 tool_calls = msg.get("tool_calls") or []
                 content = msg.get("content") or ""
@@ -240,7 +309,9 @@ class AgentJudge:
                             "reason": content[:2000],
                             "rounds": rounds,
                             "tool_calls_total": tool_calls_total,
+                            "cost_usd": round(cost_usd, 6),
                             "elapsed_ms": round((time.time() - t_start) * 1000, 1),
+                            "scope_violations": self._scope_violations(),
                             "trace": trace,
                             "model": self.model,
                         },
@@ -285,7 +356,9 @@ class AgentJudge:
                     "max_steps": max_steps,
                     "rounds": rounds,
                     "tool_calls_total": tool_calls_total,
+                    "cost_usd": round(cost_usd, 6),
                     "elapsed_ms": round((time.time() - t_start) * 1000, 1),
+                    "scope_violations": self._scope_violations(),
                     "trace": trace,
                     "model": self.model,
                 },
@@ -301,7 +374,9 @@ class AgentJudge:
                     "degraded": f"{type(e).__name__}: {e}",
                     "rounds": rounds,
                     "tool_calls_total": tool_calls_total,
+                    "cost_usd": round(cost_usd, 6),
                     "elapsed_ms": round((time.time() - t_start) * 1000, 1),
+                    "scope_violations": self._scope_violations(),
                     "trace": trace,
                     "model": self.model,
                 },
@@ -339,11 +414,17 @@ def build_agent_judge_from_env(
     tool_impls: dict[str, Callable[[dict], Any]] | None = None,
     model_key: str = "deepseek-v4-flash",
     config_path: str | None = None,
+    policy: ToolPolicy | None = None,
+    max_cost_usd: float = DEFAULT_MAX_COST_USD,
+    per_call_timeout_s: float = DEFAULT_PER_CALL_TIMEOUT_S,
 ) -> AgentJudge:
     """从 config/models.yaml + 环境变量构造 AgentJudge。
 
     优先读 config/models.yaml 的模型配置；api_key 从 api_key_env 指定的环境变量读取。
     端点不可用时抛异常（调用方负责降级）。
+
+    policy: 工具作用域白名单。为 None 时用默认拒绝策略
+            （http_probe / read_file / read_log 全部拒绝）。
     """
     import yaml
 
@@ -381,4 +462,7 @@ def build_agent_judge_from_env(
         api_key=api_key,
         tools=tools,
         tool_impls=tool_impls,
+        policy=policy,
+        max_cost_usd=max_cost_usd,
+        per_call_timeout_s=per_call_timeout_s,
     )

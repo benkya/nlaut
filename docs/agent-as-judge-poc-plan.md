@@ -9,31 +9,38 @@
 
 ## 0. 现状盘点与结论先行
 
-### 0.1 仓库现状（已核实，非推测）
+### 0.1 仓库现状（v0.4.0 已提交，commit `8821c04` + P0 收口）
 
-截至本方案撰写时，nlaut 仓库中**已存在** Agent-as-Judge 的可运行原型（未提交，git status 显示为 untracked）：
+> ⚠️ **本节已按实现后的真实状态更新**（初稿撰写于原型未提交时，描述已过时）。
+> 下面标注的「实测数据」全部来自真实端点执行，非估算。
 
 | 文件 | 状态 | 内容 |
 | --- | --- | --- |
-| `src/nlaut/judge/agent_judge.py` | untracked，372 行 | `AgentJudge` 类：多轮 OpenAI-compatible function calling 循环、置信度封顶 `CONFIDENCE_CAP=0.85`、降级路径、`raw` 全程留痕（`trace`） |
-| `src/nlaut/judge/agent_tools.py` | untracked，265 行 | 6 个只读取证工具的 schema + 实现：`query_db` / `http_probe` / `read_log` / `read_file` / `inspect_trace` / `list_registry` |
-| `tests/agent_judge_test.py` | untracked，411 行 | 30 个元测试（**实测全通过**）+ 8 样本金标准集 + `-m agent` 真实端点测试 |
-| `pyproject.toml` | 已修改 | 新增 `agent` pytest marker，默认 `addopts` 排除 `agent` |
-| `src/nlaut/judge/__init__.py` | **未改动** | `register_judge("agent", ...)` **尚未注册** |
+| `src/nlaut/judge/agent_judge.py` | ✅ 已提交 | `AgentJudge` 类：多轮 function calling 循环、置信度封顶 `CONFIDENCE_CAP=0.85`、**成本预算拦截**、**单次调用熔断**、降级路径、`raw` 全程留痕（`trace` / `scope_violations` / `cost_usd`） |
+| `src/nlaut/judge/agent_tools.py` | ✅ 已提交 | **7 个**只读取证工具 + **`ToolPolicy` 作用域白名单**（默认拒绝式） |
+| `src/nlaut/judge/protocol.py` | ✅ 已提交 | `EngineName` 加 `"agent"`；新增 `register_judge_factory`（按需构造） |
+| `src/nlaut/judge/__init__.py` | ✅ 已提交 | `register_judge_factory("agent", ...)` **已注册**（懒加载工厂） |
+| `src/nlaut/ir/model.py` | ✅ 已提交 | `AssertAgentVerify`（`kind=agent_verify`）+ union 注册 |
+| `src/nlaut/executor/runner.py` | ✅ 已提交 | `_engine_name` / `_question_for` **已接线** |
+| `tests/agent_judge_test.py` | ✅ 已提交 | **165 项元测试全绿** + 9 样本金标准集 + `-m agent` 真实端点测试 |
+| `cases/demo/tc_agent_verify_001.yaml` | ✅ 已提交 | G-11 示例用例 |
+| `pyproject.toml` | ✅ 已提交 | 新增 `agent` marker，默认 `addopts` 排除 `agent` |
 
-实测验证：`.venv/bin/python -m pytest tests/agent_judge_test.py -q` → **30 passed**。
+实测：`.venv/bin/python -m pytest tests/` → **165 passed**。
 
-### 0.2 因此，本 PoC 的定位是「**验证与度量**」，不是「设计与实现」
+### 0.2 本 PoC 的定位是「**验证与度量**」，不是「设计与实现」
 
 原型已解决"能不能跑"，但**没有解决"准不准、稳不稳、能不能挡住假阳性"**。这恰恰是 G-11 作为**阻断项**能否依赖它的唯一判据。
 
-| 已经解决 | 尚未解决（本 PoC 的靶心） |
+| 已解决（v0.4.0 实测） | 尚未解决（本 PoC 的靶心） |
 | --- | --- |
-| 工具调用循环跑通（`agent_judge.py` docstring 记录 2026-10-30 实测 deepseek-v4-flash / deepseek-v4-pro-0813 端点正常） | 8 样本金标准**从未跑过真实端点**（`-m agent` 测试默认跳过） |
+| 工具调用循环跑通（真实端点实测通过） | 样本量仍偏少（9 个），需补至 ≥20 |
 | 置信度封顶 0.85 < 0.9，强制走人工仲裁 | 封顶是否合理？漏斗末端是否该完全人工？ |
-| 降级路径不误判为通过（`confidence=0` → `human_review`） | 8 样本的一致率、陷阱识破率、抖动率**无任何实测数据** |
-| 陷阱样本真值由测试直接构造（非模型生成），并有防"陷阱失效"的自检 | 陷阱只有 4 个，且**样本形态过简**（见 §3.4） |
-| 工具只读语义 | Agent 是否会**越界**去查模块内部逻辑？无任何检测 |
+| 降级路径不误判为通过（`confidence=0` → `human_review`） | 需补「越界检查」类样本（judge 是否去查模块内部逻辑） |
+| 陷阱样本真值由测试直接构造，并防"陷阱失效"自检 | 陷阱目前 5 个，形态仍偏简（见 §3.4） |
+| 工具只读 + `ToolPolicy` 作用域白名单（默认拒绝，越界记账） | 尚无「越界倾向」专项样本 |
+| **一致率实测：9 样本 × 3 轮 = 27/27 判对、翻转率 0%** | **延迟 p95 127.3s 超 PoC 红线（≤60s）**——成因在内网端点长尾，已加 `per_call_timeout_s` 熔断兜底，但端点本身待治理 |
+| 成本预算 `max_cost_usd` 已真实生效（实测单次 $0.0017） | 需按真实 token 单价校准估算口径 |
 
 ### 0.3 三条不可绕过的红线
 
@@ -715,24 +722,34 @@ AssertIntegrationLink(BaseModel):
 
 ### 7.7 接口契约的最小改动清单
 
+> **状态已按 v0.4.0 实际落地更新**（初稿撰写于实现前，状态列已过时）。
+
 | 文件 | 改动 | 性质 | 当前状态 |
 | --- | --- | --- | --- |
-| `src/nlaut/judge/protocol.py` | `Evidence` 追加 8 个可选字段；`EngineName` 追加 `"agent"` | 向后兼容 | **待做** |
-| `src/nlaut/judge/agent_judge.py` | 补 `scope_violations` / `parse_mode` / `elapsed_ms`；`max_steps`/`timeout_s` 调整；严格 JSON rubric 支持 | 扩展现有 | **待做** |
-| `src/nlaut/judge/agent_tools.py` | `http_probe`/`read_log`/`read_file` 加白名单；`_query_db` 支持 `store_diff` | 扩展现有 | **待做** |
-| `src/nlaut/judge/__init__.py` | 注册 "agent"（**建议懒加载工厂**） | 新增一行 | **待做**（当前未注册） |
-| `src/nlaut/judge/arbiter.py` | **不改**（PoC 阶段走路径 A + `CONFIDENCE_CAP`） | 零改动 | ✅ 保持 |
+| `src/nlaut/judge/protocol.py` | `EngineName` 追加 `"agent"`；新增 `register_judge_factory` | 向后兼容 | ✅ **已完成** |
+| `src/nlaut/judge/agent_judge.py` | 补 `scope_violations` / `cost_usd` / `elapsed_ms`；**成本预算拦截**；**单次调用熔断** | 扩展现有 | ✅ **已完成** |
+| `src/nlaut/judge/agent_tools.py` | **7 个**工具 + **`ToolPolicy` 作用域白名单**（默认拒绝 + 越界记账）；新增 `locate_object` | 扩展现有 | ✅ **已完成** |
+| `src/nlaut/judge/__init__.py` | 注册 `"agent"`（懒加载工厂） | 新增一行 | ✅ **已完成** |
+| `src/nlaut/judge/arbiter.py` | **不改**（走 `CONFIDENCE_CAP` 封顶路径） | 零改动 | ✅ 保持 |
 | `src/nlaut/judge/laya.py` | **不改**（`render_state` 不加新字段） | 零改动 | ✅ 保持 |
 | `src/nlaut/judge/deterministic.py` | **不改** | 零改动 | ✅ 保持 |
 | `src/nlaut/judge/vlm_mlx.py` | **不改** | 零改动 | ✅ 保持 |
-| `src/nlaut/executor/runner.py` | **不改**（PoC 走离线脚本） | 零改动 | ✅ 保持 |
-| `src/nlaut/ir/model.py` | **不改**（PoC 阶段） | 延后到路径 B | ✅ 保持 |
-| `docs/judge-protocol.md` | 追加 Agent 引擎的引擎差异说明（置信度封顶语义、三态、只读工具） | 延后 | **待做** |
+| `src/nlaut/executor/runner.py` | `_engine_name` / `_question_for` 增加 `agent_verify` 路由 | 扩展 | ✅ **已完成** |
+| `src/nlaut/ir/model.py` | 新增 `AssertAgentVerify` + union 注册 | 扩展 | ✅ **已完成** |
+| `docs/judge-protocol.md` | 追加 Agent 引擎章节（封顶语义、作用域白名单、成本预算、熔断） | 延后 | ✅ **已完成** |
 | `docs/agent-as-judge-poc-plan.md` | 本文件 | — | ✅ 已建 |
-| `tests/agent_judge_test.py` | 扩展 `GOLDEN_SAMPLES` 至 16；新增对照实验与度量脚本 | 扩展现有 | **待做** |
+| `tests/agent_judge_test.py` | `GOLDEN_SAMPLES` 9 个（+E1 定位陷阱）；新增 `ToolPolicy` / 成本预算 / 熔断测试 | 扩展现有 | ✅ **已完成**（165 项全绿） |
+| `scripts/agent_judge_repeatability.py` | 一致率度量脚本（实测 27/27、翻转率 0%） | 新增 | ✅ **已完成** |
+| `cases/demo/tc_agent_verify_001.yaml` | G-11 示例用例 | 新增 | ✅ **已完成** |
+| ~~`Evidence` 追加 8 个可选字段~~ | 未采纳：现有 Evidence 已够用（db_state / tool_calls / conversation），未加字段 | 未做 | ➖ 不做 |
+| ~~严格 JSON rubric 输出~~ | 未采纳：模型输出稳定性不足，改用「显式标记 + 启发式」解析 | 未做 | ➖ 不做 |
+| ~~`_query_db` 支持 `store_diff`~~ | 未采纳：当前 `db_state` 快照已满足 G-11 | 未做 | ➖ 不做 |
+| ~~`GOLDEN_SAMPLES` 扩至 16~~ | 当前 9 个，**待补至 ≥20**（含越界检查类样本） | 扩展 | ⏳ **待做** |
 | `pyproject.toml` | `agent` marker | 已完成 | ✅ 已有 |
 
-> **改动量评估**：PoC 阶段在现有 untracked 原型之上，**改动集中在 4 个 judge 文件 + 1 个测试文件**，执行层（`runner.py`）、IR 层、其余 3 个引擎**全部零改动**。这符合 `docs/judge-protocol.md`「报告层零改动」的设计承诺。
+> **改动量评估**：最终落地共改 6 个源文件 + 1 个测试文件 + 1 个示例用例 + 4 份文档；
+> `arbiter.py` / `laya.py` / `deterministic.py` / `vlm_mlx.py` **全部零改动**，
+> 符合 `docs/judge-protocol.md`「报告层零改动」的设计承诺。
 
 ---
 

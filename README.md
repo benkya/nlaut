@@ -13,7 +13,7 @@
 | **Electron/IDE 插件** | CDP（connect_over_cdp） | 8 条 | GienCoderWorkbench / DSH 桌面端 |
 | **集成准入门禁** | Agent 自主取证 | 1 条示例 | 模块接入后「数据能进来、结果能出去」（G-11） |
 
-**框架规模**：~4,200 行 Python · 133 条用例 IR · 149 项元测试全绿 · 13 个模型预配置 · 9 篇 GitHub Wiki · 统一报告（对话+4P12S+上线结论卡）
+**框架规模**：~4,400 行 Python · 133 条用例 IR · 165 项元测试全绿 · 13 个模型预配置 · 9 篇 GitHub Wiki · 统一报告（对话+4P12S+上线结论卡）
 
 ## 快速开始
 
@@ -233,7 +233,11 @@ assertions:
 可用只读工具：`query_db` / `locate_object` / `http_probe` / `read_log` / `read_file` /
 `inspect_trace` / `list_registry`。
 
-- 端点不可用 / 无 key / 步数耗尽 → `confidence=0` + `raw.degraded`，**绝不误判为通过**
+- 端点不可用 / 无 key / 步数耗尽 / 超成本预算 → `confidence=0` + `raw.degraded`，**绝不误判为通过**
+- **作用域白名单**：`http_probe` / `read_file` / `read_log` 默认**拒绝**，
+  需显式放行 `NLaut_AGENT_JUDGE_ALLOWED_HOSTS` / `_ALLOWED_PATHS`；
+  越界记入 `raw.scope_violations`
+- **成本预算** `max_cost_usd`（默认 0.5 USD）+ **单次调用熔断** `per_call_timeout_s`（默认 45s）
 - 环境变量：`NLaut_AGENT_JUDGE_MODEL`（默认 `deepseek-v4-flash`）、
   `NLaut_AGENT_JUDGE_TOOLS`（逗号分隔工具名子集，用于「有无工具」消融对照）
 - 一致率实测：`scripts/agent_judge_repeatability.py`

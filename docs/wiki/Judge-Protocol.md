@@ -74,16 +74,40 @@ Verdict（confidence 封顶 0.85）
 1. **置信度封顶 0.85**（`CONFIDENCE_CAP`）——低于 `route()` 的 0.9 自动裁决线，
    所以 agent judge 的结论**必定**进人工仲裁队列。它是「证据充分的判定」，
    不是「自动放行许可」。
-2. **工具只读**——工具实现方保证不写被测系统状态；judge 只能验证，不能改动。
-3. **降级绝不误判为通过**——端点不可用 / 无 key / 步数耗尽 → `confidence=0` +
-   `raw.degraded` → `route()` 走 `human_review`。**「agent judge 不可用」绝不能被读成「判定通过」**。
+2. **工具只读 + 作用域白名单**——工具实现方保证不写被测系统状态；
+   且 `http_probe` / `read_file` / `read_log` 受 `ToolPolicy` 约束，
+   **默认拒绝式**（不配白名单即全部拒绝），越界返回结构化拒绝并记入
+   `Verdict.raw["scope_violations"]`。judge 只能验证，不能改动，也不能越界窥探。
+3. **降级绝不误判为通过**——端点不可用 / 无 key / 步数耗尽 / 超成本预算 →
+   `confidence=0` + `raw.degraded` → `route()` 走 `human_review`。
+   **「agent judge 不可用」绝不能被读成「判定通过」**。
+
+### 成本预算与延迟熔断（v0.4.0）
+
+| 机制 | 默认值 | 行为 |
+| --- | --- | --- |
+| `max_cost_usd` | 0.50 USD | 每轮调用累计成本（按 token 折算）；超预算立即降级 `max_cost_exceeded` |
+| `per_call_timeout_s` | 45s | 单次 HTTP 调用硬上限；端点长尾（实测 p95 127s）时熔断，不再空等 |
+| `max_steps` | 6（IR 可覆盖） | 取证步数上限；耗尽降级 `max_steps_exhausted` |
+
+> 成本单价为**保守估算**（默认 $0.6/1M token），用于预算拦截，不是账单。
 
 ### 实测基线（2026-10-30）
 
 - 端点：`deepseek-v4-flash`（内网，`config/models.yaml`）
 - 金标准：9 样本 × 3 轮 = 27 次判定 → **27/27 判对，0 降级，翻转率 0%**
-- 延迟：中位 **2.9s**，p95 见 `artifacts/agent_judge_repeatability.json`
+- 延迟：中位 **3.6s**；**p95 127.3s**（端点长尾，非 judge 逻辑问题）——
+  这正是 `per_call_timeout_s` 熔断要解决的情形
 - 复现：`scripts/agent_judge_repeatability.py --repeats 3`
+
+### 环境变量
+
+| 变量 | 作用 |
+| --- | --- |
+| `NLaut_AGENT_JUDGE_MODEL` | 模型 key（默认 `deepseek-v4-flash`） |
+| `NLaut_AGENT_JUDGE_TOOLS` | 逗号分隔工具名子集（「有无工具」消融对照） |
+| `NLaut_AGENT_JUDGE_ALLOWED_HOSTS` | `http_probe` 允许的 host（支持 `*.corp` 与 `*`） |
+| `NLaut_AGENT_JUDGE_ALLOWED_PATHS` | `read_file` / `read_log` 允许的目录根 |
 
 ### 工程提示：取证效率直接决定成本与稳定性
 

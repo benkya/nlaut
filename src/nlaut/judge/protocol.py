@@ -15,7 +15,7 @@ from typing import Literal, Protocol, runtime_checkable
 from pydantic import BaseModel, Field
 
 QuestionKind = Literal["noul", "choice", "score"]
-EngineName = Literal["deterministic", "mlx-vlm", "laya", "jev"]
+EngineName = Literal["deterministic", "mlx-vlm", "laya", "agent", "jev"]
 
 
 class Evidence(BaseModel):

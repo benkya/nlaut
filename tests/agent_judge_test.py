@@ -24,6 +24,7 @@ from nlaut.judge.agent_judge import (
 )
 from nlaut.judge.agent_tools import (
     DEFAULT_TOOLS,
+    ToolPolicy,
     build_env_tool_impls,
     default_file_reader,
     default_log_reader,
@@ -166,6 +167,183 @@ class TestToolImpls:
         impls = build_env_tool_impls(db_state={"task": [{"id": 1}]})
         res = impls["locate_object"]({"table": "task", "keyword": ""})
         assert res["error"] == "keyword_required"
+
+
+class TestToolPolicy:
+    """工具作用域白名单（P0 安全项，v0.4.0）。
+
+    背景：无限制时 `http_probe` 可 GET 任意内网地址、`read_file` 可读任意路径
+    （含密钥文件）。软件工厂场景下这是实质风险，必须默认拒绝 + 显式放行。
+    """
+
+    def test_default_policy_denies_everything(self):
+        """默认拒绝：空策略下所有 host / 路径都不放行。"""
+        pol = ToolPolicy()
+        assert pol.host_allowed("http://10.0.0.1:8080/x") is False
+        assert pol.path_allowed("/etc/passwd") is False
+        assert pol.path_allowed("/Users/Ben/.ssh/id_rsa") is False
+
+    def test_exact_host_allowed(self):
+        pol = ToolPolicy(allowed_hosts={"api.internal.corp"})
+        assert pol.host_allowed("http://api.internal.corp/v1") is True
+        assert pol.host_allowed("http://evil.com/v1") is False
+
+    def test_wildcard_subdomain_allowed(self):
+        pol = ToolPolicy(allowed_hosts={"*.gientech.com"})
+        assert pol.host_allowed("http://token-api.gientech.com/x") is True
+        assert pol.host_allowed("http://gientech.com/x") is True  # 裸域也匹配
+        assert pol.host_allowed("http://evilgientech.com/x") is False
+
+    def test_path_root_allowed(self):
+        pol = ToolPolicy(allowed_path_roots={"/tmp/logs"})
+        assert pol.path_allowed("/tmp/logs/app.log") is True
+        assert pol.path_allowed("/tmp/logs") is True
+        assert pol.path_allowed("/tmp/other/app.log") is False
+
+    def test_path_traversal_blocked(self):
+        """路径穿越必须被拦（realpath 归一后再比对）。"""
+        pol = ToolPolicy(allowed_path_roots={"/tmp/logs"})
+        assert pol.path_allowed("/tmp/logs/../../etc/passwd") is False
+
+    def test_violation_is_recorded(self):
+        pol = ToolPolicy()
+        res = pol.record_violation("http_probe", "http://evil.com", "host 不在允许列表")
+        assert res["error"] == "scope_violation"
+        assert len(pol.violations) == 1
+        assert pol.violations[0]["tool"] == "http_probe"
+
+    def test_http_probe_rejected_when_out_of_scope(self):
+        """越界 http_probe 返回结构化拒绝，且不真正发请求。"""
+        called = []
+
+        def fake_probe(url, timeout):
+            called.append(url)
+            return {"status": 200}
+
+        impls = build_env_tool_impls(http_probe=fake_probe, policy=ToolPolicy())
+        res = impls["http_probe"]({"url": "http://evil.com/secret"})
+        assert res["error"] == "scope_violation"
+        assert called == []  # 未真正发请求
+
+    def test_http_probe_allowed_when_in_scope(self):
+        def fake_probe(url, timeout):
+            return {"status": 200, "url": url}
+
+        impls = build_env_tool_impls(
+            http_probe=fake_probe,
+            policy=ToolPolicy(allowed_hosts={"api.internal.corp"}),
+        )
+        res = impls["http_probe"]({"url": "http://api.internal.corp/x"})
+        assert res["status"] == 200
+
+    def test_read_file_rejected_when_out_of_scope(self):
+        impls = build_env_tool_impls(policy=ToolPolicy())
+        res = impls["read_file"]({"path": "/Users/Ben/.ssh/id_rsa"})
+        assert res["error"] == "scope_violation"
+
+    def test_read_file_allowed_within_root(self, tmp_path):
+        target = tmp_path / "app.log"
+        target.write_text("hello", encoding="utf-8")
+        impls = build_env_tool_impls(policy=ToolPolicy(allowed_path_roots={str(tmp_path)}))
+        res = impls["read_file"]({"path": str(target)})
+        assert "hello" in res
+
+    def test_read_log_rejected_when_out_of_scope(self):
+        impls = build_env_tool_impls(policy=ToolPolicy())
+        res = impls["read_log"]({"path": "/var/log/app.log"})
+        assert res["error"] == "scope_violation"
+
+    def test_from_env_parses_lists(self, monkeypatch):
+        monkeypatch.setenv("NLaut_AGENT_JUDGE_ALLOWED_HOSTS", "a.corp, *.b.corp")
+        monkeypatch.setenv("NLaut_AGENT_JUDGE_ALLOWED_PATHS", "/tmp/a, /var/log")
+        pol = ToolPolicy.from_env()
+        assert pol.allowed_hosts == {"a.corp", "*.b.corp"}
+        assert pol.allowed_path_roots == {"/tmp/a", "/var/log"}
+
+
+class TestCostBudget:
+    """成本预算拦截（P0，v0.4.0）——max_cost_usd 必须真的生效。"""
+
+    def test_cost_budget_blocks_second_call(self):
+        """预算为 0 时，第一次调用后即降级（不再发起第二次调用）。"""
+        calls = []
+
+        class FakeJudge(AgentJudge):
+            def _call(self, messages, with_tools):
+                calls.append(1)
+                # 第一次返回工具调用，第二次若被调用说明预算没拦住
+                if len(calls) == 1:
+                    return (
+                        {
+                            "choices": [
+                                {
+                                    "message": {
+                                        "content": "",
+                                        "tool_calls": [
+                                            {
+                                                "id": "t1",
+                                                "type": "function",
+                                                "function": {"name": "q", "arguments": "{}"},
+                                            }
+                                        ],
+                                    }
+                                }
+                            ],
+                            "usage": {"total_tokens": 1000},
+                        },
+                        0.0006,  # 本次调用成本 USD
+                    )
+                raise AssertionError("预算未拦截，发起了第 2 次调用")
+
+        judge = FakeJudge(
+            base_url="http://127.0.0.1:1/v1",
+            model="dummy",
+            tool_impls={"q": lambda a: {"ok": True}},
+            max_cost_usd=0.0001,  # 0.0006 > 0.0001 → 下轮即拦截
+            max_steps=5,
+        )
+        v = judge.judge(Evidence(case_id="cost-1"), Question(kind="noul", text="验证落库"))
+        assert v.confidence == 0.0
+        assert v.raw["degraded"] == "max_cost_exceeded"
+        assert len(calls) == 1
+
+    def test_cost_is_accumulated_in_verdict(self):
+        class FakeJudge(AgentJudge):
+            def _call(self, messages, with_tools):
+                return (
+                    {
+                        "choices": [{"message": {"content": "judgement: true\nCONFIDENCE: High"}}],
+                        "usage": {"total_tokens": 500},
+                    },
+                    0.0003,
+                )
+
+        judge = FakeJudge(
+            base_url="http://127.0.0.1:1/v1",
+            model="dummy",
+            tool_impls={},
+        )
+        v = judge.judge(Evidence(case_id="cost-2"), Question(kind="noul", text="x"))
+        assert v.raw["cost_usd"] > 0
+        assert v.confidence > 0
+
+
+class TestPerCallTimeout:
+    """单次调用熔断（P1 延迟治理，v0.4.0）。"""
+
+    def test_per_call_timeout_default_is_bounded(self):
+        """默认单次调用超时必须远小于整体超时（防端点长尾卡死）。"""
+        from nlaut.judge.agent_judge import (
+            DEFAULT_PER_CALL_TIMEOUT_S,
+            DEFAULT_TIMEOUT_S,
+        )
+
+        assert DEFAULT_PER_CALL_TIMEOUT_S < DEFAULT_TIMEOUT_S
+        assert DEFAULT_PER_CALL_TIMEOUT_S <= 60.0
+
+    def test_timeout_is_passed_to_http_call(self):
+        judge = AgentJudge(base_url="http://x/v1", model="m", per_call_timeout_s=12.5)
+        assert judge.per_call_timeout_s == 12.5
 
 
 class TestDegradation:
