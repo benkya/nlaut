@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """DeepSeek-V4.1-Flash 同模型跨端点对比（vllm 30828 vs sglang 30089 INT8）
 
 同模型名，不同部署：
@@ -123,7 +122,7 @@ def p95(v):
     s = sorted(v)
     if len(s) == 1:
         return s[0]
-    return s[min(len(s) - 1, max(0, int(round(0.95 * (len(s) - 1)))))]
+    return s[min(len(s) - 1, max(0, round(0.95 * (len(s) - 1))))]
 
 
 def main():

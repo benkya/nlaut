@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """P0 侧关思考能力元测试（enable_thinking / disable_thinking）
 
 背景：--think off 只作用于 4P12S 探针（经 chat_template_kwargs.enable_thinking），
@@ -11,6 +10,7 @@ P0 对话批次此前无任何关思考通道。DeepSeek-V4.1-Flash 实测：
 from __future__ import annotations
 
 import inspect
+from typing import ClassVar
 
 from nlaut.executor.channels import api as api_mod
 
@@ -40,7 +40,7 @@ class _FakeResp:
 class _FakeClient:
     """替换 httpx.Client —— api.py 用 with httpx.Client(...) as client 发请求"""
 
-    captured: dict = {}
+    captured: ClassVar[dict] = {}
 
     def __init__(self, *a, **kw):
         pass

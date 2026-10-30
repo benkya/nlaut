@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """DeepSeek-V4.1-Flash 同窗口双口径对照实验（消除服务端负载变量）
 
 设计要点：
@@ -117,7 +116,7 @@ def call(mode_extra: dict, case: dict) -> dict:
                 out["content"] = content
                 out["ok"] = True
                 out["latency_ms"] = (time.time() - t0) * 1000
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — 探针/守卫脚本需捕获任意异常并记录
             out["err"] = f"{type(e).__name__}: {e}"
         return out
 
@@ -135,7 +134,7 @@ def call(mode_extra: dict, case: dict) -> dict:
         out["reasoning_tokens"] = dtl.get("reasoning_tokens", 0)
         out["ok"] = True
         out["latency_ms"] = (time.time() - t0) * 1000
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — 探针/守卫脚本需捕获任意异常并记录
         out["err"] = f"{type(e).__name__}: {e}"
     return out
 
@@ -146,7 +145,7 @@ def pct(vals, q):
     s = sorted(vals)
     if len(s) == 1:
         return s[0]
-    return s[min(len(s) - 1, max(0, int(round(q * (len(s) - 1)))))]
+    return s[min(len(s) - 1, max(0, round(q * (len(s) - 1))))]
 
 
 def main() -> None:

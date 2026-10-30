@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """从 run_combined.jsonl 提取本批次 P0 失败/转人工明细（含 evidence 原始返回）"""
-import json
 import glob
+import json
 import os
+from pathlib import Path
 
-f = sorted(glob.glob('artifacts/session/run_combined.jsonl'), key=os.path.getmtime)[-1]
-lines = open(f, encoding='utf-8').read().splitlines()
+files = sorted(glob.glob('artifacts/session/run_combined.jsonl'), key=os.path.getmtime)
+f = files[-1]
+lines = Path(f).read_text(encoding='utf-8').splitlines()
 
 # 定位本批次起点：run_start 事件不带 model 字段（已知缺陷），
 # 改用 ts 时间戳切分 —— 批次起始时间取自本轮 combined_report 启动时刻。
@@ -24,7 +25,8 @@ cur_cid = None
 for l in seg:
     try:
         e = json.loads(l)
-    except Exception:
+    except json.JSONDecodeError:
+        # 非 JSON 行（如日志混入）跳过，不中断整个批次解析
         continue
     ev = e.get('event')
     cid = e.get('case_id')
@@ -92,6 +94,10 @@ for c in order:
         if 'response' in str(e.get('event', '')).lower() or e.get('llm_response'):
             print(f"    >>> 返回: {str(e.get('llm_response'))[:300]}")
 
-json.dump({'order': order, 'runs': runs}, open('artifacts/ds41f_intra_p0_detail.json', 'w', encoding='utf-8'),
-          ensure_ascii=False, indent=2, default=str)
+out_path = Path('artifacts/ds41f_intra_p0_detail.json')
+out_path.parent.mkdir(parents=True, exist_ok=True)
+out_path.write_text(
+    json.dumps({'order': order, 'runs': runs}, ensure_ascii=False, indent=2, default=str),
+    encoding='utf-8',
+)
 print("\n明细已存 artifacts/ds41f_intra_p0_detail.json")

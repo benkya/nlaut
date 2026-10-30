@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """MD → 浅色主题 HTML（GitHub 风格），用于测试报告。
 用户偏好：浅色系（白底#ffffff + 深色文字 #24292f），不展示版本号。
 """
@@ -9,6 +8,7 @@ import re
 import sys
 from html.parser import HTMLParser
 from pathlib import Path
+from typing import ClassVar
 
 
 def esc(s: str) -> str:
@@ -151,7 +151,7 @@ footer{margin-top:44px;padding-top:18px;border-top:1px solid var(--bd);color:var
 
 
 class V(HTMLParser):
-    VOID = {"meta", "br", "hr", "img", "input", "link", "source"}
+    VOID: ClassVar[set[str]] = {"meta", "br", "hr", "img", "input", "link", "source"}
 
     def __init__(self):
         super().__init__()

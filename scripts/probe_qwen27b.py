@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """Qwen3.8-27B (10.62.48.94:8866) 能力探测：思考字段名 + 参数行为 + TTFT
 新端点必须先双向验证，不能沿用 47.239.178.97:30021 的历史结论。
 """
@@ -115,5 +114,5 @@ if __name__ == "__main__":
             print(f"    -> {tc[0]['function']['name']}({tc[0]['function']['arguments']})")
         else:
             print(f"    content: {(m.get('content') or '')[:150]!r}")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — 探针/守卫脚本需捕获任意异常并记录
         print(f"  ERR {type(e).__name__}: {e}")

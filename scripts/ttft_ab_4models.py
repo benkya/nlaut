@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """Qwen3.8-27B 三部署 + DeepSeek-V4.1-Flash 同口径 TTFT 实测
 
 旧报告的 P0 数据混了开/关思考口径，TTFT 不可比。
@@ -11,7 +10,6 @@ from __future__ import annotations
 import json
 import os
 import statistics
-import sys
 import time
 
 import requests
@@ -81,7 +79,7 @@ def sample(base: str, model: str, key: str | None, think: str) -> dict:
         return {"ok": True, "ttft_ms": ttft, "total_ms": (time.time() - t0) * 1000,
                 "content_len": len(content), "delta_keys": keys,
                 "leak": content[:40].replace("\n", " ")}
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — 探针/守卫脚本需捕获任意异常并记录
         return {"ok": False, "err": f"{type(e).__name__}: {e}"}
 
 
@@ -89,7 +87,7 @@ def p95(vals):
     s = sorted(vals)
     if len(s) == 1:
         return s[0]
-    return s[min(len(s) - 1, max(0, int(round(0.95 * (len(s) - 1)))))]
+    return s[min(len(s) - 1, max(0, round(0.95 * (len(s) - 1))))]
 
 
 def main():
@@ -140,9 +138,9 @@ def main():
     print("=" * 86)
     print(f"{'模型':26s} {'开思考P95':>12s} {'关思考P95':>12s} {'最快口径':>10s}")
     print("-" * 86)
-    for name in out:
-        on = out[name].get("default", {}).get("ttft_p95_ms")
-        off = out[name].get("off", {}).get("ttft_p95_ms")
+    for name, v in out.items():
+        on = v.get("default", {}).get("ttft_p95_ms")
+        off = v.get("off", {}).get("ttft_p95_ms")
         best = min([x for x in (on, off) if x], default=0)
         print(f"{name:26s} {str(on)+'ms' if on else '-':>12s} {str(off)+'ms' if off else '-':>12s} "
               f"{best}ms{'':>4s}")

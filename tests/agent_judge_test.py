@@ -346,6 +346,121 @@ class TestPerCallTimeout:
         assert judge.per_call_timeout_s == 12.5
 
 
+class TestRetryOnEndpointJitter:
+    """端点抖动重试（P1 延迟治理，v0.4.0）。
+
+    实测根因：连续 25 次调用 p95=2.02s、0% 超 10s，
+    但同一天观察到 88s 长尾，且长尾那次 completion_token 仅 151
+    （与快请求同量级）→ 与 token 数、agent 逻辑无关，是**端点侧调度抖动**。
+    故对超时/5xx/429 做指数退避重试。
+    """
+
+    def test_default_retries_configured(self):
+        judge = AgentJudge(base_url="http://x/v1", model="m")
+        assert judge.max_retries == 2
+        assert judge.retry_backoff_s == 0.5
+
+    def test_timeout_is_retried(self, monkeypatch):
+        """首次超时 → 重试后成功，判定不应失败。"""
+        import httpx
+
+        judge = AgentJudge(
+            base_url="http://x/v1",
+            model="m",
+            max_retries=2,
+            retry_backoff_s=0.01,
+        )
+        calls = []
+
+        class FakeResp:
+            status_code = 200
+
+            def json(self):
+                return {
+                    "choices": [{"message": {"content": "judgement: true"}}],
+                    "usage": {"total_tokens": 100},
+                }
+
+        def fake_post(url, **kwargs):
+            calls.append(1)
+            if len(calls) == 1:
+                raise httpx.TimeoutException("slow")
+            return FakeResp()
+
+        monkeypatch.setattr("httpx.post", fake_post)
+        _data, cost = judge._call([{"role": "user", "content": "x"}], with_tools=False)
+        assert len(calls) == 2  # 首次超时 + 1 次重试成功
+        assert cost > 0
+
+    def test_5xx_is_retried_then_gives_up(self, monkeypatch):
+        """5xx 重试到上限后抛错 → 上层降级为 confidence=0。"""
+        judge = AgentJudge(
+            base_url="http://x/v1",
+            model="m",
+            max_retries=2,
+            retry_backoff_s=0.01,
+        )
+        calls = []
+
+        class FakeResp:
+            status_code = 503
+            text = "unavailable"
+
+        def fake_post(url, **kwargs):
+            calls.append(1)
+            return FakeResp()
+
+        monkeypatch.setattr("httpx.post", fake_post)
+        with pytest.raises(RuntimeError, match="重试"):
+            judge._call([{"role": "user", "content": "x"}], with_tools=False)
+        assert len(calls) == 3  # 首次 + 2 次重试
+
+    def test_4xx_is_not_retried(self, monkeypatch):
+        """4xx（如 401）是请求本身有问题，重试无意义 → 立即抛错。"""
+        judge = AgentJudge(
+            base_url="http://x/v1",
+            model="m",
+            max_retries=2,
+            retry_backoff_s=0.01,
+        )
+        calls = []
+
+        class FakeResp:
+            status_code = 401
+            text = "unauthorized"
+
+        def fake_post(url, **kwargs):
+            calls.append(1)
+            return FakeResp()
+
+        monkeypatch.setattr("httpx.post", fake_post)
+        with pytest.raises(RuntimeError, match="401"):
+            judge._call([{"role": "user", "content": "x"}], with_tools=False)
+        assert len(calls) == 1  # 未重试
+
+    def test_normal_path_does_not_retry(self, monkeypatch):
+        """正常 200 不重试（不增加延迟）。"""
+        judge = AgentJudge(base_url="http://x/v1", model="m", max_retries=2)
+        calls = []
+
+        class FakeResp:
+            status_code = 200
+
+            def json(self):
+                return {
+                    "choices": [{"message": {"content": "judgement: true"}}],
+                    "usage": {"total_tokens": 100},
+                }
+
+        def fake_post(url, **kwargs):
+            calls.append(1)
+            return FakeResp()
+
+        monkeypatch.setattr("httpx.post", fake_post)
+        judge._call([{"role": "user", "content": "x"}], with_tools=False)
+        assert len(calls) == 1
+
+
 class TestDegradation:
     def test_unreachable_endpoint_degrades_to_zero_confidence(self):
         """端点不可用 → confidence=0 + degraded 标记，绝不误判为通过。"""
@@ -500,12 +615,130 @@ GOLDEN_SAMPLES: list[dict] = [
         "category": "trap_locate",
         "note": "表里有 M 的行，但 ID 9999 不存在 —— 只看行数会误判为真，需 locate 能力",
     },
+    # --- F 类：多表 / 跨表场景（数据在别的表里，不在 task 表） ---
+    {
+        "case_id": "F1-real-fail-data-in-other-table",
+        "objective": "验证：模块 M 接入后任务数据真的落库到 task 表。",
+        "claimed_success": "已成功创建任务，任务 ID 1010。",
+        "db_state": {"task_log": [{"id": 1010, "module": "M"}]},
+        "expected": False,
+        "category": "multi_table",
+        "note": "数据在 task_log 表，task 表没有 —— 不能因为「库里有 M 的数据」就判真",
+    },
+    {
+        "case_id": "F2-real-pass-both-tables",
+        "objective": "验证：模块 M 接入后任务数据真的落库到 task 表。",
+        "claimed_success": "已成功创建任务，任务 ID 1011。",
+        "db_state": {
+            "task": [{"id": 1011, "status": "created", "module": "M"}],
+            "task_log": [{"id": 1011, "module": "M"}],
+        },
+        "expected": True,
+        "category": "multi_table",
+        "note": "task 与 task_log 都有 → 落库成立",
+    },
+    # --- G 类：边界场景（空列表 / 空 dict / 计数为 0） ---
+    {
+        "case_id": "G1-real-fail-empty-list-not-null",
+        "objective": "验证：模块 M 接入后任务数据真的落库了（表 task）。",
+        "claimed_success": "已成功创建任务，任务 ID 1012。",
+        "db_state": {"task": []},
+        "expected": False,
+        "category": "boundary",
+        "note": "空列表（非 None）—— 空与缺失是两种情况",
+    },
+    {
+        "case_id": "G2-real-fail-row-count-zero",
+        "objective": "验证：模块 M 接入后任务数据真的落库了（表 task）。",
+        "claimed_success": "已成功创建任务，任务 ID 1013。",
+        "db_state": {"task": {"row_count": 0}},
+        "expected": False,
+        "category": "boundary",
+        "note": "计数为 0 的 dict 形态（非 list）",
+    },
+    {
+        "case_id": "G3-real-pass-row-count-only",
+        "objective": "验证：模块 M 接入后任务数据真的落库了（表 task）。",
+        "claimed_success": "已成功创建任务，任务 ID 1014。",
+        "db_state": {"task": {"row_count": 3}},
+        "expected": True,
+        "category": "boundary",
+        "note": "只有计数字段形态 → 落库成立（表非空）",
+    },
+    # --- H 类：字段语义陷阱（行存在但关键字段不对） ---
+    {
+        "case_id": "H1-trap-row-exists-but-status-pending",
+        "objective": "验证：模块 M 接入后任务数据真的落库了（表 task）。要求 module 为 M 且 status 为 created。",
+        "claimed_success": "已成功创建任务，任务 ID 1015。",
+        "db_state": {"task": [{"id": 1015, "status": "pending", "module": "M"}]},
+        "expected": False,
+        "category": "field_semantics",
+        "note": "行存在、module 也对，但 status 是 pending 不是 created —— 需读字段语义",
+    },
+    {
+        "case_id": "H2-trap-row-exists-but-module-lowercase",
+        "objective": "验证：模块 M 接入后任务数据真的落库了（表 task）。要求 module 字段为 M。",
+        "claimed_success": "已成功创建任务，任务 ID 1016。",
+        "db_state": {"task": [{"id": 1016, "status": "created", "module": "m"}]},
+        "expected": False,
+        "category": "field_semantics",
+        "note": "module 是小写 m，与要求的 M 不一致 —— 大小写敏感判定",
+    },
+    # --- I 类：多行 / 定位歧义 ---
+    {
+        "case_id": "I1-real-pass-target-among-many",
+        "objective": "验证：模块 M 接入后任务数据真的落库了（表 task）。本次创建的任务 ID 是 1020，请确认该记录存在且 module 为 M。",
+        "claimed_success": "已成功创建任务，任务 ID 1020。",
+        "db_state": {
+            "task": [
+                {"id": 1019, "status": "created", "module": "OTHER"},
+                {"id": 1020, "status": "created", "module": "M"},
+                {"id": 1021, "status": "created", "module": "OTHER"},
+            ]
+        },
+        "expected": True,
+        "category": "locate_ambiguity",
+        "note": "多行混杂，目标 1020 确实是 M —— locate 必须精确到目标而非任意行",
+    },
+    {
+        "case_id": "I2-trap-target-among-many-wrong-module",
+        "objective": "验证：模块 M 接入后任务数据真的落库了（表 task）。本次创建的任务 ID 是 1022，请确认该记录存在且 module 为 M。",
+        "claimed_success": "已成功创建任务，任务 ID 1022。",
+        "db_state": {
+            "task": [
+                {"id": 1021, "status": "created", "module": "M"},
+                {"id": 1022, "status": "created", "module": "OTHER"},
+            ]
+        },
+        "expected": False,
+        "category": "locate_ambiguity",
+        "note": "表里有 M 的行但目标 1022 是 OTHER —— 定位到别的行就误判为真",
+    },
+    # --- J 类：证据不足 / 不可判定（应判不确定 → 转人工） ---
+    {
+        "case_id": "J1-uncertain-no-db-evidence",
+        "objective": "验证：模块 M 接入后任务数据真的落库了（表 task）。",
+        "claimed_success": "已成功创建任务，任务 ID 1030。",
+        "db_state": None,
+        "expected": False,
+        "category": "insufficient_evidence",
+        "note": "完全没有 db_state 证据 → 无法证实 → 判否（不得凭空判真）",
+    },
+    {
+        "case_id": "J2-uncertain-claimed-only",
+        "objective": "验证：模块 M 接入后任务数据真的落库了（表 task）。",
+        "claimed_success": "已成功创建任务，任务 ID 1031，已确认写入。",
+        "db_state": None,
+        "expected": False,
+        "category": "insufficient_evidence",
+        "note": "只有自述、零工具证据 —— 这正是 LLM-as-Judge 会被骗的场景",
+    },
 ]
 
 
 class TestGoldenSampleIntegrity:
     def test_sample_count(self):
-        assert len(GOLDEN_SAMPLES) == 9
+        assert len(GOLDEN_SAMPLES) == 20
 
     def test_all_categories_present(self):
         cats = {s["category"] for s in GOLDEN_SAMPLES}
@@ -515,7 +748,25 @@ class TestGoldenSampleIntegrity:
             "trap_surface_pass",
             "trap_surface_fail",
             "trap_locate",
+            "multi_table",
+            "boundary",
+            "field_semantics",
+            "locate_ambiguity",
+            "insufficient_evidence",
         }
+
+    def test_trap_sample_count_is_at_least_half(self):
+        """陷阱样本必须占足够比例 —— 否则「高准确率」没有意义。
+
+        真实 agent 的价值全在陷阱样本上（能不能识破表面信号）。
+        """
+        traps = [
+            s
+            for s in GOLDEN_SAMPLES
+            if s["category"].startswith("trap") or s["category"] in ("field_semantics", "locate_ambiguity")
+        ]
+        assert len(traps) >= 9
+        assert len(traps) / len(GOLDEN_SAMPLES) >= 0.45
 
     def test_expected_is_bool(self):
         for s in GOLDEN_SAMPLES:
@@ -573,6 +824,53 @@ class TestGoldenSampleIntegrity:
         assert "成功" in s["claimed_success"]
         # 期望判否
         assert s["expected"] is False
+
+    def test_multi_table_samples_are_consistent(self):
+        """多表样本：F1 数据在别的表（应判否），F2 两表都有（应判真）。"""
+        f1 = next(x for x in GOLDEN_SAMPLES if x["case_id"].startswith("F1"))
+        f2 = next(x for x in GOLDEN_SAMPLES if x["case_id"].startswith("F2"))
+        # F1: task 表必须不存在或为空
+        assert "task" not in (f1.get("db_state") or {}) or not f1["db_state"]["task"]
+        assert f1["expected"] is False
+        # F2: task 表必须有行
+        assert (f2.get("db_state") or {}).get("task")
+        assert f2["expected"] is True
+
+    def test_field_semantics_traps_are_real(self):
+        """字段语义陷阱：行存在但关键字段值不符 —— 必须真的不符。"""
+        h1 = next(x for x in GOLDEN_SAMPLES if x["case_id"].startswith("H1"))
+        row = h1["db_state"]["task"][0]
+        assert row["module"] == "M"  # module 对
+        assert row["status"] != "created"  # status 不对 → 陷阱成立
+        assert h1["expected"] is False
+
+        h2 = next(x for x in GOLDEN_SAMPLES if x["case_id"].startswith("H2"))
+        row2 = h2["db_state"]["task"][0]
+        assert row2["module"] != "M"  # 大小写不同 → 陷阱成立
+        assert h2["expected"] is False
+
+    def test_insufficient_evidence_samples_have_no_db_state(self):
+        """证据不足样本：db_state 必须真的缺失 —— 否则就退化成普通样本。"""
+        for s in GOLDEN_SAMPLES:
+            if s["category"] != "insufficient_evidence":
+                continue
+            assert s.get("db_state") is None, f"{s['case_id']} 证据不足样本却有 db_state"
+            assert s["expected"] is False, f"{s['case_id']} 证据不足样本不应判真"
+            assert "成功" in s["claimed_success"], f"{s['case_id']} 缺表面信号，测不出抗骗能力"
+
+    def test_locate_ambiguity_samples_have_both_kinds(self):
+        """定位歧义：I1 目标在、M 也对；I2 目标在、但 module 不对。
+
+        两者的差别只在目标行 —— 若两条样本真值相同则陷阱无效。
+        """
+        i1 = next(x for x in GOLDEN_SAMPLES if x["case_id"].startswith("I1"))
+        i2 = next(x for x in GOLDEN_SAMPLES if x["case_id"].startswith("I2"))
+        assert i1["expected"] is True
+        assert i2["expected"] is False
+        # 两条都必须「表里同时有 M 和非 M 的行」——这才是定位歧义
+        for s in (i1, i2):
+            mods = {r.get("module") for r in s["db_state"]["task"]}
+            assert "M" in mods and "OTHER" in mods, f"{s['case_id']} 缺少 M/OTHER 混合行"
 
 
 class TestGoldenSampleEvidence:

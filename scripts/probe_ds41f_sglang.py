@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """DeepSeek-V4.1-Flash INT8 @ 10.62.64.38:30089 (sglang) 能力探测
 
 与 30828 端点（vllm-0.31.0-tp8，reasoning 字段）对比：
@@ -132,7 +131,7 @@ if __name__ == "__main__":
             print(f"    -> {tc[0]['function']['name']}({tc[0]['function']['arguments']})")
         else:
             print(f"    content: {(m.get('content') or '')[:150]!r}")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — 探针/守卫脚本需捕获任意异常并记录
         print(f"  ERR {type(e).__name__}: {e}")
 
     print("\n=== 7) max_tokens 截断行为（思考吃预算）===")

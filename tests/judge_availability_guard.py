@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """判定层可用性守卫（防止依赖缺失导致静默误判为模型失败）
 
 背景（2026-10-27 实测事故）：
@@ -55,19 +54,19 @@ def test_laya_judge_can_judge():
     sys.path.insert(0, os.path.join(root, "src"))
     try:
         from nlaut.judge.protocol import Evidence, Question, get_judge
-    except Exception as e:  # pragma: no cover
+    except Exception as e:  # pragma: no cover  # noqa: BLE001 — 探针/守卫脚本需捕获任意异常并记录
         pytest.fail(f"无法导入 judge 协议: {e}")
 
     try:
         judge = get_judge("laya")
-    except Exception as e:  # pragma: no cover
+    except Exception as e:  # pragma: no cover  # noqa: BLE001 — 探针/守卫脚本需捕获任意异常并记录
         pytest.fail(f"get_judge('laya') 失败: {type(e).__name__}: {e}")
 
     ev = Evidence(case_id="guard_probe", llm_response="机器学习是让计算机从数据中自动学习规律的方法。")
     q = Question(text="这段文字是否在描述机器学习？只答 yes 或 no。", kind="noul")
     try:
         verdict = judge.judge(ev, q)
-    except Exception as e:  # pragma: no cover
+    except Exception as e:  # pragma: no cover  # noqa: BLE001 — 探针/守卫脚本需捕获任意异常并记录
         pytest.fail(
             f"Laya judge 判定失败（判定层不可用，会让 P0 大量用例被误记为 failed）: "
             f"{type(e).__name__}: {e}\n"

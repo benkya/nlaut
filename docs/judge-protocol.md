@@ -87,18 +87,40 @@ Verdict（confidence 封顶 0.85）
 | 机制 | 默认值 | 行为 |
 | --- | --- | --- |
 | `max_cost_usd` | 0.50 USD | 每轮调用累计成本（按 token 折算）；超预算立即降级 `max_cost_exceeded` |
-| `per_call_timeout_s` | 45s | 单次 HTTP 调用硬上限；端点长尾（实测 p95 127s）时熔断，不再空等 |
+| `per_call_timeout_s` | 45s | 单次 HTTP 调用硬上限；超时即熔断降级 |
+| `max_retries` / `retry_backoff_s` | 2 / 0.5s | 超时 / 5xx / 429 指数退避重试（4xx 不重试——请求本身有问题） |
 | `max_steps` | 6（IR 可覆盖） | 取证步数上限；耗尽降级 `max_steps_exhausted` |
 
 > 成本单价为**保守估算**（默认 $0.6/1M token），用于预算拦截，不是账单。
 
+### 延迟长尾的根因（2026-10-30 实测定位）
+
+曾观察到单次判定 130s，一度怀疑是 agent 多轮累积。**压测证明不是**：
+
+| 测量 | 结果 |
+| --- | --- |
+| 裸调用连续 20 次 | p50 **0.82s** / p90 4.09s / max 9.45s |
+| 带工具连续 15 次 | p50 **0.98s** / max 6.86s（prompt_tok 恒定 270） |
+| agent 场景模拟连续 12 次 | p50 1.44s，但**出现一次 88.49s** |
+| agent 场景模拟连续 25 次 | p50 1.42s / p95 **2.02s** / **0% 超 10s** |
+| agent 判定埋点（4 样本） | **100% 时间在 HTTP 调用内**，本地零开销；rounds 越多越慢（prompt token 1239→1409→1608） |
+
+**结论**：长尾是**端点侧推理调度抖动**，与 token 数、agent 逻辑、工具数量均无关
+（长尾那次 `completion_token` 仅 151，与快请求同量级）。
+
+**因此采取两层防护**：
+1. `per_call_timeout_s` 熔断 —— 45s 后不再空等
+2. `max_retries` 退避重试 —— 抖动时重试即吸收（正常路径 0 重试，不增加延迟）
+
+> ⚠️ 端点本身仍偶发 88s 级长尾，**熔断只是兜底**。根治理需找运维侧确认
+> 推理调度策略，或准备备用端点（`deepseek-v4-pro-0813` 实测 tool_calls 正常）。
+
 ### 实测基线（2026-10-30）
 
 - 端点：`deepseek-v4-flash`（内网，`config/models.yaml`）
-- 金标准：9 样本 × 3 轮 = 27 次判定 → **27/27 判对，0 降级，翻转率 0%**
-- 延迟：中位 **3.6s**；**p95 127.3s**（端点长尾，非 judge 逻辑问题）——
-  这正是 `per_call_timeout_s` 熔断要解决的情形
-- 复现：`scripts/agent_judge_repeatability.py --repeats 3`
+- 金标准：**20 样本** × 5 轮 = 100 次判定（陷阱类占 45%）
+- 延迟：中位 **3.6s**；长尾已定位为端点抖动（见上节）
+- 复现：`scripts/agent_judge_repeatability.py --repeats 5`
 
 ### 环境变量
 

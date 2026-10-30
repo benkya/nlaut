@@ -201,8 +201,8 @@ cron 每 5 分钟扫描 → 自动识别 → 跑 P0 批次 → 报告发群 → 
 - **Agent 引擎 conf 强制封顶 0.85** → 必定走 human_review（agent judge 是「证据充分的判定」，不是「自动放行许可」）
 
 **判定层自身是被测对象**：`tests/judge_golden/` 金标准回归防止 AI 误报进入报告；
-`tests/agent_judge_test.py` 另有 9 样本金标准 × 3 轮一致性度量
-（实测 27/27 判对、翻转率 0%、中位延迟 2.9s）。
+`tests/agent_judge_test.py` 另有 **20 样本金标准**（陷阱类占 45%）× 5 轮一致性度量
+（复现：`scripts/agent_judge_repeatability.py --repeats 5`）。
 
 ## 断言类型速查
 
@@ -238,6 +238,7 @@ assertions:
   需显式放行 `NLaut_AGENT_JUDGE_ALLOWED_HOSTS` / `_ALLOWED_PATHS`；
   越界记入 `raw.scope_violations`
 - **成本预算** `max_cost_usd`（默认 0.5 USD）+ **单次调用熔断** `per_call_timeout_s`（默认 45s）
+  + **退避重试** `max_retries`（默认 2）——吸收端点推理抖动
 - 环境变量：`NLaut_AGENT_JUDGE_MODEL`（默认 `deepseek-v4-flash`）、
   `NLaut_AGENT_JUDGE_TOOLS`（逗号分隔工具名子集，用于「有无工具」消融对照）
 - 一致率实测：`scripts/agent_judge_repeatability.py`

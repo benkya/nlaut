@@ -46,6 +46,13 @@ DEFAULT_PER_CALL_TIMEOUT_S = 45.0
 # 仅用于 max_cost_usd 预算拦截，不是实际账单。
 DEFAULT_COST_PER_1K_TOKENS_USD = 0.0006
 
+# 端点偶发抖动的重试次数与退避基数。
+# 实测：连续 25 次调用 p95=2.02s、0% 超 10s，但同一天观察到 88s 长尾
+# （completion_token 仅 151，与快请求同量级 → 与 token 数无关，
+#  是端点侧推理调度抖动）。重试只在抖动/故障时付出成本。
+DEFAULT_MAX_RETRIES = 2
+DEFAULT_RETRY_BACKOFF_S = 0.5
+
 if TYPE_CHECKING:  # pragma: no cover — 仅类型引用，避免运行时循环导入
     from .agent_tools import ToolPolicy
 
@@ -143,6 +150,8 @@ class AgentJudge:
         per_call_timeout_s: float = DEFAULT_PER_CALL_TIMEOUT_S,
         cost_per_1k_tokens_usd: float = DEFAULT_COST_PER_1K_TOKENS_USD,
         policy: ToolPolicy | None = None,
+        max_retries: int = DEFAULT_MAX_RETRIES,
+        retry_backoff_s: float = DEFAULT_RETRY_BACKOFF_S,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.model = model
@@ -161,6 +170,9 @@ class AgentJudge:
         self.cost_per_1k_tokens_usd = cost_per_1k_tokens_usd
         # 作用域策略：与 tool_impls 共享同一实例（越界由工具实现记账）
         self._policy = policy
+        # 端点抖动重试（正常路径不增加延迟）
+        self.max_retries = max_retries
+        self.retry_backoff_s = retry_backoff_s
 
     # --- 工具执行 ---
 
@@ -193,8 +205,13 @@ class AgentJudge:
     def _call(self, messages: list[dict], with_tools: bool) -> tuple[dict, float]:
         """调用端点，返回 (response_json, 本次调用估算成本 USD)。
 
-        超时用 min(per_call_timeout_s, 剩余整体预算)——
-        端点长尾时熔断，不让一次判定卡住数分钟。
+        重试策略（应对端点偶发长尾）：
+        实测 2026-10-30 连续 25 次调用 p95=2.02s、0% 超 10s，
+        但同一天也观察到 88s 的偶发长尾（p50=1.44s 时出现一次）。
+        根因是**端点侧推理调度抖动**，与 token 数、agent 逻辑无关
+        （长尾那次 completion_token 仅 151，与快请求同量级）。
+        因此对超时/5xx 做**指数退避重试**：正常路径 0 重试（不增加延迟），
+        只有抖动/故障时才付重试成本。
         """
         import httpx
 
@@ -209,25 +226,53 @@ class AgentJudge:
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
 
-        resp = httpx.post(
-            f"{self.base_url}/chat/completions",
-            json=body,
-            headers=headers,
-            timeout=self.per_call_timeout_s,
-            trust_env=False,
-        )
-        if resp.status_code != 200:
-            raise RuntimeError(f"agent judge 端点 HTTP {resp.status_code}: {resp.text[:200]}")
-        data = resp.json()
+        url = f"{self.base_url}/chat/completions"
+        last_err: Exception | None = None
 
+        for attempt in range(self.max_retries + 1):
+            if attempt:
+                # 指数退避：0.5s → 1s → 2s …
+                time.sleep(self.retry_backoff_s * (2 ** (attempt - 1)))
+            try:
+                resp = httpx.post(
+                    url,
+                    json=body,
+                    headers=headers,
+                    timeout=self.per_call_timeout_s,
+                    trust_env=False,
+                )
+            except httpx.TimeoutException as e:
+                last_err = e
+                continue
+            except httpx.HTTPError as e:
+                last_err = e
+                continue
+
+            if resp.status_code == 200:
+                data = resp.json()
+                return data, self._usage_cost(data)
+
+            # 5xx 与 429 视为可重试；4xx（除 429）是请求本身有问题，重试无意义
+            if resp.status_code in (429,) or 500 <= resp.status_code < 600:
+                last_err = RuntimeError(
+                    f"agent judge 端点 HTTP {resp.status_code}: {resp.text[:200]}"
+                )
+                continue
+            raise RuntimeError(
+                f"agent judge 端点 HTTP {resp.status_code}: {resp.text[:200]}"
+            )
+
+        raise RuntimeError(f"agent judge 端点重试 {self.max_retries} 次仍失败: {last_err}")
+
+    def _usage_cost(self, data: dict) -> float:
+        """按 usage 估算本次调用成本 USD。"""
         usage = data.get("usage") or {}
         tokens = int(usage.get("total_tokens") or 0)
         if not tokens:
             tokens = int(usage.get("prompt_tokens") or 0) + int(
                 usage.get("completion_tokens") or 0
             )
-        cost = tokens / 1000.0 * self.cost_per_1k_tokens_usd
-        return data, cost
+        return tokens / 1000.0 * self.cost_per_1k_tokens_usd
 
     # --- 主判定流程 ---
 
