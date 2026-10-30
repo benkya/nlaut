@@ -9,7 +9,7 @@ import argparse
 import html
 import json
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 _STATUS_COLOR = {
@@ -30,7 +30,7 @@ def render(out_dir: Path, model_label: str | None = None) -> Path:
     summary = json.loads(summary_path.read_text(encoding="utf-8"))
 
     model_id = model_label or summary["model"]
-    now = datetime.now(tz=timezone.utc).isoformat(timespec="minutes")[:16]
+    now = datetime.now(tz=UTC).isoformat(timespec="minutes")[:16]
     total = summary["steps_total"]
     passed = summary["steps_passed"]
     failed = total - passed
@@ -110,7 +110,6 @@ def render(out_dir: Path, model_label: str | None = None) -> Path:
         cls = "pass" if ok else "fail"
         attempts = r.get("attempts", [])
         attempts_n = len(attempts)
-        last_attempt = attempts[-1] if attempts else {}
         err = r.get("error", "") or (attempts[-1].get("error", "") if attempts else "")
         gate = r.get("gate_detail", [])
         gate_str = " ".join("✅" if g else "❌" for g in gate)

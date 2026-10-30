@@ -1,0 +1,23 @@
+id: tc_agent_verify_001
+title: 集成准入门禁 G-11-模块 M 接入后任务数据真的落库
+source: "口述: 模块 M 接进工作台后，建的任务要真的写进库，不能只是界面上说成功"
+req_ref: "集成准入门禁 G-11（组外集成层）"
+priority: P0
+channel: api
+quad:
+  actor: 集成准入门禁
+  action: 自主取证验证落库
+  object: task 表
+  preconditions:
+    - "模块 M 已完成注册并接入工作台"
+    - "已发起一次创建任务的调用"
+steps:
+  - action: api_call
+    system_prompt: "你是软件工厂的任务创建服务。用户要求创建任务，请正常调用创建逻辑。"
+    prompt: "请创建一个任务，任务名 agent_verify_001，模块归属 M。"
+assertions:
+  - kind: agent_verify
+    objective: "验证：模块 M 接入后，本次创建的任务数据是否真的落库到 task 表。判定依据是表里的实际行（module 字段为 M 且存在该任务的 id），不是创建接口的自述成功与否。若 task 表不存在、为空、或找不到 module=M 的对应行，判定为 false。"
+    threshold: 0.9
+    max_steps: 6
+postconditions: []

@@ -9,12 +9,13 @@ latency_ms / conversation 字段，支持 API 通道判定。
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Literal, Protocol, runtime_checkable
 
 from pydantic import BaseModel, Field
 
 QuestionKind = Literal["noul", "choice", "score"]
-EngineName = Literal["deterministic", "mlx-vlm", "laya", "jev"]
+EngineName = Literal["deterministic", "mlx-vlm", "laya", "agent", "jev"]
 
 
 class Evidence(BaseModel):
@@ -71,13 +72,31 @@ class Judge(Protocol):
 
 _JUDGES: dict[str, Judge] = {}
 
+# 工厂型引擎：需要在运行时构造（如 agent judge 需要端点配置 + 工具表）。
+# 工厂签名：factory() -> Judge；get_judge() 在注册表未命中时调用它并缓存实例。
+_JUDGE_FACTORIES: dict[str, Callable[[], Judge]] = {}
+
 
 def register_judge(name: str, judge: Judge) -> None:
     _JUDGES[name] = judge
 
 
+def register_judge_factory(name: str, factory: Callable[[], Judge]) -> None:
+    """注册一个按需构造的引擎（工厂模式）。
+
+    用于需要运行时上下文的引擎（如 Agent-as-Judge 需要模型端点 + 取证工具集）：
+    import 时不构造，首次 get_judge(name) 时才构造，之后缓存复用。
+    """
+    _JUDGE_FACTORIES[name] = factory
+
+
 def get_judge(name: str) -> Judge:
-    try:
+    if name in _JUDGES:
         return _JUDGES[name]
-    except KeyError:
-        raise KeyError(f"未注册判定引擎: {name}（已注册: {sorted(_JUDGES)}）") from None
+    if name in _JUDGE_FACTORIES:
+        judge = _JUDGE_FACTORIES[name]()
+        _JUDGES[name] = judge
+        return judge
+    raise KeyError(
+        f"未注册判定引擎: {name}（已注册: {sorted(_JUDGES)}，工厂: {sorted(_JUDGE_FACTORIES)}）"
+    ) from None

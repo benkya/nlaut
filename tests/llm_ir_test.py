@@ -461,3 +461,114 @@ class TestLayaRenderState:
         state = render_state(ev)
         assert "P95 TTFT" in state
         assert "1500" in state
+
+
+class TestAgentVerifyAssertion:
+    """agent_verify 断言（Agent-as-Judge，v0.4.0）的 IR 与路由验证。
+
+    覆盖「新增断言类型的完整注册链」：ir/model.py + runner._question_for
+    + runner._engine_name + docs/ir-schema.md。
+    """
+
+    def test_model_defaults(self):
+        from nlaut.ir.model import AssertAgentVerify
+
+        a = AssertAgentVerify(kind="agent_verify", objective="验证任务是否真的落库")
+        assert a.kind == "agent_verify"
+        assert a.judge == "agent"
+        assert a.threshold == 0.9
+        assert a.max_steps == 6
+        assert a.system_prompt is None
+
+    def test_objective_required(self):
+        """objective 为空必须校验失败——judge 没有目标就无从取证。"""
+        import pytest
+        from pydantic import ValidationError
+
+        from nlaut.ir.model import AssertAgentVerify
+
+        with pytest.raises(ValidationError):
+            AssertAgentVerify(kind="agent_verify", objective="")
+
+    def test_in_assertion_union(self):
+        """agent_verify 必须能通过判别联合解析（否则 YAML 用例会校验失败）。"""
+        from nlaut.ir.model import AssertAgentVerify
+
+        obj = AssertAgentVerify.model_validate(
+            {"kind": "agent_verify", "objective": "验证落库", "max_steps": 3}
+        )
+        assert obj.kind == "agent_verify"
+        assert obj.max_steps == 3
+
+    def test_engine_name_routes_to_agent(self):
+        from nlaut.executor.runner import _engine_name
+        from nlaut.ir.model import AssertAgentVerify
+
+        a = AssertAgentVerify(kind="agent_verify", objective="验证落库")
+        assert _engine_name(a) == "agent"
+
+    def test_question_for_carries_context(self):
+        """Question 必须带上 objective + max_steps + threshold + system_prompt。"""
+        from nlaut.executor.runner import _question_for
+        from nlaut.ir.model import AssertAgentVerify
+
+        a = AssertAgentVerify(
+            kind="agent_verify",
+            objective="验证任务是否真的落库",
+            max_steps=4,
+            threshold=0.85,
+            system_prompt="自定义取证约束",
+        )
+        q = _question_for(a, None)
+        assert q.kind == "noul"
+        assert q.text == "验证任务是否真的落库"
+        assert q.context["max_steps"] == 4
+        assert q.context["threshold"] == 0.85
+        assert q.context["system_prompt"] == "自定义取证约束"
+
+    def test_other_assertions_not_affected(self):
+        """新增 agent_verify 不得改变既有断言的引擎路由。"""
+        from nlaut.executor.runner import _engine_name
+        from nlaut.ir.model import (
+            AssertAttribute,
+            AssertResponseContains,
+            AssertTextVisible,
+            AssertVisualState,
+        )
+
+        assert _engine_name(AssertTextVisible(kind="text_visible", selector=".a", expected="x")) == (
+            "deterministic"
+        )
+        assert (
+            _engine_name(AssertAttribute(kind="attribute", selector=".a", name="x", expected="1"))
+            == "deterministic"
+        )
+        assert (
+            _engine_name(AssertResponseContains(kind="response_contains", keywords=["a"]))
+            == "deterministic"
+        )
+        assert _engine_name(AssertVisualState(kind="visual_state", prompt="?")) == "mlx-vlm"
+
+    def test_agent_engine_registered(self):
+        """agent 引擎必须可通过 get_judge 取到（工厂模式，构造需真实配置）。"""
+        from nlaut.judge.protocol import _JUDGE_FACTORIES, get_judge
+
+        assert "agent" in _JUDGE_FACTORIES
+        # 真正取一次（工厂会读 config/models.yaml + 环境变量）
+        judge = get_judge("agent")
+        assert judge.engine == "agent"  # type: ignore[attr-defined]
+        assert judge.tools  # type: ignore[attr-defined]  # 工具集非空
+
+    def test_yaml_case_parses(self):
+        """仓库内的 agent_verify 用例必须能正常解析。"""
+        from pathlib import Path
+
+        from nlaut.ir.model import TestCaseIR
+
+        path = Path(__file__).parent.parent / "cases" / "demo" / "tc_agent_verify_001.yaml"
+        if not path.exists():
+            import pytest
+
+            pytest.skip("agent_verify 示例用例不存在")
+        ir = TestCaseIR.from_yaml_file(path)
+        assert ir.assertions[0].kind == "agent_verify"

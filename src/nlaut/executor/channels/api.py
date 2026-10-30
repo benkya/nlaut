@@ -89,11 +89,20 @@ def _call_api(
     timeout: float = 60.0,
     repeat: int = 1,
     reasoning_effort: str = "",
+    disable_thinking: bool = False,
 ) -> tuple[dict, float]:
     """调用 OpenAI-compatible API，返回 (response_json, latency_ms)。
 
     支持 stream=true：收集所有 chunk 拼成完整 response。
     reasoning_effort: 推理模型思考强度（如 "low"/"medium"/"high"），空串不传。
+    disable_thinking: 关闭模型思考，**P0 对话批次专用开关**。
+
+    为何不用 reasoning_effort 关思考（DeepSeek-V4.1-Flash 实测 2026-10-20）：
+      裸请求                1.9s / reasoning_tokens=469
+      reasoning_effort=low  4.6s / reasoning_tokens=1236  ← 该网关不认此字段，反向放大思考
+      enable_thinking=False 0.3s / reasoning_tokens=0     ← 唯一正确开关，提速 6.3×
+    故关思考统一走 chat_template_kwargs.enable_thinking（--think off 4P12S 侧同款），
+    且与 reasoning_effort 互斥：disable_thinking 优先，reasoning_effort 被丢弃。
     """
     url = f"{base_url.rstrip('/')}/chat/completions"
     headers = {"Content-Type": "application/json"}
@@ -106,7 +115,9 @@ def _call_api(
     }
     if tools:
         body["tools"] = tools
-    if reasoning_effort:
+    if disable_thinking:
+        body["chat_template_kwargs"] = {"enable_thinking": False}
+    elif reasoning_effort:
         body["reasoning_effort"] = reasoning_effort
 
     t0 = time.time()
@@ -140,16 +151,20 @@ def _call_api(
                 if not choices:
                     continue
                 delta = choices[0].get("delta", {}) or {}
-                # TTFT 语义（v0.2.7）：首个含 content 或 reasoning_content 的 chunk 即计时——
+                # TTFT 语义（v0.2.7）：首个含 content 或 reasoning 的 chunk 即计时——
                 # 推理模型（glm-5.2 等）先流式输出思考再出正文，若只认 content，
                 # 3s 上限会把所有推理模型误判为 TTFT 超标（实测首chunk 0.6-1.5s、首content 10-12s）。
-                if ttft_ms is None and (delta.get("content") or delta.get("reasoning_content")):
+                # 思考字段名因厂商而异：DeepSeek/glm-5.2 用 reasoning_content，
+                # GLM-5.3-Flash / DeepSeek-V4.1-Flash 用 reasoning（无 _content 后缀）——
+                # 只认 reasoning_content 会把新模型的思考时间全算进 TTFT 等待（实测 12.5s 误判超标）。
+                delta_reasoning = delta.get("reasoning_content") or delta.get("reasoning")
+                if ttft_ms is None and (delta.get("content") or delta_reasoning):
                     ttft_ms = (time.time() - t0) * 1000
                 if delta.get("content"):
                     full_content += delta["content"]
                     stream_chunks += 1
-                if delta.get("reasoning_content"):
-                    reasoning_len += len(delta.get("reasoning_content") or "")
+                if delta_reasoning:
+                    reasoning_len += len(delta_reasoning)
                 if delta.get("tool_calls"):
                     for tc in delta["tool_calls"]:
                         idx = tc.get("index", 0)
@@ -201,12 +216,14 @@ def execute(
     model: str = "",
     timeout: float = 60.0,
     reasoning_effort: str = "",
+    disable_thinking: bool = False,
     logger: Callable[[str], None] = print,
 ) -> dict:
     """执行一条 API 通道 IR 用例，返回 Evidence 字段。
 
     必须提供 base_url, api_key, model（由 runner 从模型配置注入）。
     reasoning_effort: 推理模型思考强度（如 "low"），空串不传。
+    disable_thinking: 关闭模型思考（P0 对话批次开关，走 chat_template_kwargs）。
     返回 dict 直接喂 Evidence(case_id=ir.id, **result)。
     """
     data = data or {}
@@ -250,6 +267,7 @@ def execute(
                 stream=True,
                 timeout=timeout,
                 reasoning_effort=reasoning_effort,
+                disable_thinking=disable_thinking,
             )
             last_response = response_i
             aggregated_latency += latency_i
@@ -289,6 +307,7 @@ def execute(
             stream=is_stream,
             timeout=timeout,
             reasoning_effort=reasoning_effort,
+            disable_thinking=disable_thinking,
         )
 
     # 提取 assistant message

@@ -1,7 +1,7 @@
 [project]
 name = "nlaut"
-version = "0.3.0"
-description = "Natural-language Automation Testing framework: NL in -> IR (cases/) -> derived pytest/Playwright code (gen/) -> 3-tier judging -> evidence-chained reports"
+version = "0.4.0"
+description = "Natural-language Automation Testing framework: NL in -> IR (cases/) -> derived pytest/Playwright code (gen/) -> 4-tier judging (deterministic/VLM/Laya/Agent-as-Judge) -> evidence-chained reports"
 requires-python = ">=3.11"
 dependencies = [
     "hf-transfer>=0.1.9",
@@ -13,6 +13,12 @@ dependencies = [
     "pydantic>=2.7",
     "PyYAML>=6.0",
     "httpx>=0.27",
+    # socksio: httpx 的 SOCKS 代理支持。缺它会在 httpx 初始化 client 阶段
+    # 直接 ImportError("Using SOCKS proxy, but the 'socksio' package is not installed")，
+    # 导致 Laya judge（HF 权重加载）整体不可用 —— 表现为 P0 批次大量用例
+    # 判定数为 0 / 无 run_end，误判为模型能力失败（实测 2026-10-27）。
+    # 触发条件：环境变量 all_proxy=socks5://... 存在（HF 直连不通需走代理）。
+    "socksio>=1.0",
 ]
 
 [dependency-groups]
@@ -30,9 +36,10 @@ packages = ["src/nlaut"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-q -m 'not mlx'"
+addopts = "-q -m 'not mlx and not agent'"
 markers = [
     "mlx: 需要本机 MLX 权重的真实推理集成测试（默认跳过，-m mlx 显式开启）",
+    "agent: 需要真实 LLM 端点的 Agent-as-Judge 集成测试（默认跳过，-m agent 显式开启）",
 ]
 
 [tool.ruff]

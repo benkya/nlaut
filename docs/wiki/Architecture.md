@@ -10,7 +10,7 @@ L2 生成层   pipeline/（口述 → 意图澄清 → 四元组 → RAG → IR�
             当前由对话 AI 承担（协议: docs/verbal-to-ir-protocol.md），pipeline/ 为 M1 自动化预留
 L3 资产层   ir/（TestCaseIR = 唯一事实源；数据工厂；快照/回滚）
 L4 执行层   executor/（双通道：Playwright web + Electron CDP；环境矩阵；flaky 统计）
-L5 判定层   judge/（三级漏斗：确定性 → mlx-vlm → laya-mlx；置信度路由）
+L5 判定层   judge/（四级漏斗：确定性 → mlx-vlm → laya-mlx → agent 自主取证；置信度路由）
 L6 报告层   report/（HTML + 证据链：截图/判定明细/置信度/口述溯源内嵌）
 ```
 
@@ -47,10 +47,18 @@ L6 报告层   report/（HTML + 证据链：截图/判定明细/置信度/口述
 | 1° 确定性 | `judge/deterministic.py` | selector 文案/JSON schema/SQL 比对 | 零 AI、微秒级 |
 | 2° 视觉 | `judge/vlm_mlx.py`（mlx-vlm，Qwen 系 VLM） | 页面状态、渲染、语义文案 | 本地推理，单图秒级 [推测] |
 | 3° System One | `judge/laya.py`（laya-mlx；jev 云端同接口预留） | Noul/Choice/Score 类型决策 | 本地 13.4ms 级 / 云 150ms |
+| 4° Agent | `judge/agent_judge.py` + `judge/agent_tools.py` | **judge 自主调只读工具取证**（查库/查接口/翻日志） | 云端模型，2-5s/次（实测中位 2.9s） |
 
 路由规则（`judge/arbiter.py`）：置信度 ≥0.9 自动判定；0.5–0.9 人工仲裁队列（附完整证据包）；
-引擎自报低置信视为不确定。判定层自身是被测对象：`tests/judge_golden/` ≥30 张标注截图回归，
+引擎自报低置信视为不确定。**4° agent 的置信度强制封顶 0.85 → 必定转人工仲裁**。
+判定层自身是被测对象：`tests/judge_golden/` ≥30 张标注截图回归 +
+`tests/agent_judge_test.py` 9 样本金标准（实测 27/27 判对、翻转率 0%），
 统计准确率与校准曲线，防止 AI 误报进入报告。
+
+**4° agent 与 1°–3° 的本质差异**：证据不是通道预先塞进 `Evidence`，
+而是 judge 自己在运行时调工具去取。工具集固定为 7 个**只读**工具
+（`query_db` / `locate_object` / `http_probe` / `read_log` / `read_file` /
+`inspect_trace` / `list_registry`），judge 不能改动被测系统状态。
 
 ## 双通道注意（L4）
 

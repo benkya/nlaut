@@ -30,6 +30,102 @@ def _esc(s) -> str:
     return html.escape(str(s))
 
 
+def _render_agent_trace(trace: list | None, meta: dict | None) -> str:
+    """渲染 Agent-as-Judge 取证轨迹（v0.4.0）。
+
+    展示三件事（人工仲裁时最需要的）：
+    1. judge 调了哪些工具、拿到什么证据（取证轨迹表）
+    2. 最终判定理由（模型自己的话）
+    3. 成本 / 轮数 / 作用域越界（可审计）
+    """
+    if not trace:
+        return ""
+    m = meta or {}
+
+    # 工具调用轨迹表
+    tr_rows = []
+    for t in trace:
+        tool = t.get("tool", "")
+        args = t.get("args") or {}
+        result = t.get("result")
+        if isinstance(result, dict):
+            if "error" in result:
+                brief = f"❌ {result['error']}"
+                color = "#c0392b"
+            else:
+                brief = _short_result(result)
+                color = "#333"
+        else:
+            brief = _short_result(result)
+            color = "#333"
+        arg_s = ", ".join(f"{k}={v}" for k, v in list(args.items())[:3])
+        tr_rows.append(
+            f"<tr><td>{t.get('step', '')}</td>"
+            f"<td><code>{_esc(tool)}</code></td>"
+            f"<td class='muted'>{_esc(arg_s)[:120]}</td>"
+            f"<td style='color:{color}'>{_esc(brief)[:300]}</td></tr>"
+        )
+
+    head_bits = []
+    if m.get("rounds") is not None:
+        head_bits.append(f"{m['rounds']} 轮")
+    if m.get("tool_calls_total") is not None:
+        head_bits.append(f"{m['tool_calls_total']} 次工具调用")
+    if m.get("elapsed_ms") is not None:
+        head_bits.append(f"{m['elapsed_ms'] / 1000:.1f}s")
+    if m.get("cost_usd") is not None:
+        head_bits.append(f"${m['cost_usd']:.5f}")
+    head = " · ".join(head_bits)
+
+    extra = ""
+    if m.get("degraded"):
+        extra += (
+            f"<p class='muted' style='color:#b8860b'>⚠️ 降级: {_esc(m['degraded'])}</p>"
+        )
+    viol = m.get("scope_violations") or []
+    if viol:
+        v_rows = "".join(
+            f"<li><code>{_esc(v.get('tool'))}</code> {_esc(v.get('target', '')[:80])}"
+            f" — {_esc(v.get('reason', '')[:100])}</li>"
+            for v in viol
+        )
+        extra += (
+            f"<details><summary>🚫 作用域越界（{len(viol)}）</summary>"
+            f"<ul style='font-size:12px;color:#c0392b'>{v_rows}</ul></details>"
+        )
+    reason = m.get("reason") or ""
+    if reason:
+        extra += (
+            f"<details><summary>🧠 判定理由</summary>"
+            f"<pre style='white-space:pre-wrap;font-size:12px;background:#f6f8fa;"
+            f"padding:10px;border-radius:6px;overflow-x:auto'>{_esc(reason[:2000])}</pre></details>"
+        )
+
+    return (
+        f"<details open><summary>🔍 Agent 取证轨迹（{head}）</summary>"
+        f"<table style='margin:6px 0;font-size:12px'>"
+        f"<tr><th>步</th><th>工具</th><th>参数</th><th>取证结果</th></tr>"
+        f"{''.join(tr_rows)}</table>{extra}</details>"
+    )
+
+
+def _short_result(result) -> str:
+    """把工具结果压成一行摘要。"""
+    if isinstance(result, dict):
+        if "error" in result:
+            return f"error: {result['error']}"
+        if "row_count" in result:
+            return f"row_count={result['row_count']}"
+        if "matched" in result:
+            return f"matched={result['matched']}/{result.get('total_rows', '?')}"
+        if "status" in result:
+            return f"status={result['status']}"
+        return ", ".join(f"{k}={v}" for k, v in list(result.items())[:4])
+    if isinstance(result, list):
+        return f"[{len(result)} items] {str(result)[:120]}"
+    return str(result)[:200]
+
+
 def render_html(
     results: list[dict],
     out_path: str | Path = "artifacts/report.html",
@@ -123,6 +219,10 @@ def render_html(
             lat = r.get("latency_ms")
             if lat:
                 parts.append(f'<p class="muted">响应延迟: {lat:.0f}ms</p>')
+            # Agent-as-Judge 取证轨迹（v0.4.0）
+            agent_html = _render_agent_trace(r.get("agent_trace"), r.get("agent_meta"))
+            if agent_html:
+                parts.append(agent_html)
             if parts:
                 evidence_html = f'<div style="margin:8px 0">{"&nbsp;".join(parts)}</div>'
         rows.append(f"""
