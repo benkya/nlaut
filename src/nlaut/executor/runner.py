@@ -225,6 +225,9 @@ def run_case(
         )
     evidence = Evidence(case_id=ir.id, **ev_kw)
 
+    # Agent-as-Judge 取证轨迹（若有）：报告层展示 judge 查了什么、拿到什么证据
+    agent_trace = None
+    agent_meta = None
     results = []
     for a in ir.assertions:
         engine_name = _engine_name(a)
@@ -255,6 +258,18 @@ def run_case(
             "detail": decision.reason,
             "latency_ms": round((time.time() - t1) * 1000, 1),
         })
+        # Agent-as-Judge 取证轨迹：报告层展示 judge 查了什么、拿到什么证据
+        if verdict.engine == "agent" and verdict.raw.get("trace"):
+            agent_trace = verdict.raw.get("trace")
+            agent_meta = {
+                "rounds": verdict.raw.get("rounds"),
+                "tool_calls_total": verdict.raw.get("tool_calls_total"),
+                "cost_usd": verdict.raw.get("cost_usd"),
+                "elapsed_ms": verdict.raw.get("elapsed_ms"),
+                "degraded": verdict.raw.get("degraded"),
+                "scope_violations": verdict.raw.get("scope_violations") or [],
+                "reason": verdict.raw.get("reason", "")[:2000],
+            }
 
     # 用例级状态：任一 auto_fail → failed；有 human_review → need_review；否则 passed
     statuses = [r["status"] for r in results if r.get("status")]
@@ -268,6 +283,7 @@ def run_case(
         case_status = "passed"
 
     _log({"event": "run_end", "status": case_status, "duration_s": round(time.time() - t0, 1)})
+
     return {
         "case_id": ir.id,
         "title": ir.title,
@@ -276,13 +292,16 @@ def run_case(
         "status": case_status,
         "assertions": results,
         "screenshot": ev_kw.get("screenshot"),
-        "duration_s": round(time.time() - t0, 1),
+        "duration_s": round((time.time() - t0), 1),
         # 请求与返回（失败/转人工时报告展示，便于人工定性）
         "llm_response": evidence.llm_response,
         "conversation": evidence.conversation,
         "tool_calls": evidence.tool_calls,
         "latency_ms": evidence.latency_ms,
         "response_raw": evidence.response,
+        # Agent-as-Judge 取证轨迹（v0.4.0）
+        "agent_trace": agent_trace,
+        "agent_meta": agent_meta,
     }
 
 

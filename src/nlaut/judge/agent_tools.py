@@ -249,6 +249,7 @@ def build_tool_impls(
     trace: list[dict] | None = None,
     registry: dict | None = None,
     policy: ToolPolicy | None = None,
+    truth_source: Any = None,
 ) -> dict[str, Callable[[dict], Any]]:
     """构造工具实现表。
 
@@ -263,6 +264,9 @@ def build_tool_impls(
     policy:     工具作用域白名单。为 None 时用**默认拒绝**策略
                 （http_probe / read_file / read_log 全部拒绝），
                 避免「忘记配策略」退化成 judge 可读全盘。
+    truth_source: 真实组外模块的真值源（见 nlaut.judge.truth_source）。
+                提供后，`query_db` 会改用它取证据，证据带来源标识，
+                供报告审计与人工仲裁判断可信度。
     """
     impls: dict[str, Callable[[dict], Any]] = {}
     pol = policy if policy is not None else ToolPolicy()
@@ -270,6 +274,18 @@ def build_tool_impls(
     def _query_db(args: dict) -> Any:
         table = args.get("table", "")
         limit = int(args.get("limit") or 20)
+        # 优先走真实真值源（接入组外模块时）
+        if truth_source is not None:
+            ev = truth_source.snapshot(table)
+            if not ev.ok:
+                return {"error": ev.error, "source": ev.source, "hint": "该证据源取不到数据"}
+            val = ev.value
+            base = {"table": table, "source": ev.source, "collected_at": ev.collected_at}
+            if isinstance(val, list):
+                return {**base, "row_count": len(val), "rows": val[:limit]}
+            if isinstance(val, dict) and "row_count" in val:
+                return {**base, "row_count": val["row_count"]}
+            return {**base, "value": val}
         if db_state is None:
             return {"error": "db_state_not_provided", "hint": "本次判定未接入数据库快照"}
         if table not in db_state:
@@ -346,13 +362,20 @@ def build_tool_impls(
         table = args.get("table", "")
         keyword = str(args.get("keyword") or "").strip()
         fields = args.get("fields") or []
-        if db_state is None:
-            return {"error": "db_state_not_provided", "hint": "本次判定未接入数据库快照"}
-        if table not in db_state:
-            return {"error": "table_not_found", "available_tables": sorted(db_state)}
-        rows = db_state[table]
-        if not isinstance(rows, list):
-            return {"error": "table_not_searchable", "table": table, "value": rows}
+        # 真实真值源优先
+        if truth_source is not None:
+            ev = truth_source.snapshot(table)
+            if not ev.ok:
+                return {"error": ev.error, "source": ev.source}
+            rows = ev.value if isinstance(ev.value, list) else []
+        else:
+            if db_state is None:
+                return {"error": "db_state_not_provided", "hint": "本次判定未接入数据库快照"}
+            if table not in db_state:
+                return {"error": "table_not_found", "available_tables": sorted(db_state)}
+            rows = db_state[table]
+            if not isinstance(rows, list):
+                return {"error": "table_not_searchable", "table": table, "value": rows}
         if not keyword:
             return {"error": "keyword_required", "table": table, "row_count": len(rows)}
 

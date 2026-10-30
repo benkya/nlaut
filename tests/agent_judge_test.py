@@ -461,6 +461,57 @@ class TestRetryOnEndpointJitter:
         assert len(calls) == 1
 
 
+class TestTruthSourceIntegration:
+    """真实模块真值源接入（v0.4.0）。
+
+    接入真实组外模块时，`query_db` / `locate_object` 改走 TruthSource，
+    证据带 source + collected_at，供报告审计与人工仲裁判断可信度。
+    """
+
+    def test_query_db_uses_truth_source_with_provenance(self):
+        from nlaut.judge.truth_source import DictTruthSource
+
+        ts = DictTruthSource({"task": [{"id": 1005, "module": "M"}]}, source="db://prod/")
+        impls = build_env_tool_impls(truth_source=ts)
+        res = impls["query_db"]({"table": "task"})
+        assert res["row_count"] == 1
+        assert res["source"] == "db://prod/task"
+        assert res["collected_at"] > 0
+
+    def test_locate_object_uses_truth_source(self):
+        from nlaut.judge.truth_source import DictTruthSource
+
+        ts = DictTruthSource({"task": [{"id": 1005, "module": "M"}]})
+        impls = build_env_tool_impls(truth_source=ts)
+        res = impls["locate_object"]({"table": "task", "keyword": "1005"})
+        assert res["matched"] == 1
+
+    def test_truth_source_failure_is_evidence_not_crash(self):
+        from nlaut.judge.truth_source import DictTruthSource
+
+        ts = DictTruthSource({})
+        impls = build_env_tool_impls(truth_source=ts)
+        res = impls["query_db"]({"table": "nope"})
+        assert "error" in res
+        assert res["source"]
+
+    def test_truth_source_takes_priority_over_db_state(self):
+        """同时给了真值源和 db_state 时，真值源优先（真实接入优先）。"""
+        from nlaut.judge.truth_source import DictTruthSource
+
+        ts = DictTruthSource({"task": [{"id": 999}]})
+        impls = build_env_tool_impls(db_state={"task": [{"id": 1}]}, truth_source=ts)
+        res = impls["query_db"]({"table": "task"})
+        assert res["rows"][0]["id"] == 999
+
+    def test_db_state_still_works_without_truth_source(self):
+        """没有真值源时回落到 db_state 快照（PoC 路径不受影响）。"""
+        impls = build_env_tool_impls(db_state={"task": [{"id": 1}]})
+        res = impls["query_db"]({"table": "task"})
+        assert res["row_count"] == 1
+        assert "source" not in res  # 旧路径不带 provenance
+
+
 class TestDegradation:
     def test_unreachable_endpoint_degrades_to_zero_confidence(self):
         """端点不可用 → confidence=0 + degraded 标记，绝不误判为通过。"""
