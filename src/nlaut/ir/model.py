@@ -251,11 +251,33 @@ class AssertResponseTtftP95(BaseModel):
     judge: Literal["deterministic"] = "deterministic"
 
 
+class AssertAgentVerify(BaseModel):
+    """Agent-as-Judge 断言：judge 自主取证后判定目标是否成立。
+
+    与其他断言的本质差异：**证据由 judge 自己去取**，而不是由通道预先塞进 Evidence。
+    judge 可调用的只读工具集在运行时注入（query_db / http_probe / read_log /
+    read_file / inspect_trace / list_registry）。
+
+    判定结果置信度被强制封顶到 agent_judge.CONFIDENCE_CAP（0.85），
+    因此 route() 必定把它路由到 human_review —— agent judge 的结论是
+    「证据充分的判定」，不是「自动放行许可」。
+
+    v0.4.0 新增。
+    """
+    kind: Literal["agent_verify"]
+    objective: str = Field(min_length=1)  # 判定目标（judge 的取证任务描述）
+    threshold: float = Field(default=0.9, ge=0.0, le=1.0)
+    max_steps: int = Field(default=6, ge=1, le=20)
+    system_prompt: str | None = None  # 可选：覆盖默认取证约束 prompt
+    judge: Literal["agent"] = "agent"
+
+
 Assertion = Annotated[
     AssertTextVisible | AssertAttribute | AssertVisualState | AssertNoul | AssertChoice | AssertScore
     | AssertResponseExact | AssertResponseContains | AssertResponseNotContains
     | AssertResponseJsonSchema | AssertToolCallParams | AssertResponseTime
-    | AssertResponseTtft | AssertResponseLength | AssertResponseTtftP95,
+    | AssertResponseTtft | AssertResponseLength | AssertResponseTtftP95
+    | AssertAgentVerify,
     Field(discriminator="kind"),
 ]
 

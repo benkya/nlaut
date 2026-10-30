@@ -87,6 +87,28 @@ assertions:
 | `response_ttft` | deterministic | max_ms=3000 | 流式首 token 延迟（D14；非流式调用转人工） |
 | `response_ttft_p95` | deterministic | max_p95_ms=3000 | 流式 P95 首 token 延迟（D14 扩展；v0.2.7 多次采样 1-20 次） |
 | `response_length` | deterministic | min_chars, max_chars | 回答字符数区间（D15 字数约束） |
+| `agent_verify` | agent（Agent-as-Judge） | objective, threshold=0.9, max_steps=6, system_prompt? | **自主取证型判定**：judge 自己调只读工具查证据后下结论（v0.4.0 新增） |
+
+## Agent-as-Judge 判定（`agent_verify`，v0.4.0）
+
+与上表所有断言的**本质差异**：证据不是由通道预先塞进 `Evidence`，
+而是 **judge 自己在运行时调工具去取**。
+
+| 项 | 说明 |
+| --- | --- |
+| 判定目标 | `objective`（judge 的取证任务描述，会被写进 system prompt） |
+| 可用工具 | 6 个**只读**工具：`query_db` / `http_probe` / `read_log` / `read_file` / `inspect_trace` / `list_registry` |
+| 终止条件 | 模型不再请求工具（出结论）/ `max_steps` 耗尽 / 端点异常 |
+| 置信度 | 模型自评 High/Medium/Low，**强制封顶 0.85** |
+| 路由结果 | 因 0.85 < 0.9 自动裁决线，`route()` 必定判 `human_review` |
+| 降级 | 端点不可用 / 无 key / 步数耗尽 → `confidence=0` + `raw.degraded`，**绝不误判为通过** |
+
+环境变量：
+
+- `NLaut_AGENT_JUDGE_MODEL` — 指定模型（默认 `deepseek-v4-flash`）
+- `NLaut_AGENT_JUDGE_TOOLS` — 逗号分隔的工具名子集，用于做「有无工具」的消融对照
+
+> 落地位置见 `docs/agent-as-judge-design.md`（接口设计）与 `docs/agent-as-judge-poc-plan.md`（验证方案）。
 
 ## 规则
 

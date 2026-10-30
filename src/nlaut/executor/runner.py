@@ -124,6 +124,17 @@ def _question_for(a, ir: TestCaseIR):
         return Question(kind="choice", text=a.question, options=a.options)
     if a.kind == "score":
         return Question(kind="score", text=a.question)
+    if a.kind == "agent_verify":
+        # Agent-as-Judge：judge 自主取证，证据不预先塞进 Evidence
+        return Question(
+            kind="noul",
+            text=a.objective,
+            context={
+                "system_prompt": a.system_prompt,
+                "max_steps": a.max_steps,
+                "threshold": a.threshold,
+            },
+        )
 
     raise ValueError(f"未知断言类型: {a.kind}")
 
@@ -141,6 +152,9 @@ def _engine_name(a) -> str:
     # VLM 判定
     if kind == "visual_state":
         return "mlx-vlm"
+    # Agent-as-Judge 判定（自主取证型）
+    if kind == "agent_verify":
+        return "agent"
     # Laya 判定
     return "laya"
 

@@ -1,7 +1,7 @@
 [project]
 name = "nlaut"
-version = "0.3.0"
-description = "Natural-language Automation Testing framework: NL in -> IR (cases/) -> derived pytest/Playwright code (gen/) -> 3-tier judging -> evidence-chained reports"
+version = "0.4.0"
+description = "Natural-language Automation Testing framework: NL in -> IR (cases/) -> derived pytest/Playwright code (gen/) -> 4-tier judging (deterministic/VLM/Laya/Agent-as-Judge) -> evidence-chained reports"
 requires-python = ">=3.11"
 dependencies = [
     "hf-transfer>=0.1.9",
@@ -36,9 +36,10 @@ packages = ["src/nlaut"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-q -m 'not mlx'"
+addopts = "-q -m 'not mlx and not agent'"
 markers = [
     "mlx: 需要本机 MLX 权重的真实推理集成测试（默认跳过，-m mlx 显式开启）",
+    "agent: 需要真实 LLM 端点的 Agent-as-Judge 集成测试（默认跳过，-m agent 显式开启）",
 ]
 
 [tool.ruff]

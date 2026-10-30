@@ -1,0 +1,812 @@
+# Agent-as-Judge PoC 方案（G-11 集成准入门禁场景）
+
+> 版本：v0.2（基于仓库现状重写）  
+> 适用范围：nlaut 判定层「Agent-as-Judge（自主取证型判定器）」在集成准入门禁 **G-11** 场景下的可行性验证  
+> 目标判定项：G-11「接入后模块与工作台的交互链路通（数据能进来、结果能出去）」  
+> 文档性质：方案设计，不含实现代码
+
+---
+
+## 0. 现状盘点与结论先行
+
+### 0.1 仓库现状（已核实，非推测）
+
+截至本方案撰写时，nlaut 仓库中**已存在** Agent-as-Judge 的可运行原型（未提交，git status 显示为 untracked）：
+
+| 文件 | 状态 | 内容 |
+| --- | --- | --- |
+| `src/nlaut/judge/agent_judge.py` | untracked，372 行 | `AgentJudge` 类：多轮 OpenAI-compatible function calling 循环、置信度封顶 `CONFIDENCE_CAP=0.85`、降级路径、`raw` 全程留痕（`trace`） |
+| `src/nlaut/judge/agent_tools.py` | untracked，265 行 | 6 个只读取证工具的 schema + 实现：`query_db` / `http_probe` / `read_log` / `read_file` / `inspect_trace` / `list_registry` |
+| `tests/agent_judge_test.py` | untracked，411 行 | 30 个元测试（**实测全通过**）+ 8 样本金标准集 + `-m agent` 真实端点测试 |
+| `pyproject.toml` | 已修改 | 新增 `agent` pytest marker，默认 `addopts` 排除 `agent` |
+| `src/nlaut/judge/__init__.py` | **未改动** | `register_judge("agent", ...)` **尚未注册** |
+
+实测验证：`.venv/bin/python -m pytest tests/agent_judge_test.py -q` → **30 passed**。
+
+### 0.2 因此，本 PoC 的定位是「**验证与度量**」，不是「设计与实现」
+
+原型已解决"能不能跑"，但**没有解决"准不准、稳不稳、能不能挡住假阳性"**。这恰恰是 G-11 作为**阻断项**能否依赖它的唯一判据。
+
+| 已经解决 | 尚未解决（本 PoC 的靶心） |
+| --- | --- |
+| 工具调用循环跑通（`agent_judge.py` docstring 记录 2026-10-30 实测 deepseek-v4-flash / deepseek-v4-pro-0813 端点正常） | 8 样本金标准**从未跑过真实端点**（`-m agent` 测试默认跳过） |
+| 置信度封顶 0.85 < 0.9，强制走人工仲裁 | 封顶是否合理？漏斗末端是否该完全人工？ |
+| 降级路径不误判为通过（`confidence=0` → `human_review`） | 8 样本的一致率、陷阱识破率、抖动率**无任何实测数据** |
+| 陷阱样本真值由测试直接构造（非模型生成），并有防"陷阱失效"的自检 | 陷阱只有 4 个，且**样本形态过简**（见 §3.4） |
+| 工具只读语义 | Agent 是否会**越界**去查模块内部逻辑？无任何检测 |
+
+### 0.3 三条不可绕过的红线
+
+| # | 红线 | 依据 |
+| --- | --- | --- |
+| R1 | **G-11 只判集成，不判模块内部功能正确性** | 《集成准入门禁判定项清单 v1.0》§二原则 1；§3.4 注释："判定的是**接入后能否正常工作**，不是模块内部功能是否正确" |
+| R2 | **PAA 组不重复验证组外模块内部功能** | 《质量责任边界图 v1.2》L5 组外集成层；L2 组内集成层是 PAA 组主责，L5 是"只验收在软件工厂中可集成可运行" |
+| R3 | **假阳性比假阴性危险** | G-11 是**阻断项**。假阳性 = 把不合格模块放行进软件工厂；假阴性 = 误挡合格模块。**两者代价不同，需分级统计** |
+
+### 0.4 PoC 成功判据（Go / No-Go）
+
+| 判据 | 阈值 | 不达标处置 |
+| --- | --- | --- |
+| A. 陷阱加权误判率 | ≤ 0.125（4 陷阱最多错 1，且必须是假阴性） | No-Go：Agent 会放大误报，不可用于阻断项 |
+| B. 陷阱假阳性数（FP） | **= 0** | No-Go：放行坏模块 = 门禁失效 |
+| C. 重复轮次自一致率（J1 翻转率） | ≤ 5% | No-Go：抖动率过高，置信度不可信 |
+| D. 高置信区（conf≥0.85）实际准确率 | ≥ 0.95 | 需下调封顶值或维持全量人工 |
+| E. 越界率（C1/C2/C3 违规） | **= 0** | No-Go：违反 R1/R2，风险大于收益 |
+| F. 人工介入率 | 报告并给出结论 | 100% 人工 = 不构成自动化收益，需权衡 |
+| G. P95 单次判定耗时 | ≤ 60s | 超出则仅可用于 P0 阻断项抽样复核 |
+
+---
+
+## 1. 范围定义（Scope）
+
+### 1.1 在范围内
+
+- 在**已有** `AgentJudge` 原型上验证 G-11 场景的判定质量：一致率、陷阱识破率、抖动率、校准。
+- 补齐 G-11 特有的样本缺口（当前 8 样本形态过简，见 §3.4）。
+- Agent-as-Judge vs LLM-as-Judge 的**同模型消融对照**（§6）。
+- 判定层接线收口：注册、`route()` 行为验证、`Evidence` 字段补强（§7）。
+
+### 1.2 明确不在范围内（防止范围漂移）
+
+| 不做 | 原因 |
+| --- | --- |
+| 判定 G-10 / G-12 / G-13~G-14 | 本 PoC 只验证 G-11 一个判定项 |
+| 判定模块内部功能正确性 | 违反 R1/R2 —— 那是所在组自担的 L4 组外功能层 |
+| 实现 G-11 的集成冒烟脚本本身 | 本 PoC 验证 judge 层；脚本是 judge 的输入，不是本 PoC 的产物 |
+| 生产门禁硬拦截上线 | PoC 只输出 Go/No-Go 与后续提案 |
+| Agent 执行**写**操作 | 只读取证；写操作放大对被测系统的副作用，不可控 |
+| 重写 `AgentJudge` / `agent_tools` 的主体逻辑 | 原型已跑通元测试；PoC 阶段只加"不改主体"的检测点与样本 |
+| 跨模型能力对比 | 只做同模型"有无工具"的消融（§6.1） |
+| Agent 的 prompt 工程优化 | 对照实验要求 rubric 逐字相同，改 prompt 会破坏对照有效性 |
+
+### 1.3 与 L2 / L5 的责任边界对齐
+
+| 层 | 责任方 | 本 PoC 的位置 |
+| --- | --- | --- |
+| L2 组内集成层 | PAA 组质量经理 + 开发工作台 | **不在范围**。若被测模块是 PAA 组内模块，走 L2 流程，与 G-11 门禁无关 |
+| L5 组外集成层 | PAA 组质量经理 | **PoC 主体**。G-11 属 L5 组外集成层 |
+
+> 表述纪律：本 PoC 的一切结论只对"L5 组外集成层的 G-11"负责，不得外推为对模块整体质量的结论。
+
+---
+
+## 2. G-11 判定语义拆解
+
+G-11 原文：「接入后模块与工作台的交互链路通（数据能进来、结果能出去）」。
+
+拆成 judge 可判的原子断言：
+
+| 原子断言 | 判定内容 | 真值来源 | 现有引擎覆盖情况 |
+| --- | --- | --- | --- |
+| **A1 入口可达** | 接入后的模块在工作台上有可达入口 | DOM + 截图 | ✅ 1° `deterministic`（dom 模式）可覆盖 |
+| **A2 数据能进来** | 从工作台提交的一条数据，**真的**进入了接入模块的存储 | 提交接口响应 + **模块侧存储查询** | ⚠️ 只能看响应体文本 → **假阳性风险点** |
+| **A3 结果能出去** | 接入模块处理后的结果，**真的**回流到工作台 | 工作台回显 + **模块侧结果查询** | ⚠️ 只能看回显文本 → **假阳性风险点** |
+| **A4 双向一致** | 进来的是 X，出去的也是 X（无字段丢失、无错配） | 两侧字段级比对 | ❌ 无覆盖 |
+| **A5 非假成功** | 界面提示"成功"不代表真的成功（反向陷阱） | 提示文本 + **模块侧真值** | ❌ 无覆盖 |
+
+### 2.1 为什么 G-11 必须走 Agent 层
+
+nlaut 现有三级漏斗的前提是「判定只能基于 Evidence 作答，不得访问外部状态」（`protocol.py` 文档字符串第 3 行）。但 G-11 判的是**跨两个系统的一致性**：
+
+- `deterministic` 层的 `response_contains` 会把 `{"code":200,"msg":"保存成功"}` 判为通过 —— **这正是陷阱**。
+- `db_state` 字段虽在 `Evidence` 中定义，但**在通道层无写入方**（已核实：`grep -rn "db_state" src/nlaut/executor/` 无命中）。现有执行器从不填它。
+
+因此 A2/A3/A4/A5 必须由**能自主查询真值源**的 Agent 承担。这正是 `agent_judge.py` docstring 所述的本质区别："LLM-as-Judge：判定者只能读调用方拼进 prompt 的证据；Agent-as-Judge：判定者自己决定查什么、用什么工具取证。"
+
+### 2.2 A1 应留在 1° 层
+
+> **设计纪律**：A1（入口可达）由 `deterministic` 层终结，**不进 Agent**。G-11 的 Agent 判定只针对 A2/A3/A4/A5。把 A1 塞进 Agent 会拉高成本、放大误报面，且违反"漏斗式分层"的设计初衷（`nlaut-技术汇报材料.md` §3.1：每层只处理上层无法覆盖的场景）。
+
+---
+
+## 3. 金标准样本集设计
+
+### 3.1 现状：已有 8 样本及其覆盖
+
+`tests/agent_judge_test.py` 的 `GOLDEN_SAMPLES` 已有 8 个样本，四类配额齐备：
+
+| 已有编号 | 类别 | 自述（`claimed_success`） | `db_state` | 真值 |
+| --- | --- | --- | --- | --- |
+| A1-real-pass | 真实通过 | 已成功创建任务 ID 1001 | `task: [{id:1001, status:created, module:M}]` | True |
+| A2-real-pass-multi-row | 真实通过 | 已成功创建任务 ID 1002 | `task:` 2 行，均 module=M | True |
+| B1-real-fail-empty-table | 真实失败 | 已成功创建任务 ID 1003 | `task: []` | False |
+| B2-real-fail-table-missing | 真实失败 | 已成功创建任务 ID 1004 | `other_table: [{id:1}]` | False |
+| C1-trap-claimed-but-not-persisted | ⚠️正向陷阱 | 已成功创建任务 ID 1005 | `task: []` | False |
+| C2-trap-partial-persist-wrong-module | ⚠️正向陷阱 | 已成功创建任务 ID 1006 | `task: [{id:1006, module:OTHER}]` | False |
+| D1-trap-claimed-fail-but-persisted | ⚠️反向陷阱 | 创建失败：数据库连接超时 | `task: [{id:1007, module:M}]` | True |
+| D2-trap-partial-fail-but-persisted | ⚠️反向陷阱 | 部分成功：任务创建了，但后续同步失败 | `task: [{id:1008, module:M}]` | True |
+
+已有设计中**值得肯定**的三点，本方案予以继承：
+
+1. **真值由测试直接构造，非模型生成**（`agent_judge_test.py` 文件 docstring 明确）。
+2. **有"防陷阱失效"自检**：`test_trap_samples_actually_differ_from_claimed`（第 298-314 行）与 `test_reverse_trap_samples_actually_contradict_claim`（第 316-327 行），断言"自述成功 ⇒ 实际未落库"必须成立。
+3. **注释直接记录了 CSS override 事故**（第 301-302 行）："这是 nlaut 历史踩过的坑（CSS override 失效导致「同图」假阳性）：报告「5/5 全对」前必须先独立验证金标准真伪。"
+
+> **重要修正**：CSS override 事故在 nlaut 代码库中确有记载——位于 `tests/agent_judge_test.py` 第 301-302 行的注释中。此前我在仓库中检索 `CSS`/`override` 未命中，是因为该文件为 untracked、不在 git 历史中。**该事故已确认，§3.5 的论证成立。**
+
+### 3.2 已有 8 样本的三个缺口（PoC 必须补齐）
+
+| 缺口 | 现状 | 为什么对 G-11 是致命的 |
+| --- | --- | --- |
+| **G-a 真值源只有 DB 一路** | `db_state` 快照 | G-11 是**跨系统**判定。"结果能出去"需要工作台侧证据；"请求是否真的发出"需要服务端日志。现有 `query_db` 单通道无法覆盖 |
+| **G-b 无"增量 vs 存量"区分** | A2 有 2 行存量 + 1 新行，但真值靠 `module` 字段 | 反向陷阱 D1/D2 的真值是"表里**有** module=M 的行"，不是"**本次操作**新增了行"。若表里本来就有存量行，judge 无法证明是本次操作所致 → **这正是真实集成场景的核心难点**，现有样本未触及 |
+| **G-c 无正反问法配对** | 8 样本各 1 个 `objective` | 无法检测 judge 的问法敏感性。既有 `tests/judge_golden/golden.jsonl` 已用正反问法设计（6 题 = 3 场景 × 正反），本层缺失是退化 |
+
+### 3.3 补齐后的样本集总览
+
+| 参数 | 值 |
+| --- | --- |
+| 样本总量 | **16 个**（已有 8 + 新增 8） |
+| 已有样本编号 | `A1`、`A2`、`B1`、`B2`、`C1`、`C2`、`D1`、`D2`（沿用现有命名，不重命名） |
+| 新增样本编号 | `E1`~`E8`（见 §3.4） |
+| 四类配额 | 真实通过 4（A1/A2 + E1/E2）/ 真实失败 4（B1/B2 + E3/E4）/ 正向陷阱 4（C1/C2 + E5/E6）/ 反向陷阱 4（D1/D2 + E7/E8） |
+| 正反问法 | 每个样本 1 个主问 + 反向陷阱样本额外 1 个反问 → 共 **20 个判定点/轮** |
+| 重复轮次 | R = 5 |
+| 总判定点 | 16 × 5 = **80**（+ 反问 4×5 = 20，共 100） |
+
+### 3.4 新增样本明细表（E1~E8）
+
+| 编号 | 类别 | 场景 | 表面现象 | 真值 | 独立验证方法 | 补的缺口 |
+| --- | --- | --- | --- | --- | --- | --- |
+| **E1** | 真实通过 | 提交 → 工作台列表新增 T031 | 列表出现 T031，计数"共 31 条" | 模块侧存储确有 T031 | **DB 直查** `WHERE id='T031'` + DOM 计数比对 | G-a（工作台侧 + 模块侧双源） |
+| **E2** | 真实通过 | 模块处理结果回流工作台详情页 | 详情页显示模块产出的结果字段 | 模块侧结果表有对应行，字段一致 | **DB 直查 + 字段级比对** | A3「结果能出去」 |
+| **E3** | 真实失败 | 提交接口返回 500，页面通用错误 | "操作失败，请稍后重试" | 模块侧**无**新行 | **DB 直查**总数未变 | G-a（失败侧） |
+| **E4** | 真实失败 | 模块侧查询接口 404/500，工作台兜底文案 | 工作台显示"暂无数据" | 查询失败但 DB **有**行 → 链路不通 | **DB 直查 + 接口日志** | A3 失败态 |
+| **E5** | ⚠️正向陷阱 | 提交接口 `catch` 吞异常后仍返回 `{code:200,msg:"保存成功"}`，前端 toast"保存成功"，列表靠**本地 state 乐观更新**多了一条 | toast 成功 + 列表看起来多了一条 | **DB 无新行** | **DB 直查 + 前后差分** | G-a + G-b |
+| **E6** | ⚠️正向陷阱 | 前端 `localStorage` 缓存提交内容做本地展示，服务端从未收到请求（路由配错，前端 catch 后走本地分支） | 页面展示完整，与成功态完全一致 | 服务端 DB 无新行 **且服务端无该请求日志** | **DB 直查 + 服务端访问日志** | G-a（日志通道） |
+| **E7** | ⚠️反向陷阱 | 提交实际成功且 DB 有行，但前端跳转前抛渲染异常，用户看到错误页 | 页面显示"加载失败" | **DB 确有新行** | **DB 直查 + 前后差分** | G-b（增量判定） |
+| **E8** | ⚠️反向陷阱 | 提交成功，但响应体字段拼写错（`mesage` 而非 `message`）致前端解析异常走错误分支；工作台列表未刷新 | 页面显示错误提示 | **DB 确有新行**，且模块侧结果已产出 | **DB 直查 + 结果表直查** | G-b + A3 |
+
+### 3.5 陷阱样本的"独立验证"为什么必须用另一套方法
+
+**这是本方案最核心的方法论约束，因此单列一节并给出硬规则。**
+
+#### 3.5.1 历史教训：CSS override 导致的"同图"假阳性
+
+`tests/agent_judge_test.py` 第 301-302 行已记录该事故：
+
+> "这是 nlaut 历史踩过的坑（CSS override 失效导致「同图」假阳性）：报告「5/5 全对」前必须先独立验证金标准真伪。"
+
+机理拆解，对 G-11 的直接含义：
+
+| 假阳性来源 | 机理 | judge 若只信"证据包自述"会怎样 |
+| --- | --- | --- |
+| **CSS override 失效** | 目标元素被更高优先级样式覆盖，截图上的可见内容 ≠ DOM 实际值 | 看截图说"链路通"，DOM 里其实是空值 |
+| **乐观更新（乐观 UI）** | 前端先本地改 state 再发请求，请求实际失败但 state 没回滚 | 看列表说"新数据进来了"，服务端其实没有 |
+| **响应体自述成功** | 后端 `{code:200, msg:"保存成功"}` 但事务未提交 | 读响应说"成功"，DB 里没有 |
+
+**三者共同的根因：judge 用作证的那份证据，与被断言的真值之间，缺少独立观测通道。**
+
+#### 3.5.2 设计硬规则（写入 PoC 验收 checklist）
+
+| 规则 | 内容 | 落实位置 |
+| --- | --- | --- |
+| **T1 通道正交性** | 陷阱样本的真值标签必须由**独立方法**确定（DB 直查 / 服务端日志），**不得**由任何 UI/响应体证据确定 | E5~E8 的 `db_state` 由测试直接构造，沿用现有 `GOLDEN_SAMPLES` 的做法 |
+| **T2 证据包同构** | 陷阱样本喂给 judge 的 Evidence 必须与真实通过样本**同构**——同样的字段、同样的大小、同样的结构。禁止给陷阱样本额外加"可疑提示"字段（等于送答案） | `_evidence_for()` 统一构造，不按 category 分支 |
+| **T3 陷阱必须"看起来一样"** | E5 与 E1 的截图、DOM、响应体在结构与内容上尽量一致，差异仅在被测系统内部实现 | E5 的 `claimed_success` 与 E1 同构 |
+| **T4 真值双重确认** | 每个陷阱样本的真值由**两次独立查询**确认（间隔 ≥ 3s + 重启被测进程），排除查询本身偶发 | 人工核对步骤，写入样本元数据 |
+| **T5 陷阱不可由确定性断言命中** | 陷阱样本不得命中 `deterministic` 层的任一模式，否则测的是 1° 层不是 Agent 层 | E5 的响应体含 `msg:"保存成功"` → **绝不可**写成 `response_contains` 断言 |
+| **T6 防陷阱失效自检常态化** | 现有 `test_trap_samples_actually_differ_from_claimed` / `test_reverse_trap_samples_actually_contradict_claim` 的断言逻辑必须扩展到 E5~E8，且**新增样本先过自检再进金标准** | 扩展现有测试类 |
+
+> **T5 的工程含义**：E5 的响应体若含 `{code:200,msg:"保存成功"}`，`deterministic` 的 `response_contains` 会直接判通过 —— 所以 G-11 的断言**不能**写成 `response_contains`，必须走 Agent 通道。PoC 要验证的正是 Agent 能否突破"证据自述"的陷阱。
+
+#### 3.5.3 反向陷阱为什么必须做，且真值必须带"前后差分"
+
+只做正向陷阱（C1/C2/E5/E6）会得到一个**退化的**判别器：它只需学会"看到 DB 就查 DB"就能拿满分，但对真实失败样本（B1/B2/E3/E4）会大面积误判为"通"（因为 DB 里通常有历史行）。
+
+加入反向陷阱（D1/D2/E7/E8）后，判别器必须**区分"本次操作的增量"与"存量"**——这正是"数据能进来、结果能出去"在真实集成场景下的核心难点。
+
+**因此 E7/E8 的真值定义必须带操作前后差分：**
+
+| 反向陷阱真值定义 | 验证方法 |
+| --- | --- |
+| E7 | `rowcount_before` → 执行提交 → `rowcount_after`，且 `after - before` 中存在本次操作标识对应的行（**不是**"表非空"） |
+| E8 | 同上，且模块侧结果表中存在该行的结果行 |
+
+> **这暴露一个现有实现的具体缺口**：`agent_tools.py` 的 `_query_db` 实现（第 145-158 行）只返回 `row_count` 与 `rows[:limit]` —— **纯快照语义，无法表达差分**。现有 `GOLDEN_SAMPLES` 的 D1/D2 真值"表里有 module=M 的行"因此**过弱**：若表里本来就有存量行，judge 无法证明是本次操作所致。
+>
+> **补强方案**（§7.3）：给 `Evidence` 增加 `db_snapshot_before` / `db_snapshot_after` / `store_diff` 三个字段，并扩展 `_query_db` 支持按 `module`/操作标识过滤。
+
+### 3.6 样本集与既有 `tests/judge_golden` 的关系
+
+| 维度 | 既有 `judge_golden` | 本 PoC G-11 样本集 |
+| --- | --- | --- |
+| 被判对象 | 单张截图的静态视觉状态 | 跨系统的**状态一致性** |
+| 真值来源 | 人工标注 `expected` 字段 | **DB 直查 + 服务端日志**（机器可复现） |
+| 题量 | 10 题（6 VLM + 4 Laya） | 16 样本 × 2 问法 = 20 判定点 × 5 轮 |
+| 主指标 | 准确率 | **陷阱假阳性率** + 抖动率 + 校准 |
+| 存放位置 | `tests/judge_golden/` | `tests/agent_judge_test.py` 的 `GOLDEN_SAMPLES`（**已存在，直接扩展**） |
+
+> **接入门槛不变**：`docs/judge-protocol.md` §接入新引擎的门槛 第 2 条要求"≥30 张标注截图 + 准确率 + 校准曲线"。16 样本**不足以**作为上线门槛，只作可行性判定。扩到 30+ 是 PoC 通过后的独立任务。
+
+---
+
+## 4. 一致率度量口径
+
+### 4.1 指标定义
+
+设样本集 $S$（|S| = 16），每样本重复轮次 $R$（=5），金标准真值 $g_i \in \{0,1\}$（1 = 链路通，0 = 不通），第 $r$ 轮判定 $\hat{v}_{i,r} \in \{0,1\}$（由 `Verdict.value >= 0.5` 二值化，与现有 `test_all_golden_samples_judged_correctly` 的判定口径一致）。
+
+#### 指标 1：样本级判定一致率（SCA）
+
+$$
+\text{SCA} = \frac{1}{|S| \cdot R}\sum_{i \in S}\sum_{r=1}^{R} \mathbb{1}\big[\hat{v}_{i,r} = g_i\big]
+$$
+
+#### 指标 2：重复轮次翻转率（Flip Rate）—— 抖动度量
+
+$$
+\text{FlipRate} = \frac{1}{|S|}\sum_{i \in S}\left(1 - \frac{m_i}{R}\right)
+$$
+
+其中 $m_i = \max_w \#\{r : \hat{v}_{i,r} = w\}$（第 i 样本 R 轮中的多数票计数）。
+
+> 直觉：R=5 时某样本 3 轮说通、2 轮说不通 → $m_i=3$ → 翻转率贡献 $1-3/5=0.4$。
+
+#### 指标 3：陷阱加权误判率（FPR_trap）—— **主指标**
+
+陷阱样本是**双向**的，因此主指标表述为：
+
+$$
+\textbf{陷阱误判率} = \frac{\#\{\text{陷阱样本判定与真值相反}\}}{\#\{\text{陷阱样本}\}} = \frac{\#\{\text{8 个陷阱判错}\}}{8}
+$$
+
+- C1/C2/E5/E6 真值 = 0，判成 1 = **假阳性（危险：放行坏模块）**
+- D1/D2/E7/E8 真值 = 1，判成 0 = **假阴性（误挡合格模块）**
+
+两者都计入但**分级报告**。假阳性放行代价 > 假阴性误拦，加权：
+
+$$
+\text{FPR}_{\text{trap}}^{\text{weighted}} = \frac{2 \cdot \#\text{FP} + 1 \cdot \#\text{FN}}{2 \cdot \#\{\text{正向陷阱}\} + 1 \cdot \#\{\text{反向陷阱}\}} = \frac{2 \cdot \#\text{FP} + \#\text{FN}}{12}
+$$
+
+**Go 门槛：加权值 ≤ 1/8 = 0.125**，即 8 个陷阱最多错 1 个且必须是假阴性。
+
+#### 指标 4：常规样本混淆矩阵
+
+在 A1/A2/B1/B2/E1/E2/E3/E4 上：
+
+|  | 判"通" | 判"不通" |
+| --- | --- | --- |
+| **真值通**（A1,A2,E1,E2） | TP | FN |
+| **真值不通**（B1,B2,E3,E4） | FP | TN |
+
+**FP 必须为 0**（假阳性放行 = 门禁失效）；FN 允许 ≤ 1。
+
+#### 指标 5：问法一致性（Pair Consistency）
+
+对正反问法配对样本 $(i, i')$：
+
+$$
+\text{PairConsistency} = \frac{\#\{\text{配对中两问判定符合期望}\}}{\#\{\text{配对样本}\}}
+$$
+
+**门槛 = 100%**。同一场景反问得出同答案 = 缺陷，**不受其他指标补偿**。
+
+#### 指标 6：置信度校准（Reliability Diagram）
+
+把全部 $16 \times 5 = 80$ 个判定点按 `Verdict.confidence` 分桶（[0,0.3), [0.3,0.5), [0.5,0.7), [0.7,0.85), [0.85]）——**注意上界是 `CONFIDENCE_CAP=0.85`**：
+
+$$
+\text{Accuracy}(\text{bin}) = \frac{\#\{\text{该桶内 }\hat{v} = g\}}{\#\{\text{该桶内判定点}\}}
+$$
+
+**校准要求**：最高桶（conf = 0.85，即模型自报 High）的实际准确率 ≥ 0.95。
+
+> **校准不足的处置**：下调 `CONFIDENCE_CAP`（当前 0.85，`agent_judge.py` 第 33 行），使更多判定落入人工仲裁。由于 `route()` 的 0.9 是硬编码（`arbiter.py` 第 34 行 `if verdict.confidence < 0.9`），而 `CONFIDENCE_CAP=0.85 < 0.9` 已确保 agent verdict **必然**走 `human_review` —— **agent 引擎当前不可能自动裁决**，这是有意的设计（"agent judge 的结论是证据充分的判定，不是无条件的通过许可"）。
+
+> **一个必须写进报告的结论**：由于 `CONFIDENCE_CAP=0.85`，agent verdict **100% 落人工仲裁**。因此 §0.4-F「人工介入率」对当前实现必然是 100%。这意味着 Agent-as-Judge 在当前形态下的价值是**替人工做取证与初判**（减少人工看原始证据的时间），**不是**减少人工仲裁量。PoC 报告必须诚实说明这一点，不得把"人工介入率"包装成收益。
+
+#### 指标 7：取证充分性（Take-Evidence Sufficiency）
+
+$$
+\text{TakeEvidenceRate} = \frac{\#\{\text{判"通"的判定点中，轨迹里执行过真值源查询的}\}}{\#\{\text{判"通"的判定点}\}}
+$$
+
+**门槛 = 100%**（硬性）。判"通"却没查过真值源 = 猜测。
+
+> 该指标可从 `Verdict.raw["trace"]` 直接算出——`trace` 是 `agent_judge.py` 第 228-236 行记录的完整工具调用序列，每项含 `tool` / `args` / `result`。只需统计 `trace` 中是否出现 `query_db`（或 `http_probe` / `read_log`）。
+
+### 4.2 样本量与轮次要求
+
+| 参数 | 取值 | 依据 |
+| --- | --- | --- |
+| 样本量 \|S\| | **16**（已有 8 + 新增 8） | 四类各 4；PoC 以"暴露结构性问题"为目标 |
+| 重复轮次 R | **5** | 奇数避免平票；5 轮可分辨"稳定"(5:0/4:1) 与"抖动"(3:2) |
+| 总判定点 | 16×5 = **80**（+ 反问 4×5 = 20，共 100） | — |
+| 种子控制 | `temperature=0.0`（`agent_judge.py` 第 129 行默认）；工具调用序列不得依赖随机数 | 与 `vlm_mlx.py` 的 `temperature=0.0` 硬规则一致 |
+| 环境隔离 | 每样本独立被测进程 + 独立 DB 副本 + 独立日志 | 防样本间状态污染（A1 提交的数据不能影响 B1 的判定） |
+| 每轮重建 | 每轮前重置夹具 + 重置 DB 到该样本的初始态 | 保证 R 轮看到**同一**初始状态，否则测的是系统抖动不是 judge 抖动 |
+| 端点固定 | 对照实验全程同一 `base_url` + `model` | §6.1 消融要求 |
+
+> **8 样本最小集（若时间紧）**：A1、B1、C1、C2、D1、D2 + E5（覆盖两类陷阱 + 真实通过/失败 + 跨系统日志通道）。但**最小集不足以支撑 Go 决策**，只能支撑"是否值得继续"。
+
+### 4.3 如何区分「judge 抖动」与「被测系统本身不确定」
+
+这是本节最关键的方法论问题。两者在观测上都是"多轮判定不一致"，必须用正交实验分离。
+
+#### 4.3.1 三层判别设计
+
+**第 0 层——先排除执行侧噪声（不计入任何 judge 指标）**
+
+| 检查 | 做法 | 判据 |
+| --- | --- | --- |
+| E1 执行确定性 | 同一样本执行 5 次（不开 judge），比对采集到的 Evidence 序列化结果 | 5 次**字节级一致** → 执行侧确定；不一致则该样本**剔除**并修夹具，**不计入** judge 指标 |
+| E2 真值稳定性 | 同一样本的真值 DB 查询跑 5 次 | 5 次一致 → 真值稳定 |
+
+> E1/E2 是**准入门槛**：执行不确定的样本不进入 judge 评分。否则会把被测系统的不确定性算成 judge 的抖动。
+
+**第 1 层——固定被测状态，测 judge 抖动**
+
+| 实验 | 设计 | 观测 |
+| --- | --- | --- |
+| **J1 判定抖动** | 夹具状态**固定不变**（同一 Evidence 快照），judge 跑 R=5 | 5 轮不一致 → **纯 judge 抖动** |
+| **J2 证据抖动** | 每次重新执行（Evidence 会变，真值不变），judge 跑 R=5 | 判定不一致 + J1 一致 → 证据侧波动（截图时序/异步渲染） |
+| **J3 端到端抖动** | 每次重新执行，judge 跑 R=5 | 三者对照 |
+
+**第 2 层——交叉判别表**
+
+| J1（固定 Evidence） | J2（重执行） | 结论 | 归因 |
+| --- | --- | --- | --- |
+| 一致 | 一致 | 稳定 | — |
+| **不一致** | 不一致 | **judge 自身抖动** | judge 侧：prompt 敏感性 / 工具选择随机性 / 解析不稳定 → 修 judge |
+| 一致 | **不一致** | **被测系统/证据不稳定** | 执行侧：截图时序、异步渲染、DB 写入延迟 → 修夹具或加等待，**不算 judge 责任** |
+| **不一致** | **不一致** | 混合 | 以 J1 为主因；若 J1 抖动率 > J2，判定为 judge 问题 |
+
+> **判别口径**：以 **J1 翻转率** 作为 judge 责任的唯一度量。J2/J3 用于归因与排除。总抖动率在报告中同时给出，但归因结论以 J1 为准。
+
+#### 4.3.2 判定阈值
+
+| 判定 | 阈值 | 动作 |
+| --- | --- | --- |
+| Judge 抖动可接受 | J1 翻转率 ≤ 5%（16 样本 5 轮中翻转样本 ≤ 1，且多数票正确） | 继续推进 |
+| Judge 抖动超限 | J1 翻转率 > 5%，**或**任一样本 3:2 翻转且多数票错 | 判定 Agent 引擎不合格，不进入对照实验 |
+| 被测不确定 | J2 翻转率 > J1 且 J1 ≈ 0 | 记为夹具问题，修复后重测，不计入 judge 结论 |
+| 置信度失真 | conf=0.85 的样本 5 轮中 ≥2 轮翻转 | **No-Go**（会毒化人工仲裁队列的质量信任） |
+
+### 4.4 度量汇总表（PoC 报告模板）
+
+| 指标 | 公式位置 | Go 门槛 | 实测 | 结论 |
+| --- | --- | --- | --- | --- |
+| 陷阱加权误判率 | §4.1-3 | ≤ 0.125 | | |
+| **陷阱假阳性数（FP）** | §4.1-3 | **= 0** | | |
+| 常规样本 FP | §4.1-4 | **= 0** | | |
+| 常规样本 FN | §4.1-4 | ≤ 1 | | |
+| 样本级一致率 SCA | §4.1-1 | ≥ 0.90 | | |
+| J1 判定翻转率 | §4.1-2 | ≤ 5% | | |
+| 问法一致性 | §4.1-5 | 100% | | |
+| 校准：conf=0.85 桶准确率 | §4.1-6 | ≥ 0.95 | | |
+| **取证充分性** | §4.1-7 | **100%** | | |
+| 越界率 | §6.3-C9 | **= 0** | | |
+| 人工介入率 | — | 报告（当前必然 100%，见 §4.1-6 注） | | |
+| P95 单次判定耗时 | — | ≤ 60s | | |
+| 平均工具调用次数 | — | ≤ 12 | | |
+
+---
+
+## 5. Agent 自主取证的行为约束
+
+Agent-as-Judge 与 LLM-as-Judge 的本质差别是：**Agent 自己决定"去看什么"**。这带来能力，也带来失控风险。必须用行为契约约束。
+
+### 5.1 取证契约
+
+| 规则 | 内容 | 当前实现状态 | 违反后果 |
+| --- | --- | --- | --- |
+| **C1 只读取证** | Agent 工具集全部为只读工具 | ✅ 已实现：`agent_tools.py` 的 6 个工具均为 GET/读；`query_db` 只读快照 | 违反即该轮无效，重跑 |
+| **C2 证据包为准** | 判定依据只能是 Evidence 包 + 只读工具的取证结果 | ✅ 已实现：`_render_brief` 只渲染 Evidence 字段；工具结果回灌为 `role="tool"` 消息 | 同上 |
+| **C3 作用域限定** | 取证范围仅限"本次接入模块的存储/接口/日志"，禁止查其他模块内部实现 | ❌ **未实现** —— `read_file` / `http_probe` 无白名单 | 违反 R1/R2 → 判定越界，该轮作废 |
+| **C4 必查真值源** | 判"链路通"前必须至少执行一次真值源查询 | ⚠️ **仅靠 prompt 约束** —— `agent_judge.py` 第 190 行 "必须先用工具取证"；无框架级校验 | 未查真值源就判"通" = 猜测 → 计入指标 7 |
+| **C5 结论可回放** | 全部工具调用与观察写入 `Verdict.raw` | ✅ 已实现：`raw["trace"]` | 不可回放 = 不可审计 |
+| **C6 降级不误判** | 端点不可用/工具全失败 → 不判失败，转人工 | ✅ 已实现：`confidence=0` + `raw["degraded"]` → `route()` 走 `human_review` | — |
+| **C7 显式完成信号** | 以固定结构输出终局结论，不靠自然语言结束语判断 | ⚠️ **弱** —— `parse_judgement` 优先匹配显式标记，找不到则退化为**正文关键词启发式**（第 79-87 行） | 误解析 → 计入"解析错误率" |
+| **C8 三态语义** | pass / fail / insufficient 显式区分 | ⚠️ **退化** —— `value=0.5` 同时表示"解析失败"和"证据不足"，两者不可区分 | insufficient 与 fail 混淆 |
+
+### 5.2 C7/C8 的具体风险与补强
+
+`parse_judgement`（`agent_judge.py` 第 55-87 行）的两段式设计有一个**真实风险**：
+
+> 第 2 段启发式"取前 300 字，找结论性关键词"会把**推理过程中的中间提及**误判为最终结论。例如模型写"表里没有看到数据，因此判断为 false"，前 300 字的 `false_hits` 可能被 "是"/"否" 等中文单字词命中（`_FALSE_PAT` 含 `"否"`，`_TRUE_PAT` 含 `"是"`）。
+
+**补强方案**（PoC 期间不改主体逻辑，只加检测）：
+
+1. **统计"靠启发式解析出来的结论"占比**：在 `parse_judgement` 上包一层计数器，区分"显式标记命中"与"启发式命中"。
+2. 若启发式命中占比 > 20%，判定当前 prompt 模板不够收敛，PoC 结论标注"结论解析存在系统性脆弱性"。
+3. **建议方向（PoC 后提案）**：要求模型输出严格 JSON（`{"verdict": "pass|fail|insufficient"}`），彻底消除启发式解析；同时把三态语义落到 `value`/`confidence` 的不同取值上（如 insufficient → `value=0.5, confidence=0.5`，与 parse 失败 → `value=0.5, confidence=0.0` 区分——**现有实现已部分区分**：解析失败时 `confidence=0.0`，第 226 行）。
+
+### 5.3 取证深度上限
+
+| 上限 | 当前值 | 位置 | 评估 |
+| --- | --- | --- | --- |
+| 工具调用轮数 | `max_steps=6` | `agent_judge.py` 第 36 行 | 6 轮对 G-11 的"入 + 出 + 一致性"三段取证**偏紧**，§6 需实测是否够用 |
+| 单次判定墙钟超时 | `timeout_s=180.0` | 第 37 行 | 180s 远大于 §0.4-G 的 60s 目标，**需实测后收紧** |
+| 成本上限 | `max_cost_usd=0.50` | 第 38 行 | 已实现但**当前未见其生效逻辑**——需核实（见 §7.6 待办） |
+| 同一工具重复调用 | 无限制 | — | **需补**：防止死循环 |
+
+### 5.4 "任务完成误判为卡死"的防护
+
+用户明确点名过这个坑。Agent-as-Judge 的风险在于：Agent 认为"我要做的事已做完"但框架把它当"还在跑"。
+
+| 防护点 | 现状 | 处置 |
+| --- | --- | --- |
+| 显式完成信号 | ⚠️ `parse_judgement` 显式标记优先，但有启发式兜底（见 §5.2） | 建议改严格 JSON；PoC 期间统计启发式占比 |
+| 无输出 ≠ 卡死 | ✅ `parsed is None` → `value=0.5, confidence=0.0` → `route()` 走 `human_review`（`arbiter.py` 第 32-33 行） | 已满足 |
+| 步数耗尽 | ✅ 第 267-281 行 → `raw["degraded"]="max_steps_exhausted"`, `confidence=0.0` | 已满足 |
+| 端点异常 | ✅ 第 282-296 行 → `confidence=0.0`, `raw["degraded"]` | 已满足 |
+| 工具全部失败 | ✅ `_run_tool` 返回 `{"error": ...}` 而非抛异常（第 144-155 行）；模型据此自行判断 | 已满足 |
+| 超时未覆盖 | ⚠️ `httpx.post` 的 `timeout` 是**单次请求超时**，非整体墙钟 | **需补**：整体墙钟（`max_steps × timeout` 上限） |
+
+> **重要**：现有实现的降级语义（`confidence=0.0` → `human_review`）与 `deterministic.py` 的缺失数据语义（`_judge_response_ttft` 返回 `value=0.5, confidence=0.5`，注释明写"缺失数据 ≠ 性能不达标"）**方向一致**，都遵循"不确定 ≠ 失败"。这是 nlaut 判定层的好传统，应保持。
+
+---
+
+## 6. Agent-as-Judge vs LLM-as-Judge 并行对照实验
+
+### 6.1 对照设计
+
+| 维度 | 设置 |
+| --- | --- |
+| 样本集 | **同一批** 16 个样本 |
+| 评分卡 | **同一份**（§6.2，逐字相同，不做引擎侧适配） |
+| 证据包 | **完全相同**的 Evidence 快照（同一批 `.json` 落盘文件，两引擎读同一份） |
+| 轮次 | 各 R = 5 |
+| 温度 | 均为 0 |
+| 模型 | **同一底座模型、同一端点**（唯一变量是"是否给工具"）——**这是消融，不是跨模型比较** |
+| 盲评 | 结果汇总由第三方脚本计算，两引擎输出互不可见 |
+
+> **关键设计：底座模型必须相同。** 若 Agent 组用强模型+工具、LLM 组用弱模型无工具，测出的是"模型差异"而非"Agent 增益"。本对照是**同模型的工具消融**。
+>
+> **实现约束**：`build_agent_judge_from_env`（`agent_judge.py` 第 325-372 行）已支持从 `config/models.yaml` 读取端点。LLM 组用**同一 `base_url` + `model_id`**，但 `tools=[]`（不传工具），只喂同一份 rubric + Evidence 渲染文本。渲染文本必须是 Agent 组 `_render_brief` 的**完全相同**的输出（可复用该方法），确保两组起点一致。
+
+### 6.2 统一评分卡（Rubric）
+
+两组收到**逐字相同**的 rubric：
+
+```
+判定任务（G-11）：接入后模块与工作台的交互链路是否通（数据能进来、结果能出去）？
+
+判定规则：
+1. 只判断"集成链路是否通"，不判断接入模块内部功能逻辑是否正确。
+2. 判定"通"必须有两类证据：(a) 数据确实进入了接入模块的存储；
+   (b) 模块的处理结果确实回流到了工作台。
+3. 界面提示、toast 文案、HTTP 响应体的 code=200 都不构成"链路通"的充分证据。
+   必须独立查询模块侧的存储/接口/日志来交叉验证。
+4. 若无法取到模块侧真值证据，输出 insufficient，不要猜测。
+5. 结论必须在 [pass, fail, insufficient] 三态之一。
+
+输出格式（严格 JSON，无多余文字）：
+{"verdict": "pass|fail|insufficient", "evidence_refs": [...], "reasoning": "..."}
+```
+
+> **Rubric 第 3 条是两组共享的**，这暴露了"无工具的 LLM 在 G-11 这类跨系统一致性任务上的天花板"——它**在原理上无法满足**。这是有意的设计：证明 Agent 价值的正是"能自己取证"这一点。
+>
+> **公平性声明（必须写进报告）**：本对照不是"故意给 LLM 组出难题"，而是"两组拿同一张考卷，工具是 Agent 组的额外能力"。报告须明确声明，避免结论被质疑为不公平对比。
+>
+> **rubric 与现有 system_prompt 的关系**：`agent_judge.py` 第 187-198 行的默认 system_prompt 已是同精神（"必须先用工具取证""结论基于最终/实际状态""探索要完整""无法取证时判为不确定"）。**但它用的是 `judgement: true|false` + `CONFIDENCE: High|Medium|Low` 格式，与 §6.2 的严格 JSON 不同。** 对照实验必须**两个引擎都用严格 JSON**（Agent 组也换成 JSON rubric），否则混淆了"格式差异"与"工具差异"。这是本对照最容易被做错的地方。
+
+### 6.3 对比指标
+
+| 指标 | 定义 | 期望 | 说明 |
+| --- | --- | --- | --- |
+| **C1 陷阱加权误判率** | §4.1-3 | Agent 显著更低 | **主对比指标** |
+| **C2 陷阱假阳性数** | FP on C1/C2/E5/E6 | Agent = 0，LLM > 0 | 最能体现价值的对比点 |
+| **C3 取证充分性** | §4.1-7 | Agent = 100%（受 C4 强制），LLM = 0%（无工具） | Agent 组的**结构性优势** |
+| **C4 SCA** | §4.1-1 | Agent ≥ LLM | — |
+| **C5 J1 翻转率** | §4.1-2 | Agent ≤ LLM | Agent 若更稳，说明工具给了稳定锚点 |
+| **C6 校准（conf 最高桶准确率）** | §4.1-6 | Agent ≥ 0.95 | — |
+| **C7 成本** | 平均墙钟耗时、平均工具调用数、平均 token | Agent 显著更高（预期） | 必须报告，否则结论不可用于门禁 |
+| **C8 人工介入率** | 按 `route()` 落 `human_review` 的占比 | Agent < LLM | 直接对应门禁运营成本 |
+| **C9 越界率** | 违反 C1/C2/C3 的轮次占比 | **= 0** | 一票否决项 |
+| **C10 解析失败率** | `parsed is None` 的判定点占比 | Agent ≈ LLM | 检查两组是否被输出格式问题干扰 |
+
+> **C9 的可测前提**：框架侧需记录每次工具调用是否越界。当前 `agent_tools.py` 的 `read_file` / `http_probe` **无路径/URL 白名单**（`_run_tool` 只查 `tool_impls` 里有没有这个工具名）。因此 C9 **当前不可测** —— 需先补白名单（§7.3），否则 C9 只能靠人工审阅 `trace` 抽样，量级不可信。
+
+### 6.4 结论判读规则
+
+| 观察组合 | 结论 |
+| --- | --- |
+| C1 降幅 ≥ 30pp 且 C9 = 0 且 C6 ≥ 0.95 | **Go**：Agent-as-Judge 值得推进 |
+| C1 降幅 < 30pp | **No-Go**：工具能力没换来判定质量提升，留在 3° Laya 层 |
+| C9 > 0 | **No-Go**：越界不可控，风险大于收益 |
+| C10 > 5% | 结论不可信：先修输出格式契约（§5.2），再重跑对照 |
+| C7 显示 Agent 成本 > 10× LLM 且 C1 提升 < 15pp | **有条件 Go**：仅用于 P0 阻断项抽样复核，不做全量门禁 |
+
+---
+
+## 7. 最小接口设计草案（基于现有实现的收口，而非新建）
+
+> 只写接口契约，不写实现。
+
+### 7.1 引擎标识与注册
+
+`protocol.py` 的 `EngineName` 当前为 `Literal["deterministic", "mlx-vlm", "laya", "jev"]` —— **`"agent"` 尚未加入**。需追加：
+
+```
+EngineName 扩展：追加 "agent"
+```
+
+注册（`src/nlaut/judge/__init__.py`，与现有三个注册并列）：
+
+```
+register_judge("agent", <AgentJudge 实例>)
+```
+
+> **注册方式的选择**：现有 `AgentJudge.__init__` 要求 `base_url` / `model` 必填（第 121-122 行），无法像 `DeterministicJudge()` 那样无参构造。且 `judge/__init__.py` 的注释明确写着"模型懒加载，import 零开销"。
+>
+> **建议**：注册**工厂函数**而非实例 —— `register_judge("agent", lambda: AgentJudge(...))` 或引入一个懒加载包装器，保持 `import nlaut.judge` 零开销、零网络调用。若坚持注册实例，则 `judge/__init__.py` 的 import 会触发 `config/models.yaml` 读取（`build_agent_judge_from_env` 第 337-362 行），**且 `api_key` 从环境变量读取时，导入时刻的环境可能与实际判定时刻不同** —— 这是个真实的隐患。
+
+### 7.2 `AgentJudge` 接口签名（现状 + 建议）
+
+现状（`agent_judge.py` 第 120-131 行）已满足 `Judge` Protocol（`protocol.py` 第 69 行 `judge(self, evidence, question) -> Verdict`）：
+
+```
+class AgentJudge:
+    engine = "agent"
+
+    def __init__(
+        self,
+        base_url: str,
+        model: str,
+        api_key: str = "",
+        tools: list[dict] | None = None,
+        tool_impls: dict[str, Callable[[dict], Any]] | None = None,
+        max_steps: int = 6,
+        timeout_s: float = 180.0,
+        max_cost_usd: float = 0.50,
+        temperature: float = 0.0,
+    ) -> None: ...
+
+    def judge(self, evidence: Evidence, question: Question) -> Verdict: ...
+```
+
+**PoC 阶段建议的签名调整**（均向后兼容）：
+
+| 调整 | 理由 |
+| --- | --- |
+| `max_steps` 6 → **10**（可配） | G-11 需"入 + 出 + 一致性"三段取证，6 轮偏紧（§5.3） |
+| `timeout_s` 180 → **60**（可配） | 对齐 §0.4-G 的 P95 目标；且需区分"单请求超时"与"整体墙钟" |
+| `max_cost_usd` **需核实是否真正生效** | 当前代码未见其拦截逻辑；需在 PoC 前确认，否则该约束是纸面的 |
+| 新增 `tool_policy: ToolPolicy` | 承载 C3 作用域白名单（§7.3） |
+| 新增 `trace_sink: Callable[[dict], None] \| None` | 框架侧记账 C1/C2/C3 违规（§7.5），支撑 C9 可测 |
+
+### 7.3 `Evidence` 需要新增的字段
+
+现状：`Evidence`（`protocol.py` 第 20-44 行）已有 `db_state`（第 32 行），且**已有消费方** —— `agent_tools.py` 的 `_query_db`（第 145-158 行）与 `agent_judge.py` 的 `_render_brief`（第 314-315 行）都在用。**我此前"db_state 无写入方"的说法只对执行器成立，对 judge 层不成立**，此处更正。
+
+G-11 仍缺的字段：
+
+| 字段 | 类型 | 语义 | 为什么必需 |
+| --- | --- | --- | --- |
+| `db_snapshot_before` | `dict \| None` | 执行**前**的存储快照 | 支撑反向陷阱的差分判定（§3.5.3） |
+| `db_snapshot_after` | `dict \| None` | 执行**后**的存储快照 | 同上 |
+| `store_diff` | `dict \| None` | 前后差分结果（新增行/变更行/计数变化） | 让 Agent 直接拿到增量证据，避免自行推算 diff 产生歧义 |
+| `server_log` | `str \| None` | 服务端访问日志路径（artifacts 相对路径） | E6 / E8 的第二重独立验证；"请求是否真的到达"的证据 |
+| `http_trace` | `list[dict] \| None` | 本次执行的请求/响应摘要（method/url/status/关键字段） | 区分"请求没发出去"与"发了但没落库" |
+| `module_endpoints` | `dict[str, str] \| None` | 接入模块的只读查询接口路由（白名单） | Agent 需知道"去哪查"，且白名单式给定以满足 C3 |
+| `truth_source_spec` | `dict \| None` | 真值源声明（表名/接口/日志文件 + 比对键） | 把"真值源"从隐含约定变成显式契约（C4 落地） |
+| `probe_timestamp` | `float \| None` | 证据采集时刻（epoch 秒） | 区分"证据过期"与"证据为真" |
+
+**兼容性**：全部可选、默认 `None`，`runner.py` 第 212 行的 `Evidence(case_id=ir.id, **ev_kw)` 构造方式不受影响。
+
+**渲染层影响**：`laya.py` 的 `render_state`（第 22-63 行）**不改动** —— 新字段不进入 Laya 输入，保持 Laya 行为零变化，避免污染既有金标准回归。Agent 引擎有独立的 `_render_brief`（`agent_judge.py` 第 298-322 行），可自行扩展。
+
+### 7.4 工具层的补强（C3 作用域白名单）
+
+现状：`agent_tools.py` 的 `build_tool_impls`（第 124-201 行）的只读性由"实现方保证"（docstring 第 3-4 行），但：
+
+| 工具 | 当前白名单 | 需补 |
+| --- | --- | --- |
+| `query_db` | ✅ 表名必须存在于 `db_state` 键中（第 150-154 行，超出则返回 `table_not_found` + 可用表列表） | 保持；补 `store_diff` 支持 |
+| `http_probe` | ❌ 任意 URL | **加 URL 白名单**（仅允许 `module_endpoints` 中声明的 URL） |
+| `read_log` | ❌ 任意路径 | **加路径白名单**（仅允许 `server_log` 及声明的日志） |
+| `read_file` | ❌ 任意路径 | **加路径白名单** |
+| `inspect_trace` | ✅ 只能读传入的 `trace` | 保持 |
+| `list_registry` | ✅ 只能读传入的 `registry` | 保持 |
+
+> **这是 C3 / C9 的落地关键**：白名单既约束 Agent 行为（作用域限定），又让"越界"成为**框架侧可自动检测**的事件，而不是靠 Agent 自报。
+
+### 7.5 接入现有 `route()` 置信度路由
+
+`arbiter.py` 的 `route()` 当前逻辑（实测确认）：
+
+| 条件 | 路由 | 行号 |
+| --- | --- | --- |
+| `engine == "deterministic"` | value ≥ 0.5 → auto_pass / auto_fail | 27-31 |
+| `confidence < 0.5` | human_review | 32-33 |
+| `confidence < 0.9` | human_review | 34-37 |
+| 否则 | value ≥ threshold → auto_pass / auto_fail | 38-41 |
+
+**接入方案**：
+
+#### 路径 A（推荐，PoC 阶段）：`route()` 零改动
+
+Agent-as-Judge 产出符合协议的 `Verdict` 即可，**`route()` 无需任何改动**：
+
+| Agent 输出 | Verdict | `route()` 行为 | 行号 |
+| --- | --- | --- | --- |
+| pass，模型自报 High | `value=1.0, confidence=0.85` | **human_review** | 34-37（0.85 < 0.9） |
+| fail | `value=0.0, confidence=0.85` | **human_review** | 同上 |
+| 解析失败 / 步数耗尽 / 端点异常 | `value=0.5, confidence=0.0` | human_review | 32-33 |
+| insufficient（若显式区分） | `value=0.5, confidence=0.5` | human_review | 34-37 |
+
+> **诚实结论**：因 `CONFIDENCE_CAP=0.85 < 0.9`，**agent verdict 必然落 `human_review`**。这不是缺陷，而是刻意设计（`agent_judge.py` 第 11-13 行："agent judge 的结论是「证据充分的判定」，不是「无条件的通过许可」"）。
+>
+> 因此 Agent-as-Judge 在门禁中的真实价值是：**替人工完成取证与初判，把"人看原始证据猜"变成"人看 agent 的取证轨迹与结论"**。PoC 报告必须如此表述，不得声称减少人工仲裁量。
+
+> **`route()` 的一处实现细节（需知悉）**：`confidence < 0.9` 是**硬编码**（第 34 行），而 `threshold` 参数只作用于最后一行的 `value >= threshold`（第 38 行）。这意味着**下调 auto 置信度门槛需改代码**，不能只调参数。
+>
+> **若日后要让 Agent 参与自动裁决**（PoC 通过后的独立提案）：
+> - **A1**：Agent 引擎内部把 confidence 封顶到 < 0.9（当前已如此，`CONFIDENCE_CAP=0.85`）→ 全部落 `human_review`，`route()` 零改动。**PoC 阶段即采用此路径**。
+> - **A2**：把 `route()` 的 0.9 提为参数 `auto_confidence: float = 0.9` —— 向后兼容（默认行为不变），但会动 L5 宪法代码，需同步更新 `docs/judge-protocol.md`。
+
+#### 路径 B：断言级引擎选择
+
+`runner.py` 的 `_engine_name(a)`（第 131-145 行）按断言 `kind` 决定引擎。G-11 走 Agent 需 IR 层新增：
+
+```
+AssertIntegrationLink(BaseModel):
+    kind: Literal["integration_link"]
+    question: str                       # rubric 正文（G-11 专用）
+    threshold: float = 0.9
+    judge: Literal["agent"] = "agent"
+    truth_source: str | None            # 显式指定真值源
+```
+
+并在 `_engine_name()` 追加 `if kind == "integration_link": return "agent"`，在 `_question_for()`（第 26-128 行）追加翻译分支。
+
+> **IR 变更的连带成本**：`ir/model.py` 的 `Assertion` 联合类型（第 254-260 行）、`docs/ir-schema.md`、`gen/` 派生代码校验器、`tests/ir_model_test.py` 都需同步。
+>
+> **PoC 阶段建议先不做 IR 变更** —— 用离线脚本直接调 `AgentJudge.judge(evidence, question)`（即现有 `tests/agent_judge_test.py` 的 `TestLiveAgentJudge` 模式），把 PoC 与 IR 演进**解耦**。这也符合现有代码的做法：`agent_judge.py` 至今**未接入 `_engine_name`/`_question_for`**，正是这个解耦。
+
+#### 路径 C：Agent 断言作为"旁路校验器"
+
+不动 IR、不动 `route()`，作为现有断言之外的附加校验层：
+
+```
+现有断言 → route() → 用例状态
+                  ↘ Agent-as-Judge 交叉验证（独立 Evidence）
+                     ↘ 若 Agent 判"不通"且 confidence ≥ 0.85 → 强制降级为 need_review
+```
+
+> **适用场景**：PoC 期间在**不改动现有门禁**的前提下收集真实分布数据。代价是双跑（成本翻倍）。
+
+#### 决策建议
+
+| 阶段 | 路径 | 理由 |
+| --- | --- | --- |
+| PoC 阶段 | **离线脚本 + 路径 A** | 不改现有代码，零回归风险；数据足够支撑 Go/No-Go |
+| PoC 通过后 | 路径 B（IR 断言）+ A2 参数化 | 正式接入门禁 |
+| 观察期 | 路径 C 旁路 | 收集真实分布，校准阈值 |
+
+### 7.6 `Verdict.raw` 需要记录的字段（Agent 特有）
+
+现状：`agent_judge.py` 已记录 `judgement` / `confidence_raw` / `reason` / `rounds` / `tool_calls_total` / `trace` / `model`（第 228-236 行），降级时记录 `degraded` / `max_steps`（第 268-280 行）。
+
+| key | 现状 | 需补 |
+| --- | --- | --- |
+| `trace` | ✅ 完整轨迹（step/tool/args/result） | 保持 |
+| `final_json` | ❌ | 若采纳严格 JSON rubric，记录原始 JSON |
+| `parse_error` | ❌ | 区分"判错"与"输出格式错"（§5.2） |
+| `parse_mode` | ❌ | "explicit" / "heuristic" —— 支撑启发式占比统计 |
+| `truth_source_queried` | ❌ | C4 取证缺失检测（§4.1-7）—— 可从 `trace` 推导，但显式字段更可靠 |
+| `step_limit_hit` / `timeout_hit` | ⚠️ 仅有 `rounds` / `degraded` | 显式化 |
+| `scope_violations` | ❌ | **C9 越界率**（§6.3）—— **必须由框架侧记账，不能靠 Agent 自报** |
+| `elapsed_ms` | ❌ | 成本统计（C7） |
+| `model` / `temperature` / `max_steps` | ⚠️ 仅 `model` | 补 `temperature` / `max_steps` |
+
+### 7.7 接口契约的最小改动清单
+
+| 文件 | 改动 | 性质 | 当前状态 |
+| --- | --- | --- | --- |
+| `src/nlaut/judge/protocol.py` | `Evidence` 追加 8 个可选字段；`EngineName` 追加 `"agent"` | 向后兼容 | **待做** |
+| `src/nlaut/judge/agent_judge.py` | 补 `scope_violations` / `parse_mode` / `elapsed_ms`；`max_steps`/`timeout_s` 调整；严格 JSON rubric 支持 | 扩展现有 | **待做** |
+| `src/nlaut/judge/agent_tools.py` | `http_probe`/`read_log`/`read_file` 加白名单；`_query_db` 支持 `store_diff` | 扩展现有 | **待做** |
+| `src/nlaut/judge/__init__.py` | 注册 "agent"（**建议懒加载工厂**） | 新增一行 | **待做**（当前未注册） |
+| `src/nlaut/judge/arbiter.py` | **不改**（PoC 阶段走路径 A + `CONFIDENCE_CAP`） | 零改动 | ✅ 保持 |
+| `src/nlaut/judge/laya.py` | **不改**（`render_state` 不加新字段） | 零改动 | ✅ 保持 |
+| `src/nlaut/judge/deterministic.py` | **不改** | 零改动 | ✅ 保持 |
+| `src/nlaut/judge/vlm_mlx.py` | **不改** | 零改动 | ✅ 保持 |
+| `src/nlaut/executor/runner.py` | **不改**（PoC 走离线脚本） | 零改动 | ✅ 保持 |
+| `src/nlaut/ir/model.py` | **不改**（PoC 阶段） | 延后到路径 B | ✅ 保持 |
+| `docs/judge-protocol.md` | 追加 Agent 引擎的引擎差异说明（置信度封顶语义、三态、只读工具） | 延后 | **待做** |
+| `docs/agent-as-judge-poc-plan.md` | 本文件 | — | ✅ 已建 |
+| `tests/agent_judge_test.py` | 扩展 `GOLDEN_SAMPLES` 至 16；新增对照实验与度量脚本 | 扩展现有 | **待做** |
+| `pyproject.toml` | `agent` marker | 已完成 | ✅ 已有 |
+
+> **改动量评估**：PoC 阶段在现有 untracked 原型之上，**改动集中在 4 个 judge 文件 + 1 个测试文件**，执行层（`runner.py`）、IR 层、其余 3 个引擎**全部零改动**。这符合 `docs/judge-protocol.md`「报告层零改动」的设计承诺。
+
+---
+
+## 8. 风险登记册
+
+| # | 风险 | 影响 | 概率 | 对策 |
+| --- | --- | --- | --- | --- |
+| R1 | Agent 依赖界面/响应自述，把假成功判成通 | 假阳性放行坏模块 | 高 | C4 + 工具白名单；C1/C2/E5/E6 陷阱专项检验；指标 7 取证充分性 |
+| R2 | Agent 越界去查模块内部逻辑 | 违反 R1/R2 责任边界 | 中 | C3 白名单 + 框架侧记账（§7.4、§7.6 `scope_violations`） |
+| R3 | Agent 抖动导致门禁不稳定 | 门禁不可信 | 中 | J1/J2/J3 三层判别；置信度失真即 No-Go |
+| R4 | 成本过高，门禁跑不动 | 门禁形同虚设 | 中 | 步数/超时/成本上限；C7 成本指标；P95 ≤ 60s |
+| R5 | 现有 8 样本形态过简，结论无法外推 | 结论无效 | 高 | 补 E1~E8（双源真值 + 差分 + 日志通道） |
+| R6 | 8→16 样本仍不足 30 的上线门槛 | 结论不稳 | 中 | PoC 只作可行性判定；30+ 样本是独立后续任务 |
+| R7 | 严格 JSON rubric 与现有 `judgement:` 格式冲突，混淆"格式差异"与"工具差异" | 对照实验失效 | 中 | 两组统一用严格 JSON（§6.2 末段） |
+| R8 | `parse_judgement` 启发式误解析 | 判定结论不可信 | 中 | 统计启发式命中占比（§5.2）；>20% 标注系统性脆弱 |
+| R9 | `max_cost_usd` 约束可能未真正生效 | 成本失控 | 中 | PoC 前核实并补拦截逻辑 |
+| R10 | 单请求 timeout ≠ 整体墙钟 | Agent 卡死拖垮门禁 | 中 | 补整体墙钟；"完成误判为卡死"的防护（§5.4） |
+| R11 | Agent 组与 LLM 组底座模型不同 | 对照结论无效 | 低 | 同 `base_url` + `model_id`（§6.1） |
+| R12 | Agent verdict 100% 落人工，无自动化收益 | PoC 价值被质疑 | 中 | 报告如实定位价值为"替人工取证"而非"减少人工"（§4.1-6 注、§7.5） |
+
+---
+
+## 9. 执行计划
+
+| 阶段 | 产出 | 出口判据 |
+| --- | --- | --- |
+| P0 前置核实 | 核实 `max_cost_usd` 是否生效；核实 `max_steps=6` 对 G-11 是否够用；确认 `config/models.yaml` 的端点与 key | 三项结论书面记录 |
+| P1 样本补齐 | E1~E8 夹具 + 真值（DB 直查 + 日志）+ 前后差分机制 | T1~T6 全部通过（§3.5.2） |
+| P2 真值标注 | 16 样本真值文件（DB 直查 + 双人复核 T4） | 真值落盘，含查询证据 |
+| P3 契约补强 | 工具白名单（C3）+ `raw` 补字段 + `Evidence` 补字段 | C9 可自动测；指标 7 可自动算 |
+| P4 评测 | 5 轮 × 16 样本 × 2 引擎 × 2 问法 | §4.4 汇总表填满 |
+| P5 归因 | J1/J2/J3 三层判别 + 逐失败样本复盘 | 每个失败有明确归因（judge / 被测 / 夹具） |
+| P6 结论 | Go / No-Go + 后续提案（注册方式、IR 断言、30 样本扩充） | 结论签字 |
+
+---
+
+## 10. 附录
+
+### 10.1 引用来源（全部实际读取核实）
+
+| 引用 | 来源 | 用途 |
+| --- | --- | --- |
+| `Evidence` / `Question` / `Verdict` / `Judge` Protocol / `EngineName` | `src/nlaut/judge/protocol.py` | §7 接口设计 |
+| `route()` 路由逻辑与 0.9 硬编码 | `src/nlaut/judge/arbiter.py` | §4.1-6、§7.5 |
+| 确定性判定 10 模式、缺失数据 → 转人工语义 | `src/nlaut/judge/deterministic.py` | §3.5.2-T5、§5.4 |
+| Laya 三题型与 `render_state` | `src/nlaut/judge/laya.py` | §7.3、§7.7 |
+| VLM 温度 0 与 logprob 置信度代理 | `src/nlaut/judge/vlm_mlx.py` | §4.2 种子控制 |
+| IR 断言联合类型与 `judge` 字段 | `src/nlaut/ir/model.py` | §7.5 路径 B |
+| 执行编排、`_engine_name`、`_question_for` | `src/nlaut/executor/runner.py` | §7.5、§7.7 |
+| **AgentJudge 现有实现**（签名/置信度封顶/降级/parse/trace） | `src/nlaut/judge/agent_judge.py` | §0.1、§5、§7.2、§7.6 |
+| **6 个只读取证工具 + `build_tool_impls`** | `src/nlaut/judge/agent_tools.py` | §0.1、§5.1、§7.4 |
+| **已有 8 样本金标准 + 防陷阱失效自检 + CSS override 事故记载** | `tests/agent_judge_test.py` | §3.1、§3.5.1 |
+| `agent` pytest marker | `pyproject.toml` | §0.1、§7.7 |
+| 判定层金标准与接入门槛 | `docs/judge-protocol.md`、`tests/judge_golden/README.md` | §3.6 |
+| 正反问法样本设计 | `tests/judge_golden/golden.jsonl` | §3.2-G-c |
+| 引擎注册表 | `src/nlaut/judge/__init__.py` | §7.1、§7.7 |
+| 框架硬约束（禁绕金标准、禁编造结果、禁硬编码 sleep） | `AGENTS.md` §5 | §3.5、§9 |
+| 三级漏斗分层设计 | `docs/nlaut-技术汇报材料.md` §3.1 | §2.2 |
+| G-11 定义、判定原则、阻断项性质 | 《集成准入门禁判定项清单 v1.0》§3.4、§二 | §0、§1、§2 |
+| L2 / L5 责任划分 | 《质量责任边界图 v1.2》§四 | §1.3、§0.3-R2 |
+| 受控夹具形态参照 | `tests/demo_app.py`（任务 CRUD、种子数据、reset 后置钩子） | §3.4 E1~E8 形态 |
+
+### 10.2 本方案中未经验证的前提（诚实声明）
+
+| # | 前提 | 状态 | 处置 |
+| --- | --- | --- | --- |
+| 1 | `max_cost_usd` 约束真正生效 | **未核实** —— 读 `agent_judge.py` 未见拦截逻辑 | P0 阶段核实；§7.2 |
+| 2 | `max_steps=6` 够用于 G-11 三段取证 | **未实测** | P0 阶段评估；§5.3 |
+| 3 | 8 样本从未跑过真实端点 | **确认** —— `-m agent` 默认被 `addopts` 排除 | P4 首轮必跑；§0.2 |
+| 4 | 真实组外模块的接入形态 | 未接触具体接入模块 | 夹具三通道通用；结论只声明"机制可行性" |
+| 5 | 组外模块的真值源形态（DB / HTTP / 日志） | 未知 | `truth_source_spec` 做成显式契约字段，接入时填充 |
+| 6 | Agent 底座模型的工具调用可靠性 | `agent_judge.py` docstring 记录 2026-10-30 实测正常，但未在本方案中复跑 | P4 复跑确认 |
+| 7 | `judge/__init__.py` 注册方式 | 当前**未注册** "agent" | §7.1 建议懒加载工厂 |
+
+---
+
+*文档结束。所有指标定义与门槛均可追溯到本文件的公式与表格；PoC 执行时须真跑并留存原始输出，不得以推断填充实测列。*

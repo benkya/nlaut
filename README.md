@@ -1,7 +1,7 @@
 # nlaut — 自然语言自动化测试框架
 
 自然语言口述 → 结构化用例 IR（`cases/`，唯一事实源）→ **三通道执行**（Playwright Web / Electron CDP / 大模型 API）
-→ **三级判定**（1° 确定性断言 → 2° VLM 视觉（本地 mlx-vlm）→ 3° Laya System One（本地 laya-mlx））
+→ **四级判定**（1° 确定性断言 → 2° VLM 视觉（本地 mlx-vlm）→ 3° Laya System One（本地 laya-mlx）→ 4° Agent-as-Judge 自主取证）
 → 置信度路由（≥0.9 自动 / 0.5–0.9 人工仲裁）→ **自包含 HTML 报告**（截图+置信度+溯源内嵌）→ **飞书群自动分发**。
 
 ## 能力总览
@@ -11,8 +11,9 @@
 | **Web 应用** | Playwright（系统 Chrome） | 32 条 | 登录/任务列表/查询/翻页/新增 |
 | **大模型 API** | httpx（OpenAI 兼容） | 93 条（18 维度 × P0/P1/P2） | 安全/代码/推理/工具调用/流式/RAG/对话 |
 | **Electron/IDE 插件** | CDP（connect_over_cdp） | 8 条 | GienCoderWorkbench / DSH 桌面端 |
+| **集成准入门禁** | Agent 自主取证 | 1 条示例 | 模块接入后「数据能进来、结果能出去」（G-11） |
 
-**框架规模**：~4,000 行 Python · 125 条用例 IR · 99 项元测试全绿 · 13 个模型预配置 · 9 篇 GitHub Wiki · 统一报告（对话+4P12S+上线结论卡）
+**框架规模**：~4,200 行 Python · 133 条用例 IR · 149 项元测试全绿 · 13 个模型预配置 · 9 篇 GitHub Wiki · 统一报告（对话+4P12S+上线结论卡）
 
 ## 快速开始
 
@@ -181,7 +182,7 @@ cron 每 5 分钟扫描 → 自动识别 → 跑 P0 批次 → 报告发群 → 
 | 静态检查 | `make lint`（ruff） |
 | 完整验证 | `make verify`（lint + test） |
 
-## 三级判定漏斗
+## 判定漏斗（3° + 4° Agent）
 
 ```
 1° 确定性断言（deterministic.py）     零 AI 成本，微秒级
@@ -189,14 +190,19 @@ cron 每 5 分钟扫描 → 自动识别 → 跑 P0 批次 → 报告发群 → 
 2° VLM 视觉判定（mlx-vlm，Qwen2.5-VL-3B）  本地推理，单图 5-6s
     ↓ 未覆盖的场景
 3° Laya System One（laya-mlx）         Noul/Choice/Score，13ms 级，0 输出 token
+    ↓ 需要「自己取证」才能判的场景
+4° Agent-as-Judge（agent_judge.py）    judge 自主调只读工具取证，2-5s/次
 ```
 
 **置信度路由**（`judge/arbiter.py`）：
 - 确定性引擎 → value ≥0.5 直接 auto_pass/auto_fail
 - AI 引擎 conf ≥0.9 → auto_pass/auto_fail
 - 0.5 ≤ conf < 0.9 → human_review（人工仲裁队列，附完整证据包）
+- **Agent 引擎 conf 强制封顶 0.85** → 必定走 human_review（agent judge 是「证据充分的判定」，不是「自动放行许可」）
 
-**判定层自身是被测对象**：`tests/judge_golden/` 金标准回归防止 AI 误报进入报告。
+**判定层自身是被测对象**：`tests/judge_golden/` 金标准回归防止 AI 误报进入报告；
+`tests/agent_judge_test.py` 另有 9 样本金标准 × 3 轮一致性度量
+（实测 27/27 判对、翻转率 0%、中位延迟 2.9s）。
 
 ## 断言类型速查
 
@@ -210,6 +216,30 @@ cron 每 5 分钟扫描 → 自动识别 → 跑 P0 批次 → 报告发群 → 
 | `response_length` / `response_time` | 确定性（1°） | 字数区间/延迟断言 |
 | `visual_state` | VLM（2°） | 页面整体状态、渲染正确性 |
 | `noul` / `choice` / `score` | Laya（3°） | 概率判断/归因分类/量表评分 |
+| `agent_verify` | Agent（4°） | **自主取证型判定**：judge 自己查库/查接口/翻日志后下结论 |
+
+### `agent_verify` 用法（Agent-as-Judge，v0.4.0）
+
+与其它断言的本质差异：**证据不是通道预先塞进去的，而是 judge 自己在运行时调工具去取**。
+
+```yaml
+assertions:
+  - kind: agent_verify
+    objective: "验证：模块 M 接入后，本次创建的任务是否真的落库到 task 表。判定依据是表里的实际行（module=M 且存在该任务 id），不是接口的自述成功与否。"
+    threshold: 0.9
+    max_steps: 6
+```
+
+可用只读工具：`query_db` / `locate_object` / `http_probe` / `read_log` / `read_file` /
+`inspect_trace` / `list_registry`。
+
+- 端点不可用 / 无 key / 步数耗尽 → `confidence=0` + `raw.degraded`，**绝不误判为通过**
+- 环境变量：`NLaut_AGENT_JUDGE_MODEL`（默认 `deepseek-v4-flash`）、
+  `NLaut_AGENT_JUDGE_TOOLS`（逗号分隔工具名子集，用于「有无工具」消融对照）
+- 一致率实测：`scripts/agent_judge_repeatability.py`
+
+> 设计与验证文档：`docs/agent-as-judge-design.md`（接口设计）、
+> `docs/agent-as-judge-poc-plan.md`（验证方案）、`docs/agent-as-judge-paper-transfer.md`（论文方法论移植）
 
 ## 用例 IR（唯一事实源）
 
@@ -345,6 +375,7 @@ L6 报告层   report/（HTML + 证据链：截图/判定明细/置信度/口述
 | v0.2.8 | 口述携带地址+key（临时模型零预配置） | ✅ 2026-09-24 |
 | v0.2.9 | 统一报告：对话能力+4P12S 合并 + 上线结论卡 + 失败用例请求/返回展示 | ✅ 2026-09-29 |
 | v0.3.0 | Electron CDP 通道实现（connect_over_cdp，三通道全部可用） | ✅ 2026-09-29 |
+| v0.4.0 | **Agent-as-Judge 自主取证判定**（`agent_verify` 断言 + 7 个只读工具 + 9 样本金标准 + 一致率实测脚本） | ✅ 2026-10-30 |
 | M1 | `pipeline/` 框架内自动生成（接模型 API） | 待做 |
 | M2 | IR→pytest 代码生成 + 环境矩阵 + 自愈 | 待做 |
 | M3 | 趋势报告 + 并行执行 + MCP server | 待做 |
