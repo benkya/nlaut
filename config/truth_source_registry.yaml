@@ -1,0 +1,8 @@
+design_task_attachments:
+  description: 设计任务附件目录
+  path: ~/.dsh/design-task-attachments
+  type: file
+design_tasks:
+  description: 设计任务文件，包含所有设计任务记录
+  path: ~/.dsh/design-task.json
+  type: file

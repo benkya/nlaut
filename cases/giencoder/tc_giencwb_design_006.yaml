@@ -1,0 +1,52 @@
+id: tc_giencwb_design_006
+title: Agent-as-Judge验证-设计任务数据持久化
+source: |
+  口述: 创建设计任务后，验证任务数据是否真实写入到 dshHome/design-task.json 文件，
+  检查任务标题、ID、状态、创建时间是否正确。
+  
+  这是 Agent-as-Judge 的实际应用场景：
+  - Judge 自主调用只读工具（文件读取）获取真值
+  - 对比被测系统的自述（"任务已创建"）与客观证据（文件内容）
+  - 避免被"表面成功实际未落库"的陷阱欺骗
+req_ref: null
+priority: P0
+channel: electron
+quad:
+  actor: Agent-as-Judge
+  action: 自主查询设计任务文件验证数据落库
+  object: 设计任务数据持久化（G-11 门禁）
+  preconditions:
+    - 设计任务已通过"添加任务"表单提交
+    - GienCoderWorkbench Electron应用已启动
+data_ref: null
+steps:
+  - action: wait_timeout
+    ms: 2000
+    comment: 等待文件写入完成
+assertions:
+  - kind: agent_verify
+    prompt: |
+      请验证设计任务"测试任务-设计登录页面"是否真实落库：
+      
+      1. 读取 ~/.dsh/design-task.json 文件（如果文件不存在，说明未落库）
+      2. 解析 JSON，找到 title 字段包含"测试任务"或"设计登录页面"的任务记录
+      3. 检查该记录的以下字段：
+         - id: 应为 REQ-S31-<n> 格式
+         - title: 应包含"测试任务"或"设计登录页面"
+         - status: 应为 "not-started"、"in-progress" 或 "done"
+         - createdAt: 应为今天的 ISO 时间戳
+      4. 如果文件不存在或找不到对应记录，判定为 fail
+      
+      只答：pass 或 fail，并给出查询到的具体记录作为证据。
+    truth_sources:
+      design_tasks:
+        type: file
+        path: ~/.dsh/design-task.json
+        description: 设计任务文件
+    tools:
+      - name: read_file
+        description: 读取本地文件内容
+    max_cost_usd: 0.10
+    timeout_s: 30
+    confidence_threshold: 0.85
+postconditions: []
