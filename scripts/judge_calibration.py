@@ -26,7 +26,7 @@ from nlaut.judge.llm_judge import LLMJudge
 from nlaut.judge.protocol import Evidence, Question, Verdict
 
 
-def load_golden_standard(path: str = "config/calibrate_v1.json") -> list[dict]:
+def load_golden_standard(path: str = "config/calibrate_v2.json") -> list[dict]:
     """加载金标准样本"""
     with open(path) as f:
         data = json.load(f)

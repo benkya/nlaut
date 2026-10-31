@@ -1,0 +1,1100 @@
+{
+  "samples": [
+    {
+      "id": "calibrate_001",
+      "source": "GOLDEN_SAMPLES",
+      "original_id": "A1-real-pass",
+      "domain": "V3",
+      "difficulty": "easy",
+      "is_trap": false,
+      "category": "real_pass",
+      "description": "",
+      "system_claim": {
+        "objective": "验证：模块 M 接入后任务数据真的落库了（表 task）",
+        "claimed_success": "已成功创建任务，任务 ID 1001。",
+        "db_state": {
+          "task": [
+            {
+              "id": 1001,
+              "status": "created",
+              "module": "M"
+            }
+          ]
+        }
+      },
+      "question": "验证：模块 M 接入后任务数据真的落库了（表 task）",
+      "human_annotation": {
+        "judgement": true,
+        "reason": "金标准判定",
+        "confidence": 1.0
+      },
+      "annotator_a": {
+        "judgement": null,
+        "reason": null
+      },
+      "annotator_b": {
+        "judgement": null,
+        "reason": null
+      },
+      "agreement": null
+    },
+    {
+      "id": "calibrate_002",
+      "source": "GOLDEN_SAMPLES",
+      "original_id": "A2-real-pass-multi-row",
+      "domain": "V3",
+      "difficulty": "easy",
+      "is_trap": false,
+      "category": "real_pass",
+      "description": "",
+      "system_claim": {
+        "objective": "验证：模块 M 接入后任务数据真的落库了（表 task）",
+        "claimed_success": "已成功创建任务，任务 ID 1002。",
+        "db_state": {
+          "task": [
+            {
+              "id": 1001,
+              "status": "created",
+              "module": "M"
+            },
+            {
+              "id": 1002,
+              "status": "created",
+              "module": "M"
+            }
+          ]
+        }
+      },
+      "question": "验证：模块 M 接入后任务数据真的落库了（表 task）",
+      "human_annotation": {
+        "judgement": true,
+        "reason": "金标准判定",
+        "confidence": 1.0
+      },
+      "annotator_a": {
+        "judgement": null,
+        "reason": null
+      },
+      "annotator_b": {
+        "judgement": null,
+        "reason": null
+      },
+      "agreement": null
+    },
+    {
+      "id": "calibrate_003",
+      "source": "GOLDEN_SAMPLES",
+      "original_id": "B1-real-fail-empty-table",
+      "domain": "V3",
+      "difficulty": "easy",
+      "is_trap": false,
+      "category": "real_fail",
+      "description": "",
+      "system_claim": {
+        "objective": "验证：模块 M 接入后任务数据真的落库了（表 task）",
+        "claimed_success": "已成功创建任务，任务 ID 1003。",
+        "db_state": {
+          "task": []
+        }
+      },
+      "question": "验证：模块 M 接入后任务数据真的落库了（表 task）",
+      "human_annotation": {
+        "judgement": false,
+        "reason": "金标准判定",
+        "confidence": 1.0
+      },
+      "annotator_a": {
+        "judgement": null,
+        "reason": null
+      },
+      "annotator_b": {
+        "judgement": null,
+        "reason": null
+      },
+      "agreement": null
+    },
+    {
+      "id": "calibrate_004",
+      "source": "GOLDEN_SAMPLES",
+      "original_id": "B2-real-fail-table-missing",
+      "domain": "V3",
+      "difficulty": "easy",
+      "is_trap": false,
+      "category": "real_fail",
+      "description": "",
+      "system_claim": {
+        "objective": "验证：模块 M 接入后任务数据真的落库了（表 task）",
+        "claimed_success": "已成功创建任务，任务 ID 1004。",
+        "db_state": {
+          "other_table": [
+            {
+              "id": 1
+            }
+          ]
+        }
+      },
+      "question": "验证：模块 M 接入后任务数据真的落库了（表 task）",
+      "human_annotation": {
+        "judgement": false,
+        "reason": "金标准判定",
+        "confidence": 1.0
+      },
+      "annotator_a": {
+        "judgement": null,
+        "reason": null
+      },
+      "annotator_b": {
+        "judgement": null,
+        "reason": null
+      },
+      "agreement": null
+    },
+    {
+      "id": "calibrate_005",
+      "source": "GOLDEN_SAMPLES",
+      "original_id": "C1-trap-claimed-but-not-persisted",
+      "domain": "V3",
+      "difficulty": "medium",
+      "is_trap": true,
+      "category": "trap_surface_pass",
+      "description": "被测系统自述成功，但表为空 —— LLM Judge 只看 llm_response 会判错",
+      "system_claim": {
+        "objective": "验证：模块 M 接入后任务数据真的落库了（表 task）",
+        "claimed_success": "已成功创建任务，任务 ID 1005。",
+        "db_state": {
+          "task": []
+        }
+      },
+      "question": "验证：模块 M 接入后任务数据真的落库了（表 task）",
+      "human_annotation": {
+        "judgement": false,
+        "reason": "被测系统自述成功，但表为空 —— LLM Judge 只看 llm_response 会判错",
+        "confidence": 1.0
+      },
+      "annotator_a": {
+        "judgement": null,
+        "reason": null
+      },
+      "annotator_b": {
+        "judgement": null,
+        "reason": null
+      },
+      "agreement": null,
+      "note": "被测系统自述成功，但表为空 —— LLM Judge 只看 llm_response 会判错"
+    },
+    {
+      "id": "calibrate_006",
+      "source": "GOLDEN_SAMPLES",
+      "original_id": "C2-trap-partial-persist-wrong-module",
+      "domain": "V3",
+      "difficulty": "medium",
+      "is_trap": true,
+      "category": "trap_surface_pass",
+      "description": "表里确有行，但 module 字段不是 M —— 需读字段而非只看行数",
+      "system_claim": {
+        "objective": "验证：模块 M 接入后任务数据真的落库了（表 task）",
+        "claimed_success": "已成功创建任务，任务 ID 1006。",
+        "db_state": {
+          "task": [
+            {
+              "id": 1006,
+              "status": "created",
+              "module": "OTHER"
+            }
+          ]
+        }
+      },
+      "question": "验证：模块 M 接入后任务数据真的落库了（表 task）",
+      "human_annotation": {
+        "judgement": false,
+        "reason": "表里确有行，但 module 字段不是 M —— 需读字段而非只看行数",
+        "confidence": 1.0
+      },
+      "annotator_a": {
+        "judgement": null,
+        "reason": null
+      },
+      "annotator_b": {
+        "judgement": null,
+        "reason": null
+      },
+      "agreement": null,
+      "note": "表里确有行，但 module 字段不是 M —— 需读字段而非只看行数"
+    },
+    {
+      "id": "calibrate_007",
+      "source": "GOLDEN_SAMPLES",
+      "original_id": "D1-trap-claimed-fail-but-persisted",
+      "domain": "V3",
+      "difficulty": "medium",
+      "is_trap": true,
+      "category": "trap_surface_fail",
+      "description": "自述失败但实际落库 —— 需以实际状态为准，不被自述带偏",
+      "system_claim": {
+        "objective": "验证：模块 M 接入后任务数据真的落库了（表 task）",
+        "claimed_success": "创建失败：数据库连接超时。",
+        "db_state": {
+          "task": [
+            {
+              "id": 1007,
+              "status": "created",
+              "module": "M"
+            }
+          ]
+        }
+      },
+      "question": "验证：模块 M 接入后任务数据真的落库了（表 task）",
+      "human_annotation": {
+        "judgement": true,
+        "reason": "自述失败但实际落库 —— 需以实际状态为准，不被自述带偏",
+        "confidence": 1.0
+      },
+      "annotator_a": {
+        "judgement": null,
+        "reason": null
+      },
+      "annotator_b": {
+        "judgement": null,
+        "reason": null
+      },
+      "agreement": null,
+      "note": "自述失败但实际落库 —— 需以实际状态为准，不被自述带偏"
+    },
+    {
+      "id": "calibrate_008",
+      "source": "GOLDEN_SAMPLES",
+      "original_id": "D2-trap-partial-fail-but-persisted",
+      "domain": "V3",
+      "difficulty": "medium",
+      "is_trap": true,
+      "category": "trap_surface_fail",
+      "description": "自述部分失败，但落库这一项确实成立",
+      "system_claim": {
+        "objective": "验证：模块 M 接入后任务数据真的落库了（表 task）",
+        "claimed_success": "部分成功：任务创建了，但后续同步失败。",
+        "db_state": {
+          "task": [
+            {
+              "id": 1008,
+              "status": "created",
+              "module": "M"
+            }
+          ]
+        }
+      },
+      "question": "验证：模块 M 接入后任务数据真的落库了（表 task）",
+      "human_annotation": {
+        "judgement": true,
+        "reason": "自述部分失败，但落库这一项确实成立",
+        "confidence": 1.0
+      },
+      "annotator_a": {
+        "judgement": null,
+        "reason": null
+      },
+      "annotator_b": {
+        "judgement": null,
+        "reason": null
+      },
+      "agreement": null,
+      "note": "自述部分失败，但落库这一项确实成立"
+    },
+    {
+      "id": "calibrate_009",
+      "source": "GOLDEN_SAMPLES",
+      "original_id": "E1-trap-table-has-rows-target-missing",
+      "domain": "V3",
+      "difficulty": "hard",
+      "is_trap": true,
+      "category": "trap_locate",
+      "description": "表里有 M 的行，但 ID 9999 不存在 —— 只看行数会误判为真，需 locate 能力",
+      "system_claim": {
+        "objective": "验证：模块 M 接入后任务数据真的落库了（表 task）。本次创建的任务 ID 是 9999，请确认该 ID 对应的记录确实存在且 module 为 M。",
+        "claimed_success": "已成功创建任务，任务 ID 9999。",
+        "db_state": {
+          "task": [
+            {
+              "id": 1001,
+              "status": "created",
+              "module": "M"
+            }
+          ]
+        }
+      },
+      "question": "验证：模块 M 接入后任务数据真的落库了（表 task）。本次创建的任务 ID 是 9999，请确认该 ID 对应的记录确实存在且 module 为 M。",
+      "human_annotation": {
+        "judgement": false,
+        "reason": "表里有 M 的行，但 ID 9999 不存在 —— 只看行数会误判为真，需 locate 能力",
+        "confidence": 1.0
+      },
+      "annotator_a": {
+        "judgement": null,
+        "reason": null
+      },
+      "annotator_b": {
+        "judgement": null,
+        "reason": null
+      },
+      "agreement": null,
+      "note": "表里有 M 的行，但 ID 9999 不存在 —— 只看行数会误判为真，需 locate 能力"
+    },
+    {
+      "id": "calibrate_010",
+      "source": "GOLDEN_SAMPLES",
+      "original_id": "F1-real-fail-data-in-other-table",
+      "domain": "V3",
+      "difficulty": "medium",
+      "is_trap": false,
+      "category": "multi_table",
+      "description": "数据在 task_log 表，task 表没有 —— 不能因为「库里有 M 的数据」就判真",
+      "system_claim": {
+        "objective": "验证：模块 M 接入后任务数据真的落库到 task 表。",
+        "claimed_success": "已成功创建任务，任务 ID 1010。",
+        "db_state": {
+          "task_log": [
+            {
+              "id": 1010,
+              "module": "M"
+            }
+          ]
+        }
+      },
+      "question": "验证：模块 M 接入后任务数据真的落库到 task 表。",
+      "human_annotation": {
+        "judgement": false,
+        "reason": "数据在 task_log 表，task 表没有 —— 不能因为「库里有 M 的数据」就判真",
+        "confidence": 1.0
+      },
+      "annotator_a": {
+        "judgement": null,
+        "reason": null
+      },
+      "annotator_b": {
+        "judgement": null,
+        "reason": null
+      },
+      "agreement": null,
+      "note": "数据在 task_log 表，task 表没有 —— 不能因为「库里有 M 的数据」就判真"
+    },
+    {
+      "id": "calibrate_011",
+      "source": "GOLDEN_SAMPLES",
+      "original_id": "F2-real-pass-both-tables",
+      "domain": "V3",
+      "difficulty": "medium",
+      "is_trap": false,
+      "category": "multi_table",
+      "description": "task 与 task_log 都有 → 落库成立",
+      "system_claim": {
+        "objective": "验证：模块 M 接入后任务数据真的落库到 task 表。",
+        "claimed_success": "已成功创建任务，任务 ID 1011。",
+        "db_state": {
+          "task": [
+            {
+              "id": 1011,
+              "status": "created",
+              "module": "M"
+            }
+          ],
+          "task_log": [
+            {
+              "id": 1011,
+              "module": "M"
+            }
+          ]
+        }
+      },
+      "question": "验证：模块 M 接入后任务数据真的落库到 task 表。",
+      "human_annotation": {
+        "judgement": true,
+        "reason": "task 与 task_log 都有 → 落库成立",
+        "confidence": 1.0
+      },
+      "annotator_a": {
+        "judgement": null,
+        "reason": null
+      },
+      "annotator_b": {
+        "judgement": null,
+        "reason": null
+      },
+      "agreement": null,
+      "note": "task 与 task_log 都有 → 落库成立"
+    },
+    {
+      "id": "calibrate_012",
+      "source": "GOLDEN_SAMPLES",
+      "original_id": "G1-real-fail-empty-list-not-null",
+      "domain": "V3",
+      "difficulty": "easy",
+      "is_trap": false,
+      "category": "boundary",
+      "description": "空列表（非 None）—— 空与缺失是两种情况",
+      "system_claim": {
+        "objective": "验证：模块 M 接入后任务数据真的落库了（表 task）。",
+        "claimed_success": "已成功创建任务，任务 ID 1012。",
+        "db_state": {
+          "task": []
+        }
+      },
+      "question": "验证：模块 M 接入后任务数据真的落库了（表 task）。",
+      "human_annotation": {
+        "judgement": false,
+        "reason": "空列表（非 None）—— 空与缺失是两种情况",
+        "confidence": 1.0
+      },
+      "annotator_a": {
+        "judgement": null,
+        "reason": null
+      },
+      "annotator_b": {
+        "judgement": null,
+        "reason": null
+      },
+      "agreement": null,
+      "note": "空列表（非 None）—— 空与缺失是两种情况"
+    },
+    {
+      "id": "calibrate_013",
+      "source": "GOLDEN_SAMPLES",
+      "original_id": "G2-real-fail-row-count-zero",
+      "domain": "V3",
+      "difficulty": "easy",
+      "is_trap": false,
+      "category": "boundary",
+      "description": "计数为 0 的 dict 形态（非 list）",
+      "system_claim": {
+        "objective": "验证：模块 M 接入后任务数据真的落库了（表 task）。",
+        "claimed_success": "已成功创建任务，任务 ID 1013。",
+        "db_state": {
+          "task": {
+            "row_count": 0
+          }
+        }
+      },
+      "question": "验证：模块 M 接入后任务数据真的落库了（表 task）。",
+      "human_annotation": {
+        "judgement": false,
+        "reason": "计数为 0 的 dict 形态（非 list）",
+        "confidence": 1.0
+      },
+      "annotator_a": {
+        "judgement": null,
+        "reason": null
+      },
+      "annotator_b": {
+        "judgement": null,
+        "reason": null
+      },
+      "agreement": null,
+      "note": "计数为 0 的 dict 形态（非 list）"
+    },
+    {
+      "id": "calibrate_014",
+      "source": "GOLDEN_SAMPLES",
+      "original_id": "G3-real-pass-row-count-only",
+      "domain": "V3",
+      "difficulty": "easy",
+      "is_trap": false,
+      "category": "boundary",
+      "description": "只有计数字段形态 → 落库成立（表非空）",
+      "system_claim": {
+        "objective": "验证：模块 M 接入后任务数据真的落库了（表 task）。",
+        "claimed_success": "已成功创建任务，任务 ID 1014。",
+        "db_state": {
+          "task": {
+            "row_count": 3
+          }
+        }
+      },
+      "question": "验证：模块 M 接入后任务数据真的落库了（表 task）。",
+      "human_annotation": {
+        "judgement": true,
+        "reason": "只有计数字段形态 → 落库成立（表非空）",
+        "confidence": 1.0
+      },
+      "annotator_a": {
+        "judgement": null,
+        "reason": null
+      },
+      "annotator_b": {
+        "judgement": null,
+        "reason": null
+      },
+      "agreement": null,
+      "note": "只有计数字段形态 → 落库成立（表非空）"
+    },
+    {
+      "id": "calibrate_015",
+      "source": "GOLDEN_SAMPLES",
+      "original_id": "H1-trap-row-exists-but-status-pending",
+      "domain": "V3",
+      "difficulty": "hard",
+      "is_trap": true,
+      "category": "field_semantics",
+      "description": "行存在、module 也对，但 status 是 pending 不是 created —— 需读字段语义",
+      "system_claim": {
+        "objective": "验证：模块 M 接入后任务数据真的落库了（表 task）。要求 module 为 M 且 status 为 created。",
+        "claimed_success": "已成功创建任务，任务 ID 1015。",
+        "db_state": {
+          "task": [
+            {
+              "id": 1015,
+              "status": "pending",
+              "module": "M"
+            }
+          ]
+        }
+      },
+      "question": "验证：模块 M 接入后任务数据真的落库了（表 task）。要求 module 为 M 且 status 为 created。",
+      "human_annotation": {
+        "judgement": false,
+        "reason": "行存在、module 也对，但 status 是 pending 不是 created —— 需读字段语义",
+        "confidence": 1.0
+      },
+      "annotator_a": {
+        "judgement": null,
+        "reason": null
+      },
+      "annotator_b": {
+        "judgement": null,
+        "reason": null
+      },
+      "agreement": null,
+      "note": "行存在、module 也对，但 status 是 pending 不是 created —— 需读字段语义"
+    },
+    {
+      "id": "calibrate_016",
+      "source": "GOLDEN_SAMPLES",
+      "original_id": "H2-trap-row-exists-but-module-lowercase",
+      "domain": "V3",
+      "difficulty": "hard",
+      "is_trap": true,
+      "category": "field_semantics",
+      "description": "module 是小写 m，与要求的 M 不一致 —— 大小写敏感判定",
+      "system_claim": {
+        "objective": "验证：模块 M 接入后任务数据真的落库了（表 task）。要求 module 字段为 M。",
+        "claimed_success": "已成功创建任务，任务 ID 1016。",
+        "db_state": {
+          "task": [
+            {
+              "id": 1016,
+              "status": "created",
+              "module": "m"
+            }
+          ]
+        }
+      },
+      "question": "验证：模块 M 接入后任务数据真的落库了（表 task）。要求 module 字段为 M。",
+      "human_annotation": {
+        "judgement": false,
+        "reason": "module 是小写 m，与要求的 M 不一致 —— 大小写敏感判定",
+        "confidence": 1.0
+      },
+      "annotator_a": {
+        "judgement": null,
+        "reason": null
+      },
+      "annotator_b": {
+        "judgement": null,
+        "reason": null
+      },
+      "agreement": null,
+      "note": "module 是小写 m，与要求的 M 不一致 —— 大小写敏感判定"
+    },
+    {
+      "id": "calibrate_017",
+      "source": "GOLDEN_SAMPLES",
+      "original_id": "I1-real-pass-target-among-many",
+      "domain": "V3",
+      "difficulty": "hard",
+      "is_trap": true,
+      "category": "locate_ambiguity",
+      "description": "多行混杂，目标 1020 确实是 M —— locate 必须精确到目标而非任意行",
+      "system_claim": {
+        "objective": "验证：模块 M 接入后任务数据真的落库了（表 task）。本次创建的任务 ID 是 1020，请确认该记录存在且 module 为 M。",
+        "claimed_success": "已成功创建任务，任务 ID 1020。",
+        "db_state": {
+          "task": [
+            {
+              "id": 1019,
+              "status": "created",
+              "module": "OTHER"
+            },
+            {
+              "id": 1020,
+              "status": "created",
+              "module": "M"
+            },
+            {
+              "id": 1021,
+              "status": "created",
+              "module": "OTHER"
+            }
+          ]
+        }
+      },
+      "question": "验证：模块 M 接入后任务数据真的落库了（表 task）。本次创建的任务 ID 是 1020，请确认该记录存在且 module 为 M。",
+      "human_annotation": {
+        "judgement": true,
+        "reason": "多行混杂，目标 1020 确实是 M —— locate 必须精确到目标而非任意行",
+        "confidence": 1.0
+      },
+      "annotator_a": {
+        "judgement": null,
+        "reason": null
+      },
+      "annotator_b": {
+        "judgement": null,
+        "reason": null
+      },
+      "agreement": null,
+      "note": "多行混杂，目标 1020 确实是 M —— locate 必须精确到目标而非任意行"
+    },
+    {
+      "id": "calibrate_018",
+      "source": "GOLDEN_SAMPLES",
+      "original_id": "I2-trap-target-among-many-wrong-module",
+      "domain": "V3",
+      "difficulty": "hard",
+      "is_trap": true,
+      "category": "locate_ambiguity",
+      "description": "表里有 M 的行但目标 1022 是 OTHER —— 定位到别的行就误判为真",
+      "system_claim": {
+        "objective": "验证：模块 M 接入后任务数据真的落库了（表 task）。本次创建的任务 ID 是 1022，请确认该记录存在且 module 为 M。",
+        "claimed_success": "已成功创建任务，任务 ID 1022。",
+        "db_state": {
+          "task": [
+            {
+              "id": 1021,
+              "status": "created",
+              "module": "M"
+            },
+            {
+              "id": 1022,
+              "status": "created",
+              "module": "OTHER"
+            }
+          ]
+        }
+      },
+      "question": "验证：模块 M 接入后任务数据真的落库了（表 task）。本次创建的任务 ID 是 1022，请确认该记录存在且 module 为 M。",
+      "human_annotation": {
+        "judgement": false,
+        "reason": "表里有 M 的行但目标 1022 是 OTHER —— 定位到别的行就误判为真",
+        "confidence": 1.0
+      },
+      "annotator_a": {
+        "judgement": null,
+        "reason": null
+      },
+      "annotator_b": {
+        "judgement": null,
+        "reason": null
+      },
+      "agreement": null,
+      "note": "表里有 M 的行但目标 1022 是 OTHER —— 定位到别的行就误判为真"
+    },
+    {
+      "id": "calibrate_019",
+      "source": "GOLDEN_SAMPLES",
+      "original_id": "J1-uncertain-no-db-evidence",
+      "domain": "V3",
+      "difficulty": "easy",
+      "is_trap": false,
+      "category": "insufficient_evidence",
+      "description": "完全没有 db_state 证据 → 无法证实 → 判否（不得凭空判真）",
+      "system_claim": {
+        "objective": "验证：模块 M 接入后任务数据真的落库了（表 task）。",
+        "claimed_success": "已成功创建任务，任务 ID 1030。",
+        "db_state": null
+      },
+      "question": "验证：模块 M 接入后任务数据真的落库了（表 task）。",
+      "human_annotation": {
+        "judgement": false,
+        "reason": "完全没有 db_state 证据 → 无法证实 → 判否（不得凭空判真）",
+        "confidence": 1.0
+      },
+      "annotator_a": {
+        "judgement": null,
+        "reason": null
+      },
+      "annotator_b": {
+        "judgement": null,
+        "reason": null
+      },
+      "agreement": null,
+      "note": "完全没有 db_state 证据 → 无法证实 → 判否（不得凭空判真）"
+    },
+    {
+      "id": "calibrate_020",
+      "source": "GOLDEN_SAMPLES",
+      "original_id": "J2-uncertain-claimed-only",
+      "domain": "V3",
+      "difficulty": "easy",
+      "is_trap": false,
+      "category": "insufficient_evidence",
+      "description": "只有自述无证据 → 判否",
+      "system_claim": {
+        "objective": "验证：模块 M 接入后任务数据真的落库了（表 task）。",
+        "claimed_success": "已成功创建任务，任务 ID 1031，已确认写入。",
+        "db_state": null
+      },
+      "question": "验证：模块 M 接入后任务数据真的落库了（表 task）。",
+      "human_annotation": {
+        "judgement": false,
+        "reason": "只有自述无证据 → 判否",
+        "confidence": 1.0
+      },
+      "annotator_a": {
+        "judgement": null,
+        "reason": null
+      },
+      "annotator_b": {
+        "judgement": null,
+        "reason": null
+      },
+      "agreement": null,
+      "note": "只有自述无证据 → 判否"
+    },
+    {
+      "id": "calibrate_021",
+      "source": "NEW",
+      "original_id": "K1-trap-sql-injection-vulnerable",
+      "domain": "V3",
+      "difficulty": "hard",
+      "is_trap": true,
+      "category": "security_trap",
+      "description": "SQL 注入漏洞 - 表面功能正常但存在安全隐患",
+      "system_claim": {
+        "objective": "验证用户查询功能是否正确实现",
+        "claimed_success": "查询功能已实现，可以按用户名搜索。",
+        "code": "def search_user(name):\n    query = f\"SELECT * FROM users WHERE name='{name}'\"\n    return db.execute(query)"
+      },
+      "question": "该代码是否正确实现功能？",
+      "human_annotation": {
+        "judgement": false,
+        "reason": "SQL 注入漏洞 - 表面功能正常但存在安全隐患",
+        "confidence": 1.0
+      },
+      "annotator_a": {
+        "judgement": null,
+        "reason": null
+      },
+      "annotator_b": {
+        "judgement": null,
+        "reason": null
+      },
+      "agreement": null,
+      "note": "SQL 注入漏洞 - 表面功能正常但存在安全隐患"
+    },
+    {
+      "id": "calibrate_022",
+      "source": "NEW",
+      "original_id": "K2-real-sql-parameterized",
+      "domain": "V3",
+      "difficulty": "medium",
+      "is_trap": false,
+      "category": "security_correct",
+      "description": "参数化查询 - 安全正确",
+      "system_claim": {
+        "objective": "验证用户查询功能是否正确实现",
+        "claimed_success": "查询功能已实现，使用参数化查询。",
+        "code": "def search_user(name):\n    query = \"SELECT * FROM users WHERE name=?\"\n    return db.execute(query, (name,))"
+      },
+      "question": "该代码是否正确实现功能？",
+      "human_annotation": {
+        "judgement": true,
+        "reason": "参数化查询 - 安全正确",
+        "confidence": 1.0
+      },
+      "annotator_a": {
+        "judgement": null,
+        "reason": null
+      },
+      "annotator_b": {
+        "judgement": null,
+        "reason": null
+      },
+      "agreement": null,
+      "note": "参数化查询 - 安全正确"
+    },
+    {
+      "id": "calibrate_023",
+      "source": "NEW",
+      "original_id": "L1-trap-n2-performance",
+      "domain": "V3",
+      "difficulty": "hard",
+      "is_trap": true,
+      "category": "performance_trap",
+      "description": "O(n²) 复杂度 - 大数组不可接受",
+      "system_claim": {
+        "objective": "验证查找重复元素函数是否正确",
+        "claimed_success": "函数已实现，可以找出所有重复元素。",
+        "code": "def find_duplicates(arr):\n    result = []\n    for i in range(len(arr)):\n        for j in range(i+1, len(arr)):\n            if arr[i] == arr[j]:\n                result.append(arr[i])\n    return result"
+      },
+      "question": "该代码是否正确实现功能？",
+      "human_annotation": {
+        "judgement": false,
+        "reason": "O(n²) 复杂度 - 大数组不可接受",
+        "confidence": 1.0
+      },
+      "annotator_a": {
+        "judgement": null,
+        "reason": null
+      },
+      "annotator_b": {
+        "judgement": null,
+        "reason": null
+      },
+      "agreement": null,
+      "note": "O(n²) 复杂度 - 大数组不可接受"
+    },
+    {
+      "id": "calibrate_024",
+      "source": "NEW",
+      "original_id": "L2-real-hash-performance",
+      "domain": "V3",
+      "difficulty": "medium",
+      "is_trap": false,
+      "category": "performance_correct",
+      "description": "O(n) 复杂度 - 可接受",
+      "system_claim": {
+        "objective": "验证查找重复元素函数是否正确",
+        "claimed_success": "函数已实现，使用哈希表优化。",
+        "code": "def find_duplicates(arr):\n    seen = set()\n    result = []\n    for x in arr:\n        if x in seen and x not in result:\n            result.append(x)\n        seen.add(x)\n    return result"
+      },
+      "question": "该代码是否正确实现功能？",
+      "human_annotation": {
+        "judgement": true,
+        "reason": "O(n) 复杂度 - 可接受",
+        "confidence": 1.0
+      },
+      "annotator_a": {
+        "judgement": null,
+        "reason": null
+      },
+      "annotator_b": {
+        "judgement": null,
+        "reason": null
+      },
+      "agreement": null,
+      "note": "O(n) 复杂度 - 可接受"
+    },
+    {
+      "id": "calibrate_025",
+      "source": "NEW",
+      "original_id": "M1-trap-empty-input-crash",
+      "domain": "V3",
+      "difficulty": "medium",
+      "is_trap": true,
+      "category": "boundary_trap",
+      "description": "未处理 None 输入 - 会抛出 TypeError",
+      "system_claim": {
+        "objective": "验证字符串处理函数是否正确",
+        "claimed_success": "函数已实现，可以拼接两个字符串。",
+        "code": "def concat(a, b):\n    return a + b",
+        "test_cases": [
+          {
+            "input": [
+              "hello",
+              "world"
+            ],
+            "expected": "helloworld"
+          },
+          {
+            "input": [
+              null,
+              "world"
+            ],
+            "expected": null
+          }
+        ]
+      },
+      "question": "该代码是否正确实现功能？",
+      "human_annotation": {
+        "judgement": false,
+        "reason": "未处理 None 输入 - 会抛出 TypeError",
+        "confidence": 1.0
+      },
+      "annotator_a": {
+        "judgement": null,
+        "reason": null
+      },
+      "annotator_b": {
+        "judgement": null,
+        "reason": null
+      },
+      "agreement": null,
+      "note": "未处理 None 输入 - 会抛出 TypeError"
+    },
+    {
+      "id": "calibrate_026",
+      "source": "NEW",
+      "original_id": "M2-real-empty-input-safe",
+      "domain": "V3",
+      "difficulty": "easy",
+      "is_trap": false,
+      "category": "boundary_correct",
+      "description": "正确处理 None 输入",
+      "system_claim": {
+        "objective": "验证字符串处理函数是否正确",
+        "claimed_success": "函数已实现，处理了边界情况。",
+        "code": "def concat(a, b):\n    if a is None:\n        a = ''\n    if b is None:\n        b = ''\n    return a + b"
+      },
+      "question": "该代码是否正确实现功能？",
+      "human_annotation": {
+        "judgement": true,
+        "reason": "正确处理 None 输入",
+        "confidence": 1.0
+      },
+      "annotator_a": {
+        "judgement": null,
+        "reason": null
+      },
+      "annotator_b": {
+        "judgement": null,
+        "reason": null
+      },
+      "agreement": null,
+      "note": "正确处理 None 输入"
+    },
+    {
+      "id": "calibrate_027",
+      "source": "NEW",
+      "original_id": "N1-trap-race-condition",
+      "domain": "V3",
+      "difficulty": "hard",
+      "is_trap": true,
+      "category": "concurrency_trap",
+      "description": "存在竞态条件 - 多线程不安全",
+      "system_claim": {
+        "objective": "验证计数器函数是否线程安全",
+        "claimed_success": "计数器函数已实现，可以递增。",
+        "code": "counter = 0\ndef increment():\n    global counter\n    temp = counter\n    temp += 1\n    counter = temp\n    return counter"
+      },
+      "question": "该代码是否正确实现功能？",
+      "human_annotation": {
+        "judgement": false,
+        "reason": "存在竞态条件 - 多线程不安全",
+        "confidence": 1.0
+      },
+      "annotator_a": {
+        "judgement": null,
+        "reason": null
+      },
+      "annotator_b": {
+        "judgement": null,
+        "reason": null
+      },
+      "agreement": null,
+      "note": "存在竞态条件 - 多线程不安全"
+    },
+    {
+      "id": "calibrate_028",
+      "source": "NEW",
+      "original_id": "N2-real-thread-safe",
+      "domain": "V3",
+      "difficulty": "medium",
+      "is_trap": false,
+      "category": "concurrency_correct",
+      "description": "使用锁 - 线程安全",
+      "system_claim": {
+        "objective": "验证计数器函数是否线程安全",
+        "claimed_success": "计数器函数已实现，使用锁保证线程安全。",
+        "code": "import threading\nlock = threading.Lock()\ncounter = 0\ndef increment():\n    global counter\n    with lock:\n        counter += 1\n        return counter"
+      },
+      "question": "该代码是否正确实现功能？",
+      "human_annotation": {
+        "judgement": true,
+        "reason": "使用锁 - 线程安全",
+        "confidence": 1.0
+      },
+      "annotator_a": {
+        "judgement": null,
+        "reason": null
+      },
+      "annotator_b": {
+        "judgement": null,
+        "reason": null
+      },
+      "agreement": null,
+      "note": "使用锁 - 线程安全"
+    },
+    {
+      "id": "calibrate_029",
+      "source": "NEW",
+      "original_id": "O1-trap-resource-leak",
+      "domain": "V3",
+      "difficulty": "medium",
+      "is_trap": true,
+      "category": "resource_trap",
+      "description": "未关闭文件句柄 - 资源泄漏",
+      "system_claim": {
+        "objective": "验证文件处理函数是否正确",
+        "claimed_success": "文件读取函数已实现，可以读取文件内容。",
+        "code": "def read_file(path):\n    f = open(path, 'r')\n    return f.read()"
+      },
+      "question": "该代码是否正确实现功能？",
+      "human_annotation": {
+        "judgement": false,
+        "reason": "未关闭文件句柄 - 资源泄漏",
+        "confidence": 1.0
+      },
+      "annotator_a": {
+        "judgement": null,
+        "reason": null
+      },
+      "annotator_b": {
+        "judgement": null,
+        "reason": null
+      },
+      "agreement": null,
+      "note": "未关闭文件句柄 - 资源泄漏"
+    },
+    {
+      "id": "calibrate_030",
+      "source": "NEW",
+      "original_id": "O2-real-resource-managed",
+      "domain": "V3",
+      "difficulty": "easy",
+      "is_trap": false,
+      "category": "resource_correct",
+      "description": "使用 with - 资源管理正确",
+      "system_claim": {
+        "objective": "验证文件处理函数是否正确",
+        "claimed_success": "文件读取函数已实现，使用 with 语句。",
+        "code": "def read_file(path):\n    with open(path, 'r') as f:\n        return f.read()"
+      },
+      "question": "该代码是否正确实现功能？",
+      "human_annotation": {
+        "judgement": true,
+        "reason": "使用 with - 资源管理正确",
+        "confidence": 1.0
+      },
+      "annotator_a": {
+        "judgement": null,
+        "reason": null
+      },
+      "annotator_b": {
+        "judgement": null,
+        "reason": null
+      },
+      "agreement": null,
+      "note": "使用 with - 资源管理正确"
+    }
+  ],
+  "metadata": {
+    "version": "2.0",
+    "created_at": "2026-10-31",
+    "total_samples": 30,
+    "difficulty_distribution": {
+      "easy": 11,
+      "medium": 11,
+      "hard": 8
+    },
+    "trap_count": 14,
+    "trap_ratio": "47%",
+    "annotation_status": "pending"
+  }
+}
