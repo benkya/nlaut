@@ -99,6 +99,7 @@ def calibrate_code_review(samples: list[dict]) -> dict:
         tools=CODE_REVIEW_TOOLS,
         tool_impls=tool_impls,
         max_steps=6,
+        require_tool_call=True,  # 强制要求至少调用一次工具
     )
     
     results = []

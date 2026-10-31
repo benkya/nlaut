@@ -152,6 +152,7 @@ class AgentJudge:
         policy: ToolPolicy | None = None,
         max_retries: int = DEFAULT_MAX_RETRIES,
         retry_backoff_s: float = DEFAULT_RETRY_BACKOFF_S,
+        require_tool_call: bool = False,  # 强制要求至少调用一次工具
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.model = model
@@ -173,6 +174,8 @@ class AgentJudge:
         # 端点抖动重试（正常路径不增加延迟）
         self.max_retries = max_retries
         self.retry_backoff_s = retry_backoff_s
+        # 强制工具调用（用于代码审查等场景）
+        self.require_tool_call = require_tool_call
 
     # --- 工具执行 ---
 
@@ -339,6 +342,26 @@ class AgentJudge:
 
                 if not tool_calls:
                     # 模型给出最终结论
+                    # 强制工具调用检查：如果要求调用工具但没有调用，降级为不确定
+                    if self.require_tool_call and tool_calls_total == 0:
+                        return Verdict(
+                            engine=self.engine,
+                            kind="noul",
+                            value=0.5,
+                            confidence=0.0,
+                            evidence_refs=[evidence.case_id],
+                            raw={
+                                "degraded": "no_tool_call",
+                                "reason": "强制要求调用工具，但 Agent 未调用任何工具",
+                                "rounds": rounds,
+                                "tool_calls_total": tool_calls_total,
+                                "cost_usd": round(cost_usd, 6),
+                                "elapsed_ms": round((time.time() - t_start) * 1000, 1),
+                                "scope_violations": self._scope_violations(),
+                                "trace": trace,
+                                "model": self.model,
+                            },
+                        )
                     parsed = parse_judgement(content)
                     conf = min(CONFIDENCE_CAP, parse_confidence(content))
                     value = 1.0 if parsed is True else (0.0 if parsed is False else 0.5)
