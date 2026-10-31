@@ -4,5 +4,5 @@ design_task_attachments:
   type: file
 design_tasks:
   description: 设计任务文件，包含所有设计任务记录
-  path: ~/.dsh/design-task.json
+  path: ~/.gienx/design-task.json
   type: file

@@ -41,7 +41,7 @@ assertions:
     truth_sources:
       design_tasks:
         type: file
-        path: ~/.dsh/design-task.json
+        path: ~/.gienx/design-task.json
         description: 设计任务文件
     tools:
       - name: read_file
