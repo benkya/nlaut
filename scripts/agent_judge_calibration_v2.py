@@ -20,7 +20,7 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from nlaut.judge.agent_judge import AgentJudge
-from nlaut.judge.agent_tools import build_env_tool_impls
+from nlaut.judge.agent_tools import DEFAULT_TOOLS, build_env_tool_impls
 from nlaut.judge.protocol import Evidence, Question
 
 
@@ -110,7 +110,7 @@ def calibrate_agent_judge_v2(samples: list[dict], max_samples: int = 20) -> dict
             base_url=config["base_url"],
             api_key=config["api_key"],
             model=config["model"],
-            tools=None,  # 使用默认工具 schema
+            tools=DEFAULT_TOOLS,  # 提供工具 schema，让 Agent 知道可调用哪些工具
             tool_impls=tool_impls,  # 注入 db_state
             max_steps=4,
         )
