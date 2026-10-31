@@ -1,0 +1,46 @@
+id: tc_giencwb_design_002
+title: UI设计工作台-打开添加任务弹窗
+source: |
+  口述: 点击"添加任务"按钮，应弹出添加设计任务弹窗，
+  弹窗包含：标题输入框（必填）、详细描述（可选）、设计系统选择（可选）、
+  附件上传（支持.md文件），底部有取消和确认添加两个按钮。
+req_ref: null
+priority: P0
+channel: electron
+quad:
+  actor: 用户
+  action: 点击添加任务按钮
+  object: 添加设计任务弹窗
+  preconditions:
+    - 已在UI设计工作台-设计任务视图
+    - 弹窗未打开
+data_ref: null
+steps:
+  - action: click
+    selector: 'button.gdw-queue-add'
+  - action: wait_visible
+    selector: '.gdw-modal-main'
+    timeout_ms: 3000
+assertions:
+  - kind: text_visible
+    selector: '.gdw-modal-label:has-text("标题")'
+    expected: 标题
+  - kind: text_visible
+    selector: 'input[placeholder="请输入任务标题"]'
+    expected: ""
+  - kind: text_visible
+    selector: 'textarea[placeholder*="详细描述"]'
+    expected: ""
+  - kind: text_visible
+    selector: 'button.gdw-modal-ds-trigger'
+    expected: 请选择设计系统
+  - kind: text_visible
+    selector: 'button.gdw-modal-attach__btn'
+    expected: 上传需求文档
+  - kind: text_visible
+    selector: 'button.gdw-modal-btn:has-text("取消")'
+    expected: 取消
+  - kind: text_visible
+    selector: 'button.gdw-modal-btn.is-primary'
+    expected: 确认添加
+postconditions: []

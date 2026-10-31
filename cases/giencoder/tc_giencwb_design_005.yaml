@@ -1,0 +1,30 @@
+id: tc_giencwb_design_005
+title: UI设计工作台-查看设计文件列表
+source: |
+  口述: 点击"设计文件"tab，左侧显示生成的文件树（包含HTML/CSS等文件），
+  点击文件后右侧显示文件内容预览。
+req_ref: null
+priority: P0
+channel: electron
+quad:
+  actor: 用户
+  action: 切换到设计文件视图
+  object: 文件树+代码预览
+  preconditions:
+    - 设计任务已完成
+    - 画板预览可见
+data_ref: null
+steps:
+  - action: click
+    selector: '.gdw-view-tab:has-text("设计文件")'
+  - action: wait_visible
+    selector: '.gdw-files-tree'
+    timeout_ms: 3000
+assertions:
+  - kind: text_visible
+    selector: '.gdw-files-tree'
+    expected: 文件
+  - kind: visual_state
+    prompt: "左侧是否显示了文件树结构？右侧是否显示了代码预览区域？只答 yes 或 no。"
+    threshold: 0.8
+postconditions: []
