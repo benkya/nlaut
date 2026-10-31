@@ -1,0 +1,326 @@
+{
+  "samples": [
+    {
+      "case_id": "A1-real-pass",
+      "objective": "验证：模块 M 接入后任务数据真的落库了（表 task）",
+      "claimed_success": "已成功创建任务，任务 ID 1001。",
+      "db_state": {
+        "task": [
+          {
+            "id": 1001,
+            "status": "created",
+            "module": "M"
+          }
+        ]
+      },
+      "expected": true,
+      "category": "real_pass"
+    },
+    {
+      "case_id": "A2-real-pass-multi-row",
+      "objective": "验证：模块 M 接入后任务数据真的落库了（表 task）",
+      "claimed_success": "已成功创建任务，任务 ID 1002。",
+      "db_state": {
+        "task": [
+          {
+            "id": 1001,
+            "status": "created",
+            "module": "M"
+          },
+          {
+            "id": 1002,
+            "status": "created",
+            "module": "M"
+          }
+        ]
+      },
+      "expected": true,
+      "category": "real_pass"
+    },
+    {
+      "case_id": "B1-real-fail-empty-table",
+      "objective": "验证：模块 M 接入后任务数据真的落库了（表 task）",
+      "claimed_success": "已成功创建任务，任务 ID 1003。",
+      "db_state": {
+        "task": []
+      },
+      "expected": false,
+      "category": "real_fail"
+    },
+    {
+      "case_id": "B2-real-fail-table-missing",
+      "objective": "验证：模块 M 接入后任务数据真的落库了（表 task）",
+      "claimed_success": "已成功创建任务，任务 ID 1004。",
+      "db_state": {
+        "other_table": [
+          {
+            "id": 1
+          }
+        ]
+      },
+      "expected": false,
+      "category": "real_fail"
+    },
+    {
+      "case_id": "C1-trap-claimed-but-not-persisted",
+      "objective": "验证：模块 M 接入后任务数据真的落库了（表 task）",
+      "claimed_success": "已成功创建任务，任务 ID 1005。",
+      "db_state": {
+        "task": []
+      },
+      "expected": false,
+      "category": "trap_surface_pass",
+      "note": "被测系统自述成功，但表为空 —— LLM Judge 只看 llm_response 会判错"
+    },
+    {
+      "case_id": "C2-trap-partial-persist-wrong-module",
+      "objective": "验证：模块 M 接入后任务数据真的落库了（表 task）",
+      "claimed_success": "已成功创建任务，任务 ID 1006。",
+      "db_state": {
+        "task": [
+          {
+            "id": 1006,
+            "status": "created",
+            "module": "OTHER"
+          }
+        ]
+      },
+      "expected": false,
+      "category": "trap_surface_pass",
+      "note": "表里确有行，但 module 字段不是 M —— 需读字段而非只看行数"
+    },
+    {
+      "case_id": "D1-trap-claimed-fail-but-persisted",
+      "objective": "验证：模块 M 接入后任务数据真的落库了（表 task）",
+      "claimed_success": "创建失败：数据库连接超时。",
+      "db_state": {
+        "task": [
+          {
+            "id": 1007,
+            "status": "created",
+            "module": "M"
+          }
+        ]
+      },
+      "expected": true,
+      "category": "trap_surface_fail",
+      "note": "自述失败但实际落库 —— 需以实际状态为准，不被自述带偏"
+    },
+    {
+      "case_id": "D2-trap-partial-fail-but-persisted",
+      "objective": "验证：模块 M 接入后任务数据真的落库了（表 task）",
+      "claimed_success": "部分成功：任务创建了，但后续同步失败。",
+      "db_state": {
+        "task": [
+          {
+            "id": 1008,
+            "status": "created",
+            "module": "M"
+          }
+        ]
+      },
+      "expected": true,
+      "category": "trap_surface_fail",
+      "note": "自述部分失败，但落库这一项确实成立"
+    },
+    {
+      "case_id": "E1-trap-table-has-rows-target-missing",
+      "objective": "验证：模块 M 接入后任务数据真的落库了（表 task）。本次创建的任务 ID 是 9999，请确认该 ID 对应的记录确实存在且 module 为 M。",
+      "claimed_success": "已成功创建任务，任务 ID 9999。",
+      "db_state": {
+        "task": [
+          {
+            "id": 1001,
+            "status": "created",
+            "module": "M"
+          }
+        ]
+      },
+      "expected": false,
+      "category": "trap_locate",
+      "note": "表里有 M 的行，但 ID 9999 不存在 —— 只看行数会误判为真，需 locate 能力"
+    },
+    {
+      "case_id": "F1-real-fail-data-in-other-table",
+      "objective": "验证：模块 M 接入后任务数据真的落库到 task 表。",
+      "claimed_success": "已成功创建任务，任务 ID 1010。",
+      "db_state": {
+        "task_log": [
+          {
+            "id": 1010,
+            "module": "M"
+          }
+        ]
+      },
+      "expected": false,
+      "category": "multi_table",
+      "note": "数据在 task_log 表，task 表没有 —— 不能因为「库里有 M 的数据」就判真"
+    },
+    {
+      "case_id": "F2-real-pass-both-tables",
+      "objective": "验证：模块 M 接入后任务数据真的落库到 task 表。",
+      "claimed_success": "已成功创建任务，任务 ID 1011。",
+      "db_state": {
+        "task": [
+          {
+            "id": 1011,
+            "status": "created",
+            "module": "M"
+          }
+        ],
+        "task_log": [
+          {
+            "id": 1011,
+            "module": "M"
+          }
+        ]
+      },
+      "expected": true,
+      "category": "multi_table",
+      "note": "task 与 task_log 都有 → 落库成立"
+    },
+    {
+      "case_id": "G1-real-fail-empty-list-not-null",
+      "objective": "验证：模块 M 接入后任务数据真的落库了（表 task）。",
+      "claimed_success": "已成功创建任务，任务 ID 1012。",
+      "db_state": {
+        "task": []
+      },
+      "expected": false,
+      "category": "boundary",
+      "note": "空列表（非 None）—— 空与缺失是两种情况"
+    },
+    {
+      "case_id": "G2-real-fail-row-count-zero",
+      "objective": "验证：模块 M 接入后任务数据真的落库了（表 task）。",
+      "claimed_success": "已成功创建任务，任务 ID 1013。",
+      "db_state": {
+        "task": {
+          "row_count": 0
+        }
+      },
+      "expected": false,
+      "category": "boundary",
+      "note": "计数为 0 的 dict 形态（非 list）"
+    },
+    {
+      "case_id": "G3-real-pass-row-count-only",
+      "objective": "验证：模块 M 接入后任务数据真的落库了（表 task）。",
+      "claimed_success": "已成功创建任务，任务 ID 1014。",
+      "db_state": {
+        "task": {
+          "row_count": 3
+        }
+      },
+      "expected": true,
+      "category": "boundary",
+      "note": "只有计数字段形态 → 落库成立（表非空）"
+    },
+    {
+      "case_id": "H1-trap-row-exists-but-status-pending",
+      "objective": "验证：模块 M 接入后任务数据真的落库了（表 task）。要求 module 为 M 且 status 为 created。",
+      "claimed_success": "已成功创建任务，任务 ID 1015。",
+      "db_state": {
+        "task": [
+          {
+            "id": 1015,
+            "status": "pending",
+            "module": "M"
+          }
+        ]
+      },
+      "expected": false,
+      "category": "field_semantics",
+      "note": "行存在、module 也对，但 status 是 pending 不是 created —— 需读字段语义"
+    },
+    {
+      "case_id": "H2-trap-row-exists-but-module-lowercase",
+      "objective": "验证：模块 M 接入后任务数据真的落库了（表 task）。要求 module 字段为 M。",
+      "claimed_success": "已成功创建任务，任务 ID 1016。",
+      "db_state": {
+        "task": [
+          {
+            "id": 1016,
+            "status": "created",
+            "module": "m"
+          }
+        ]
+      },
+      "expected": false,
+      "category": "field_semantics",
+      "note": "module 是小写 m，与要求的 M 不一致 —— 大小写敏感判定"
+    },
+    {
+      "case_id": "I1-real-pass-target-among-many",
+      "objective": "验证：模块 M 接入后任务数据真的落库了（表 task）。本次创建的任务 ID 是 1020，请确认该记录存在且 module 为 M。",
+      "claimed_success": "已成功创建任务，任务 ID 1020。",
+      "db_state": {
+        "task": [
+          {
+            "id": 1019,
+            "status": "created",
+            "module": "OTHER"
+          },
+          {
+            "id": 1020,
+            "status": "created",
+            "module": "M"
+          },
+          {
+            "id": 1021,
+            "status": "created",
+            "module": "OTHER"
+          }
+        ]
+      },
+      "expected": true,
+      "category": "locate_ambiguity",
+      "note": "多行混杂，目标 1020 确实是 M —— locate 必须精确到目标而非任意行"
+    },
+    {
+      "case_id": "I2-trap-target-among-many-wrong-module",
+      "objective": "验证：模块 M 接入后任务数据真的落库了（表 task）。本次创建的任务 ID 是 1022，请确认该记录存在且 module 为 M。",
+      "claimed_success": "已成功创建任务，任务 ID 1022。",
+      "db_state": {
+        "task": [
+          {
+            "id": 1021,
+            "status": "created",
+            "module": "M"
+          },
+          {
+            "id": 1022,
+            "status": "created",
+            "module": "OTHER"
+          }
+        ]
+      },
+      "expected": false,
+      "category": "locate_ambiguity",
+      "note": "表里有 M 的行但目标 1022 是 OTHER —— 定位到别的行就误判为真"
+    },
+    {
+      "case_id": "J1-uncertain-no-db-evidence",
+      "objective": "验证：模块 M 接入后任务数据真的落库了（表 task）。",
+      "claimed_success": "已成功创建任务，任务 ID 1030。",
+      "db_state": null,
+      "expected": false,
+      "category": "insufficient_evidence",
+      "note": "完全没有 db_state 证据 → 无法证实 → 判否（不得凭空判真）"
+    },
+    {
+      "case_id": "J2-uncertain-claimed-only",
+      "objective": "验证：模块 M 接入后任务数据真的落库了（表 task）。",
+      "claimed_success": "已成功创建任务，任务 ID 1031，已确认写入。",
+      "db_state": null,
+      "expected": false,
+      "category": "insufficient_evidence",
+      "note": "只有自述无证据 → 判否"
+    }
+  ],
+  "metadata": {
+    "source": "tests/agent_judge_test.py",
+    "total": 20,
+    "trap_count": 9
+  }
+}

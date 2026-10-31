@@ -4,6 +4,133 @@
 → **四级判定**（1° 确定性断言 → 2° VLM 视觉（本地 mlx-vlm）→ 3° Laya System One（本地 laya-mlx）→ 4° Agent-as-Judge 自主取证）
 → 置信度路由（≥0.9 自动 / 0.5–0.9 人工仲裁）→ **自包含 HTML 报告**（截图+置信度+溯源内嵌）→ **飞书群自动分发**。
 
+## 框架普适性
+
+nlaut 是一个**通用自动化测试框架**，支持多种被测对象：
+
+| 被测对象 | 支持状态 | 通道 | 典型场景 | 适用方法 |
+| --- | --- | --- | --- | --- |
+| **Web 应用** | ✅ 完整支持 | `web` (Playwright) | 登录/任务列表/查询/翻页 | [Web 应用测试](#web-应用测试) |
+| **HTTP API** | ✅ 完整支持 | `api` (httpx) | RESTful API/微服务测试 | [API 接口测试](#api-接口测试) |
+| **大模型 API** | ✅ 完整支持 | `api` (httpx) | LLM 能力评测/对话/工具调用 | [大模型能力测试](#大模型能力测试) |
+| **Electron 应用** | ✅ 完整支持 | `electron` (CDP) | IDE 插件/桌面应用 | [Electron 应用测试](#electron-应用测试) |
+| **数据库验证** | ✅ 支持（Agent） | `agent_verify` | 数据落库/数据一致性 | [Agent-as-Judge](#agent_verify-用法agent-as-judgev040) |
+| **代码审查** | ⚠️ 部分支持 | `agent_verify` | 代码质量/安全漏洞 | [代码审查工具](#代码审查工具) |
+| **移动应用** | ❌ 不支持 | - | - | 需要 Appium 等其他框架 |
+| **原生桌面应用** | ❌ 不支持 | - | - | 需要 WinAppDriver 等 |
+| **性能测试** | ⚠️ 部分支持 | `api` + 自定义 | 响应时间/TTFT | 仅支持基础性能指标 |
+
+### Web 应用测试
+
+适用于：单页应用(SPA)、传统 Web 应用、管理系统、电商网站等
+
+**用例示例**：
+```yaml
+id: tc_login_001
+title: 用户登录成功
+channel: web
+steps:
+  - {action: nav, path: "/login"}
+  - {action: fill, selector: "#username", value: "test_user"}
+  - {action: fill, selector: "#password", value: "test_pass"}
+  - {action: click, selector: "button[type=submit]"}
+  - {action: wait_visible, selector: ".dashboard", timeout_ms: 5000}
+assertions:
+  - kind: text_visible
+    selector: ".welcome-msg"
+    expected: "欢迎回来"
+```
+
+**运行命令**：
+```bash
+# 测试本地演示系统
+.venv/bin/python -m nlaut.cli
+
+# 测试外部系统
+.venv/bin/python -m nlaut.cli --external --base-url http://your-app.com
+```
+
+### API 接口测试
+
+适用于：RESTful API、GraphQL、微服务、内部接口
+
+**用例示例**：
+```yaml
+id: tc_api_query_001
+title: 查询用户列表接口
+channel: api
+data_ref: user_query_data
+steps:
+  - action: api_call
+    prompt: "调用 GET /api/users?page=1&size=10"
+assertions:
+  - kind: response_json_schema
+    schema:
+      type: object
+      properties:
+        data:
+          type: array
+        total:
+          type: integer
+  - kind: response_time
+    max_ms: 500
+```
+
+**运行命令**：
+```bash
+# 测试 API（需要配置 base_url 和 api_key）
+.venv/bin/python -m nlaut.cli --model my-api --api-only
+```
+
+### Electron 应用测试
+
+适用于：VSCode 插件、IDE 插件、桌面应用（Electron 技术栈）
+
+**前置条件**：应用需以 `--remote-debugging-port=9222` 启动
+
+**用例示例**：
+```yaml
+id: tc_electron_001
+title: IDE 插件 - 打开文件
+channel: electron
+steps:
+  - action: click
+    selector: 'button:has-text("打开文件")'
+  - action: wait_visible
+    selector: '.file-tree'
+    timeout_ms: 3000
+assertions:
+  - kind: attribute
+    selector: '[data-view-id]'
+    attribute: data-view-id
+    expected: file-explorer
+```
+
+**运行命令**：
+```bash
+# 1. 启动 Electron 应用（开启 CDP）
+/Applications/YourApp.app/Contents/MacOS/YourApp --remote-debugging-port=9222
+
+# 2. 运行测试
+.venv/bin/python -m nlaut.cli --cdp-url http://127.0.0.1:9222
+```
+
+### 代码审查工具
+
+适用于：代码质量检查、安全漏洞扫描、性能分析
+
+**可用工具**：
+| 工具 | 功能 | 用途 |
+| --- | --- | --- |
+| `execute_test_cases` | 执行测试用例 | 验证边界条件 |
+| `scan_security_issues` | 安全扫描 | SQL 注入/XSS 检测 |
+| `analyze_code_structure` | AST 分析 | 函数/类信息提取 |
+| `analyze_performance` | 性能分析 | O(n²) 检测 |
+
+**使用方式**：通过 `agent_verify` 断言，Agent 自动调用工具分析代码
+
+---
+
 ## 能力总览
 
 | 被测对象 | 通道 | 用例数 | 典型场景 |

@@ -1,0 +1,187 @@
+{
+  "samples": [
+    {
+      "id": "calibrate_001",
+      "source": "GOLDEN_SAMPLES",
+      "original_id": "A1-real-pass",
+      "domain": "V3",
+      "difficulty": "easy",
+      "is_trap": false,
+      "description": "真实通过 - 单行记录落库",
+      "system_claim": {
+        "objective": "验证：模块 M 接入后任务数据真的落库了（表 task）",
+        "claimed_success": "已成功创建任务，任务 ID 1001。",
+        "db_state": {
+          "task": [
+            {
+              "id": 1001,
+              "status": "created",
+              "module": "M"
+            }
+          ]
+        }
+      },
+      "question": "模块 M 创建任务 1001 是否真的落库到 task 表？",
+      "human_annotation": {
+        "judgement": true,
+        "reason": "task 表中存在 id=1001 的记录，module 字段为 M，落库成立",
+        "confidence": 1.0
+      },
+      "annotator_a": {
+        "judgement": null,
+        "reason": null
+      },
+      "annotator_b": {
+        "judgement": null,
+        "reason": null
+      },
+      "agreement": null
+    },
+    {
+      "id": "calibrate_002",
+      "source": "GOLDEN_SAMPLES",
+      "original_id": "A2-real-pass-multi-row",
+      "domain": "V3",
+      "difficulty": "easy",
+      "is_trap": false,
+      "description": "真实通过 - 多行记录落库",
+      "system_claim": {
+        "objective": "验证：模块 M 接入后任务数据真的落库了（表 task）",
+        "claimed_success": "已成功创建任务，任务 ID 1002。",
+        "db_state": {
+          "task": [
+            {
+              "id": 1001,
+              "status": "created",
+              "module": "M"
+            },
+            {
+              "id": 1002,
+              "status": "created",
+              "module": "M"
+            }
+          ]
+        }
+      },
+      "question": "模块 M 创建任务 1002 是否真的落库到 task 表？",
+      "human_annotation": {
+        "judgement": true,
+        "reason": "task 表中存在 id=1002 的记录，module 字段为 M，落库成立",
+        "confidence": 1.0
+      },
+      "annotator_a": {
+        "judgement": null,
+        "reason": null
+      },
+      "annotator_b": {
+        "judgement": null,
+        "reason": null
+      },
+      "agreement": null
+    },
+    {
+      "id": "calibrate_003",
+      "source": "GOLDEN_SAMPLES",
+      "original_id": "B1-real-fail-empty-table",
+      "domain": "V3",
+      "difficulty": "easy",
+      "is_trap": false,
+      "description": "真实失败 - 表为空",
+      "system_claim": {
+        "objective": "验证：模块 M 接入后任务数据真的落库了（表 task）",
+        "claimed_success": "已成功创建任务，任务 ID 1003。",
+        "db_state": {
+          "task": []
+        }
+      },
+      "question": "模块 M 创建任务 1003 是否真的落库到 task 表？",
+      "human_annotation": {
+        "judgement": false,
+        "reason": "task 表为空，无任何记录，落库不成立",
+        "confidence": 1.0
+      },
+      "annotator_a": {
+        "judgement": null,
+        "reason": null
+      },
+      "annotator_b": {
+        "judgement": null,
+        "reason": null
+      },
+      "agreement": null
+    },
+    {
+      "id": "calibrate_004",
+      "source": "GOLDEN_SAMPLES",
+      "original_id": "B2-real-fail-table-missing",
+      "domain": "V3",
+      "difficulty": "easy",
+      "is_trap": false,
+      "description": "真实失败 - 表不存在",
+      "system_claim": {
+        "objective": "验证：模块 M 接入后任务数据真的落库了（表 task）",
+        "claimed_success": "已成功创建任务，任务 ID 1004。",
+        "db_state": {
+          "other_table": [
+            {
+              "id": 1
+            }
+          ]
+        }
+      },
+      "question": "模块 M 创建任务 1004 是否真的落库到 task 表？",
+      "human_annotation": {
+        "judgement": false,
+        "reason": "task 表不存在，数据在 other_table 表中，落库不成立",
+        "confidence": 1.0
+      },
+      "annotator_a": {
+        "judgement": null,
+        "reason": null
+      },
+      "annotator_b": {
+        "judgement": null,
+        "reason": null
+      },
+      "agreement": null
+    },
+    {
+      "id": "calibrate_005",
+      "source": "GOLDEN_SAMPLES",
+      "original_id": "C1-trap-claimed-but-not-persisted",
+      "domain": "V3",
+      "difficulty": "medium",
+      "is_trap": true,
+      "description": "陷阱 - 自述成功但表为空",
+      "system_claim": {
+        "objective": "验证：模块 M 接入后任务数据真的落库了（表 task）",
+        "claimed_success": "已成功创建任务，任务 ID 1005。",
+        "db_state": {
+          "task": []
+        }
+      },
+      "question": "模块 M 创建任务 1005 是否真的落库到 task 表？",
+      "human_annotation": {
+        "judgement": false,
+        "reason": "系统自述成功，但 task 表为空，这是典型的假成功陷阱",
+        "confidence": 1.0
+      },
+      "annotator_a": {
+        "judgement": null,
+        "reason": null
+      },
+      "annotator_b": {
+        "judgement": null,
+        "reason": null
+      },
+      "agreement": null,
+      "note": "LLM Judge 只看 llm_response 可能判错，需验证 db_state"
+    }
+  ],
+  "metadata": {
+    "version": "1.0",
+    "created_at": "2026-10-31",
+    "total_samples": 5,
+    "annotation_status": "pending"
+  }
+}
