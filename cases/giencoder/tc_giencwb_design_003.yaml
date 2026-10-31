@@ -1,0 +1,48 @@
+id: tc_giencwb_design_003
+title: UI设计工作台-填写任务表单并提交
+source: |
+  口述: 在添加任务弹窗中填写标题（必填）、详细描述（可选），
+  选择设计系统，点击"确认添加"后弹窗关闭，
+  新任务出现在任务列表，状态显示"执行中"，
+  右侧AI对话区开始显示AI执行过程。
+req_ref: null
+priority: P0
+channel: electron
+quad:
+  actor: 用户
+  action: 填写表单并提交设计任务
+  object: 任务创建+AI执行
+  preconditions:
+    - 添加任务弹窗已打开
+    - 设计系统已存在
+data_ref: null
+steps:
+  - action: fill
+    selector: 'input[placeholder="请输入任务标题"]'
+    text: "测试任务-设计登录页面"
+  - action: fill
+    selector: 'textarea[placeholder*="详细描述"]'
+    text: "设计一个简洁的用户登录页面，包含用户名、密码输入框和登录按钮"
+  - action: click
+    selector: 'button.gdw-modal-ds-trigger'
+  - action: wait_visible
+    selector: 'button.gdw-ds-pill-item'
+    timeout_ms: 2000
+  - action: click
+    selector: 'button.gdw-ds-pill-item:has-text("Ant")'
+  - action: wait_timeout
+    ms: 500
+  - action: click
+    selector: 'button.gdw-modal-btn.is-primary'
+  - action: wait_timeout
+    ms: 2000
+assertions:
+  - kind: noul
+    comment: 弹窗已关闭
+  - kind: text_visible
+    selector: '.gdw-req-card.is-selected'
+    expected: 测试任务
+  - kind: text_visible
+    selector: '.gdw-req-card.is-selected'
+    expected: 执行中
+postconditions: []

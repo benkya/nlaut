@@ -1,0 +1,33 @@
+id: tc_giencwb_design_004
+title: UI设计工作台-AI执行完成查看画板预览
+source: |
+  口述: 任务提交后AI开始执行，执行完成后任务状态变为"已完成"，
+  中间栏"画板"tab显示设计预览图，右侧AI对话区显示"任务已完成"。
+req_ref: null
+priority: P0
+channel: electron
+quad:
+  actor: AI执行引擎
+  action: 执行设计任务并生成设计稿
+  object: 任务状态+画板预览
+  preconditions:
+    - 设计任务已提交，状态"执行中"
+    - AI模型可用
+data_ref: null
+steps:
+  - action: wait_timeout
+    ms: 30000
+  - action: wait_visible
+    selector: '.gdw-view-tab.is-active:has-text("画板")'
+    timeout_ms: 5000
+assertions:
+  - kind: visual_state
+    prompt: "任务列表中选中的任务卡片状态是否显示'已完成'或不再显示'执行中'？只答 yes 或 no。"
+    threshold: 0.8
+  - kind: visual_state
+    prompt: "中间栏画板区域是否显示了设计预览图（网页UI设计）？只答 yes 或 no。"
+    threshold: 0.8
+  - kind: text_visible
+    selector: '.gdw-view-tab.is-active'
+    expected: 画板
+postconditions: []

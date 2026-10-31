@@ -1,0 +1,41 @@
+id: tc_giencwb_design_001
+title: UI设计工作台-进入设计任务视图
+source: |
+  口述: 点击顶部"UI设计"tab，应切换到UI设计工作台，
+  左侧显示"设计任务"和"设计系统"两个子tab，中间显示任务列表，
+  右侧显示AI对话区域。
+req_ref: null
+priority: P0
+channel: electron
+quad:
+  actor: 用户
+  action: 切换到UI设计工作台
+  object: UI设计工作台主视图
+  preconditions:
+    - GienCoderWorkbench Electron应用已启动并登录
+    - 应用已开启CDP调试端口
+data_ref: null
+steps:
+  - action: click
+    selector: 'button:has-text("UI设计")'
+  - action: wait_visible
+    selector: '.gdw-lab-tab:has-text("设计任务")'
+    timeout_ms: 3000
+  - action: wait_visible
+    selector: '.gdw-lab-tab:has-text("设计系统")'
+    timeout_ms: 2000
+assertions:
+  - kind: attribute
+    selector: '[data-main-view]'
+    attribute: data-main-view
+    expected: design-workbench
+  - kind: text_visible
+    selector: '.gdw-lab-tab.is-on'
+    expected: 设计任务
+  - kind: text_visible
+    selector: '.gdw-lab-tab'
+    expected: 设计系统
+  - kind: text_visible
+    selector: 'button.gdw-queue-add'
+    expected: 添加任务
+postconditions: []
