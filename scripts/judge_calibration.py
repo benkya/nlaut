@@ -36,9 +36,9 @@ def load_golden_standard(path: str = "config/calibrate_v1.json") -> list[dict]:
 def get_llm_config() -> dict:
     """获取 LLM 配置"""
     # 从环境变量读取
-    base_url = os.getenv("DEEPSEEK_V4_FLASH_URL", "http://10.62.64.38:30089/v1")
+    base_url = os.getenv("DEEPSEEK_V4_FLASH_URL", "http://10.62.64.38:30841/inference/ljcp9fuk/v1")
     api_key = os.getenv("DEEPSEEK_V4_FLASH_KEY", "sk-dummy")
-    model = os.getenv("DEEPSEEK_V4_FLASH_MODEL", "deepseek-chat")
+    model = os.getenv("DEEPSEEK_V4_FLASH_MODEL", "DeepSeek-V4-Flash")
     
     return {
         "base_url": base_url,
