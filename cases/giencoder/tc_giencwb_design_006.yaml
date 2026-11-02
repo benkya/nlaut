@@ -20,12 +20,16 @@ quad:
     - GienCoderWorkbench Electron应用已启动
 data_ref: null
 steps:
-  - action: wait_timeout
-    ms: 2000
-    comment: 等待文件写入完成
+  # [资产修复 2026-11-02] IR 无 wait_timeout 步骤且 steps 需 ≥1 条；
+  # 原 2s 固定等待改为 wait_visible 工作台根节点（等应用就绪再判文件落库），
+  # 文件写入延迟由 agent_verify judge 侧重试兜底
+  - action: wait_visible
+    selector: '[data-main-view]'
+    timeout_ms: 3000
 assertions:
   - kind: agent_verify
-    prompt: |
+    # [资产修复 2026-11-02] AssertAgentVerify 字段名是 objective（原写 prompt 不符 schema）
+    objective: |
       请验证设计任务"测试任务-设计登录页面"是否真实落库：
       
       1. 读取 ~/.dsh/design-task.json 文件（如果文件不存在，说明未落库）

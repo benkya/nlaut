@@ -261,3 +261,14 @@ models:
     supports_function_calling: true
     context_window: 131072
     notes: "10.62.64.38:30089 sglang 后端（非 vllm），INT8 量化，key=swardz。🔴 与 30828 端点行为相反：①思考字段是 reasoning_content（30828 是 reasoning）②chat_template_kwargs.enable_thinking=False 无效（rtok 不降）③reasoning_effort=low 无效④短 model_id DeepSeek-V4.1-Flash 也可调用⑤思考极重（裸请求 16-22s，rtok 50-57）⑥max_tokens 过小会思考吃光预算返回空 content。model_id 是路径形式（/root/models/...）"
+
+  deepseek-v4.1-flash-int8-30808:
+    provider: internal
+    base_url: "http://10.62.64.38:30808/inference/v1"
+    api_key_env: "DEEPSEEK_V4_1_INT8_30808_KEY"
+    model_id: "DeepSeek-V4.1-Flash-1017-INT8"
+    type: local_deployment
+    supports_streaming: true
+    supports_function_calling: true
+    context_window: 131072
+    notes: "10.62.64.38:30808 sglang 后端，与 30089 同 IP 不同端口/网关路径（inference/v1）。key=Bearer。冒烟实测 chat 0.96s（30089 是 16-27s），思考字段 reasoning_content。同 IP 还有 8866 Qwen3.8-27B"

@@ -19,10 +19,12 @@ data_ref: null
 steps:
   - action: fill
     selector: 'input[placeholder="请输入任务标题"]'
-    text: "测试任务-设计登录页面"
+    # [资产修复 2026-11-02] fill 步骤字段名是 value（schema StepFill），原写 text 导致
+    # store.load_all() 抛 ValidationError 阻塞全通道批次
+    value: "测试任务-设计登录页面"
   - action: fill
     selector: 'textarea[placeholder*="详细描述"]'
-    text: "设计一个简洁的用户登录页面，包含用户名、密码输入框和登录按钮"
+    value: "设计一个简洁的用户登录页面，包含用户名和密码输入框和登录按钮"
   - action: click
     selector: 'button.gdw-modal-ds-trigger'
   - action: wait_visible
@@ -30,15 +32,15 @@ steps:
     timeout_ms: 2000
   - action: click
     selector: 'button.gdw-ds-pill-item:has-text("Ant")'
-  - action: wait_timeout
-    ms: 500
+    # [资产修复 2026-11-02] IR 无 wait_timeout 步骤（executor 亦不支持），
+    # 原两处 UI settle 固定等待（500ms/2000ms）移除，断言的 wait 语义由后续 wait_visible 承担
   - action: click
     selector: 'button.gdw-modal-btn.is-primary'
-  - action: wait_timeout
-    ms: 2000
 assertions:
   - kind: noul
-    comment: 弹窗已关闭
+    # [资产修复 2026-11-02] AssertNoul 必填 question（原只写 comment 不符 schema）
+    question: 弹窗已关闭且所选设计系统已生效？
+    threshold: 0.9
   - kind: text_visible
     selector: '.gdw-req-card.is-selected'
     expected: 测试任务

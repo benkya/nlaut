@@ -15,11 +15,11 @@ quad:
     - AI模型可用
 data_ref: null
 steps:
-  - action: wait_timeout
-    ms: 30000
+  # [资产修复 2026-11-02] IR 无 wait_timeout 步骤（executor 也不支持），
+  # 原 30s 固定等待 + 5s wait_visible 合并为单步 wait_visible 上限 60s，保留等生成语义
   - action: wait_visible
     selector: '.gdw-view-tab.is-active:has-text("画板")'
-    timeout_ms: 5000
+    timeout_ms: 60000
 assertions:
   - kind: visual_state
     prompt: "任务列表中选中的任务卡片状态是否显示'已完成'或不再显示'执行中'？只答 yes 或 no。"

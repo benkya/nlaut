@@ -27,7 +27,10 @@ steps:
 assertions:
   - kind: attribute
     selector: '[data-main-view]'
-    attribute: data-main-view
+    # [资产修复 2026-11-02] 原写法 attribute: data-main-view 不符 IR schema
+    # （AssertAttribute 要求 name 字段），导致 store.load_all() 抛 pydantic
+    # ValidationError，阻塞所有通道的批次（api-only 也会先加载全量用例）。
+    name: data-main-view
     expected: design-workbench
   - kind: text_visible
     selector: '.gdw-lab-tab.is-on'
