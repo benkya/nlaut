@@ -161,14 +161,9 @@ def main() -> None:
         groups = [g for g in groups if g[0].split("/")[-1] == only]
         if not groups:
             sys.exit(f"未知分组: {only}（可选 llm / demo / giencoder）")
-        if only == "llm":
-            # P0 批次实际执行 47 条 api 用例：93 条 llm 集之外还有
-            # tc_agent_verify_001（cases/demo，api 通道 P0，agent-as-judge 分支新增，
-            # 用被测模型作为自主取证判定引擎）—— 一并纳入本文档
-            groups.append((
-                "cases/demo/tc_agent_verify_001.yaml",
-                "补充：Agent-as-Judge 判定用例（api 通道，随 P0 批次执行）",
-                "用被测模型作为自主取证的判定引擎（G-11 集成门禁）。P0 批次实际执行的第 47 条 api 用例"))
+        # 2026-11-04 用户在全集 HTML 上批注：demo / giencoder 部分「不需要」，
+        # 大模型能力用例集 = 纯 cases/llm（93 条，P0=46）。
+        # 跑批的 47 条 P0 中另有 tc_agent_verify_001（属 cases/demo）——按该口径排除。
 
     all_cases: dict[str, list] = {}
     n_bad = 0
