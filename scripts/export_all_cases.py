@@ -1,8 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""导出 nlaut 全量测试用例为自包含 MD 文档（用户偏好：内容内嵌不外链）。
+"""导出 nlaut 测试用例为自包含 MD 文档（用户偏好：内容内嵌不外链）。
 
-用法: .venv/bin/python scripts/export_all_cases.py ~/Downloads/nlaut测试用例全集_<date>.md
+用法:
+    # 全量 139 条
+    .venv/bin/python scripts/export_all_cases.py ~/Downloads/nlaut测试用例全集.md
+    # 仅大模型能力用例（cases/llm，93 条）
+    .venv/bin/python scripts/export_all_cases.py ~/Downloads/大模型能力用例.md llm
+    # 仅 Web 演示（demo） / 仅 GienCoderWorkbench（giencoder）
+    .venv/bin/python scripts/export_all_cases.py ~/Downloads/web用例.md demo
 """
 from __future__ import annotations
 
@@ -128,7 +134,8 @@ def fmt_steps(ir, data: dict | None = None) -> str:
 
 def load_all(d: Path):
     cases = []
-    for p in sorted(d.rglob("*.yaml")):
+    files = [d] if d.is_file() else sorted(d.rglob("*.yaml"))
+    for p in files:
         raw = yaml.safe_load(p.read_text(encoding="utf-8"))
         try:
             ir = TestCaseIR.model_validate(raw)
@@ -140,6 +147,7 @@ def load_all(d: Path):
 
 def main() -> None:
     out_path = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("~/Downloads/nlaut测试用例全集.md").expanduser()
+    only = sys.argv[2] if len(sys.argv) > 2 else ""   # 可选：llm / demo / giencoder
     now = time.strftime("%Y-%m-%d %H:%M")
     L: list[str] = []
 
@@ -149,6 +157,19 @@ def main() -> None:
         ("cases/giencoder", "第三部分：GienCoderWorkbench 用例（cases/giencoder）", "UI 设计工作台 + Agent-as-Judge 数据落库验证用例"),
     ]
 
+    if only:
+        groups = [g for g in groups if g[0].split("/")[-1] == only]
+        if not groups:
+            sys.exit(f"未知分组: {only}（可选 llm / demo / giencoder）")
+        if only == "llm":
+            # P0 批次实际执行 47 条 api 用例：93 条 llm 集之外还有
+            # tc_agent_verify_001（cases/demo，api 通道 P0，agent-as-judge 分支新增，
+            # 用被测模型作为自主取证判定引擎）—— 一并纳入本文档
+            groups.append((
+                "cases/demo/tc_agent_verify_001.yaml",
+                "补充：Agent-as-Judge 判定用例（api 通道，随 P0 批次执行）",
+                "用被测模型作为自主取证的判定引擎（G-11 集成门禁）。P0 批次实际执行的第 47 条 api 用例"))
+
     all_cases: dict[str, list] = {}
     n_bad = 0
     for d, _, _ in groups:
@@ -157,7 +178,8 @@ def main() -> None:
         n_bad += sum(1 for _, _, err in cs if err)
 
     n_total = sum(len(v) for v in all_cases.values())
-    L.append("# nlaut 测试用例全集")
+    title = "nlaut 测试用例全集" if not only else f"nlaut 大模型能力测试用例集（{only}）"
+    L.append(f"# {title}")
     L.append("")
     L.append(f"> 生成时间：{now} · 来源仓库：`~/workspace/nlaut/cases/` · 共 **{n_total} 条**用例"
              f"（{'全部通过 IR schema 校验' if n_bad == 0 else f'⚠️ {n_bad} 条未通过校验，见文末'}）")
