@@ -98,29 +98,33 @@ def _run_step(page, step, ir, idx: int, data: dict[str, str], base_url: str,
         page.goto(url)
         logger(f"[{ir.id}] 步骤{idx} nav → {url}")
     elif step.action == "fill":
-        page.fill(step.selector, resolve_vars(step.value, data))
-        logger(f"[{ir.id}] 步骤{idx} fill {step.selector}")
+        sel = resolve_vars(step.selector, data)
+        page.fill(sel, resolve_vars(step.value, data))
+        logger(f"[{ir.id}] 步骤{idx} fill {sel}")
     elif step.action == "click":
-        page.click(step.selector)
-        logger(f"[{ir.id}] 步骤{idx} click {step.selector}")
+        sel = resolve_vars(step.selector, data)
+        page.click(sel)
+        logger(f"[{ir.id}] 步骤{idx} click {sel}")
         try:
             page.wait_for_load_state("load", timeout=3000)
         except Exception as nav_err:  # noqa: BLE001 — SPA 无导航时超时属正常
             logger(f"[{ir.id}] click 后等待 load 超时（无导航，继续）: {type(nav_err).__name__}")
     elif step.action == "select_option":
-        page.select_option(step.selector, resolve_vars(step.value, data))
-        logger(f"[{ir.id}] 步骤{idx} select_option {step.selector}")
+        sel = resolve_vars(step.selector, data)
+        page.select_option(sel, resolve_vars(step.value, data))
+        logger(f"[{ir.id}] 步骤{idx} select_option {sel}")
     elif step.action == "wait_visible":
+        sel = resolve_vars(step.selector, data)
         try:
             page.wait_for_selector(
-                step.selector, state="visible", timeout=step.timeout_ms
+                sel, state="visible", timeout=step.timeout_ms
             )
-            logger(f"[{ir.id}] 步骤{idx} wait_visible {step.selector} ✓")
+            logger(f"[{ir.id}] 步骤{idx} wait_visible {sel} ✓")
         except Exception:  # noqa: BLE001
-            logger(f"[{ir.id}] 步骤{idx} wait_visible {step.selector} 超时(继续采集)")
+            logger(f"[{ir.id}] 步骤{idx} wait_visible {sel} 超时(继续采集)")
     elif step.action == "wait_text":
         want = resolve_vars(step.text, data)
-        sel = step.selector or "body"
+        sel = resolve_vars(step.selector or "body", data)
         try:
             page.wait_for_function(
                 """([sel, want]) => {
