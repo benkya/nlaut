@@ -19,32 +19,61 @@ from pydantic import BaseModel, Field
 # ---------- steps：声明式动作（禁止代码式步骤，保证换通道不漂移） ----------
 
 
-class StepNav(BaseModel):
+class _StepBase(BaseModel):
+    """步骤基类：所有步骤共享 optional 语义。
+
+    optional=True 时，执行器把「元素不存在 / 动作失败」降级为跳过（记一条
+    skip 日志），不再中断整条用例。用于真实系统里「可能存在也可能不存在」
+    的可选交互（如首次登录才出现的新手引导遮罩关闭按钮）。
+
+    默认 False —— 保持既有语义不变：步骤失败即用例失败。
+    """
+
+    optional: bool = False
+
+
+class StepNav(_StepBase):
     action: Literal["nav"]
     path: str
 
 
-class StepFill(BaseModel):
+class StepFill(_StepBase):
     action: Literal["fill"]
     selector: str
     value: str  # 支持 $var 引用 data_ref 数据集字段
 
 
-class StepClick(BaseModel):
+class StepClick(_StepBase):
     action: Literal["click"]
     selector: str
 
 
-class StepSelectOption(BaseModel):
+class StepSelectOption(_StepBase):
     action: Literal["select_option"]
     selector: str
     value: str  # 下拉选项值，支持 $var
 
 
-class StepWaitVisible(BaseModel):
+class StepWaitVisible(_StepBase):
     action: Literal["wait_visible"]
     selector: str
     timeout_ms: int = Field(default=5000, ge=100, le=60000)
+
+
+class StepWaitText(_StepBase):
+    """等待某段文本出现在页面上。
+
+    真实系统的表格/列表内容由 XHR 异步渲染：等 selector 可见 ≠ 等数据就绪
+    （表头可能先渲染出，行数据后到）。wait_text 等的是「数据本身出现」，
+    用于消除断言与渲染之间的竞态。
+
+    text 支持 $var 引用 data_ref 数据集字段；selector 为空时对整页 body 判断。
+    """
+
+    action: Literal["wait_text"]
+    text: str
+    selector: str | None = None
+    timeout_ms: int = Field(default=15000, ge=100, le=60000)
 
 
 # --- API 通道步骤（v0.2.0 新增）---
@@ -79,7 +108,7 @@ class StepApiStream(BaseModel):
 
 
 Step = Annotated[
-    StepNav | StepFill | StepClick | StepSelectOption | StepWaitVisible
+    StepNav | StepFill | StepClick | StepSelectOption | StepWaitVisible | StepWaitText
     | StepApiCall | StepApiFollowup | StepApiToolCall | StepApiStream,
     Field(discriminator="action"),
 ]

@@ -11,3 +11,6 @@ __pycache__/
 deliveries/
 # secrets — key never enters git
 .env
+# 本地真实系统测试资产（内网地址+凭据，仅本地使用，禁止入库）
+cases/sweng/
+data/datasets.local.yaml

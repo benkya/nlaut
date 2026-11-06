@@ -59,6 +59,10 @@ def main() -> int:
     parser.add_argument("--headed", action="store_true", help="有头模式运行浏览器")
     parser.add_argument("--report", default="artifacts/report.html", help="报告输出路径")
     parser.add_argument(
+        "--retry-on-error", type=int, default=0,
+        help="用例因基础设施异常（步骤抛错）失败时的重试次数（默认 0 不重试）。"
+             "只重试 error，不重试断言失败——断言失败是真实结论。")
+    parser.add_argument(
         "--external", action="store_true",
         help="打真实被测系统（须同时给 --base-url，禁自动拉起演示系统）",
     )
@@ -146,6 +150,7 @@ def main() -> int:
         headless=not args.headed,
         session_log_path="artifacts/session/run.jsonl",
         api_config=api_config,
+        retry_on_error=args.retry_on_error,
     )
 
     for r in results:

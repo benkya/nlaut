@@ -23,21 +23,32 @@ from .channels import web
 ROOT = Path(__file__).resolve().parents[3]
 
 
-def _question_for(a, ir: TestCaseIR):
-    """把 IR 断言翻译为 Judge Question。"""
+def _question_for(a, ir: TestCaseIR | None, data: dict[str, str] | None = None):
+    """把 IR 断言翻译为 Judge Question。
+
+    data 非空时，断言的 expected/text/keywords 等字面量里的 $var 会被替换成
+    数据集字段值（与 steps 的 $var 语义一致）——否则「共 $requirement_total 项」
+    这类由数据驱动的预期值无法生效。
+    """
     from ..judge.protocol import Question
+    from .channels.web import resolve_vars
+
+    data = data or {}
+
+    def _t(s: str) -> str:
+        return resolve_vars(s, data) if data else s
 
     # --- DOM 断言（原有，向后兼容）---
     if a.kind == "text_visible":
         return Question(
             kind="noul",
-            text=a.expected,
+            text=_t(a.expected),
             context={"selector": a.selector, "negated": a.negated},
         )
     if a.kind == "attribute":
         return Question(
             kind="noul",
-            text=a.expected,
+            text=_t(a.expected),
             context={
                 "selector": f"{a.selector}|attr:{a.name}",
                 "negated": a.negated,
@@ -51,7 +62,7 @@ def _question_for(a, ir: TestCaseIR):
     if a.kind == "response_exact":
         return Question(
             kind="noul",
-            text=a.expected,
+            text=_t(a.expected),
             context={"mode": "response_exact", "case_sensitive": a.case_sensitive},
         )
     if a.kind == "response_contains":
@@ -239,7 +250,7 @@ def run_case(
             continue
         judge = get_judge(engine_name)
         t1 = time.time()
-        verdict = judge.judge(evidence, _question_for(a, ir))
+        verdict = judge.judge(evidence, _question_for(a, ir, data))
         decision = route(verdict, threshold=getattr(a, "threshold", 0.9))
         _log({
             "event": "assertion_judged",
@@ -333,6 +344,7 @@ def run_store(
     channels: list[str] | None = None,
     priorities: list[str] | None = None,
     session_log_path: str | Path | None = None,
+    retry_on_error: int = 0,
     **kwargs,
 ) -> list[dict]:
     """跑整个 IR 库（或指定 id），返回结果列表。
@@ -341,6 +353,9 @@ def run_store(
     api_config: 传入则用于 API 通道用例（base_url / api_key / model）。
     channels: 通道过滤（如 ["api"] 只跑 API 通道；None = 全部通道）。
     priorities: 优先级过滤（如 ["P0"]；None = 全部优先级）。
+    retry_on_error: 用例因**基础设施异常**（步骤抛错，如被测系统响应慢导致
+        登录页元素未渲染）而 status=error 时，重试次数（0 = 不重试）。
+        只重试 error，不重试断言失败——断言失败是真实结论，重试无意义。
     """
     store = store or IRStore(Path("cases"))
     logger = kwargs.pop("logger", print)
@@ -359,20 +374,27 @@ def run_store(
             continue
         if priorities and ir.priority not in priorities:
             continue
-        try:
-            results.append(run_case(ir, logger=logger, **kwargs))
-        except Exception as e:  # noqa: BLE001 — 单用例崩不中断批次
-            results.append({
-                "case_id": ir.id, "title": ir.title, "source": ir.source,
-                "channel": ir.channel, "status": "error",
-                "assertions": [{"assertion": "-", "engine": "-",
-                                "status": "error", "detail": f"{type(e).__name__}: {e}"}],
-                "screenshot": None, "duration_s": 0.0,
-            })
-        finally:
+        result = None
+        for attempt in range(retry_on_error + 1):
             try:
-                _apply_postconditions(ir)
-            except Exception as e:  # noqa: BLE001 — 清理失败不吞结果
-                print(f"[{ir.id}] 后置清理失败: {e}")
+                result = run_case(ir, logger=logger, **kwargs)
+            except Exception as e:  # noqa: BLE001 — 单用例崩不中断批次
+                result = {
+                    "case_id": ir.id, "title": ir.title, "source": ir.source,
+                    "channel": ir.channel, "status": "error",
+                    "assertions": [{"assertion": "-", "engine": "-",
+                                    "status": "error", "detail": f"{type(e).__name__}: {e}"}],
+                    "screenshot": None, "duration_s": 0.0,
+                }
+            # 只有 error（基础设施异常）才重试；断言失败是真实结论，不重试
+            if result.get("status") != "error" or attempt >= retry_on_error:
+                break
+            logger(f"[{ir.id}] 第 {attempt + 1} 次执行报 error，重试"
+                   f"（{retry_on_error - attempt} 次机会）")
+        results.append(result)
+        try:
+            _apply_postconditions(ir)
+        except Exception as e:  # noqa: BLE001 — 清理失败不吞结果
+            print(f"[{ir.id}] 后置清理失败: {e}")
     kwargs["logger"] = logger
     return results

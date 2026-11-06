@@ -107,41 +107,84 @@ def execute(
         try:
             page = browser.new_page(viewport={"width": 1280, "height": 900})
             for idx, step in enumerate(ir.steps, 1):
-                if step.action == "nav":
-                    path = resolve_vars(step.path, data)
-                    url = path if path.startswith(("http", "file")) else f"{base_url}{path}"
-                    page.goto(url)
-                    logger(f"[{ir.id}] 步骤{idx} nav → {url}")
-                elif step.action == "fill":
-                    page.fill(step.selector, resolve_vars(step.value, data))
-                    logger(f"[{ir.id}] 步骤{idx} fill {step.selector}")
-                elif step.action == "click":
-                    page.click(step.selector)
-                    logger(f"[{ir.id}] 步骤{idx} click {step.selector}")
-                    # click 可能触发整页导航（a 链接/表单）——等 load 完成再继续，
-                    # 避免后续步骤/截图截到跳转前的旧页面（竞态）
-                    try:
-                        page.wait_for_load_state("load", timeout=3000)
-                    except Exception as nav_err:  # noqa: BLE001 — SPA 无导航时超时属正常
-                        logger(f"[{ir.id}] click 后等待 load 超时（无导航，继续）: {type(nav_err).__name__}")
-                elif step.action == "select_option":
-                    page.select_option(step.selector, resolve_vars(step.value, data))
-                    logger(f"[{ir.id}] 步骤{idx} select_option {step.selector} = {step.value}")
-                elif step.action == "wait_visible":
-                    try:
-                        page.wait_for_selector(
-                            step.selector, state="visible", timeout=step.timeout_ms
-                        )
-                        logger(f"[{ir.id}] 步骤{idx} wait_visible {step.selector} ✓")
-                    except Exception:  # noqa: BLE001
-                        logger(f"[{ir.id}] 步骤{idx} wait_visible {step.selector} 超时(继续采集)")
-                else:
-                    raise ValueError(f"未知步骤类型: {step.action}")
+                try:
+                    _run_step(page, step, ir, idx, data, base_url, logger)
+                except Exception as step_err:
+                    # optional 步骤失败 → 降级跳过；非 optional → 原样抛出
+                    if getattr(step, "optional", False):
+                        logger(f"[{ir.id}] 步骤{idx} {step.action} "
+                               f"{getattr(step, 'selector', '')} "
+                               f"可选步骤跳过: {type(step_err).__name__}")
+                        continue
+                    raise
 
-            page.wait_for_load_state("networkidle", timeout=5000)
+            # SPA 数据由 XHR 异步渲染：networkidle 5s 可能不够（且可能永远不 idle）。
+            # 放宽到 15s，超时也继续（后续断言的 dom_state 采集会反映真实渲染结果）。
+            try:
+                page.wait_for_load_state("networkidle", timeout=15000)
+            except Exception as idle_err:  # noqa: BLE001
+                logger(f"[{ir.id}] networkidle 超时（继续采集 dom_state）: {type(idle_err).__name__}")
             screenshot = str(shot_dir / f"{ir.id}.png")
             page.screenshot(path=screenshot, full_page=True)
             dom_state = _build_dom_state(page, ir)
             return {"screenshot": screenshot, "dom_state": dom_state}
         finally:
             browser.close()
+
+
+def _run_step(page, step, ir, idx: int, data: dict[str, str], base_url: str,
+              logger: Callable[[str], None]) -> None:
+    """执行单个 IR 步骤（Web 通道）。
+
+    抽成独立函数，让 execute() 能按 optional 语义统一兜底异常。
+    """
+    if step.action == "nav":
+        path = resolve_vars(step.path, data)
+        url = path if path.startswith(("http", "file")) else f"{base_url}{path}"
+        # 真实系统首屏资源多，load 事件可能超过 Playwright 默认 30s；
+        # 放宽到 60s 并在超时后按 DOM 就绪继续（页面已可用），不中断用例。
+        try:
+            page.goto(url, timeout=60000, wait_until="domcontentloaded")
+        except Exception as nav_err:  # noqa: BLE001
+            logger(f"[{ir.id}] nav 超时（DOM 已就绪则继续）: {type(nav_err).__name__}")
+        logger(f"[{ir.id}] 步骤{idx} nav → {url}")
+    elif step.action == "fill":
+        page.fill(step.selector, resolve_vars(step.value, data))
+        logger(f"[{ir.id}] 步骤{idx} fill {step.selector}")
+    elif step.action == "click":
+        page.click(step.selector)
+        logger(f"[{ir.id}] 步骤{idx} click {step.selector}")
+        # click 可能触发整页导航（a 链接/表单）——等 load 完成再继续，
+        # 避免后续步骤/截图截到跳转前的旧页面（竞态）
+        try:
+            page.wait_for_load_state("load", timeout=3000)
+        except Exception as nav_err:  # noqa: BLE001 — SPA 无导航时超时属正常
+            logger(f"[{ir.id}] click 后等待 load 超时（无导航，继续）: {type(nav_err).__name__}")
+    elif step.action == "select_option":
+        page.select_option(step.selector, resolve_vars(step.value, data))
+        logger(f"[{ir.id}] 步骤{idx} select_option {step.selector} = {step.value}")
+    elif step.action == "wait_visible":
+        try:
+            page.wait_for_selector(
+                step.selector, state="visible", timeout=step.timeout_ms
+            )
+            logger(f"[{ir.id}] 步骤{idx} wait_visible {step.selector} ✓")
+        except Exception:  # noqa: BLE001
+            logger(f"[{ir.id}] 步骤{idx} wait_visible {step.selector} 超时(继续采集)")
+    elif step.action == "wait_text":
+        want = resolve_vars(step.text, data)
+        sel = step.selector or "body"
+        try:
+            page.wait_for_function(
+                """([sel, want]) => {
+                    const el = document.querySelector(sel);
+                    return !!el && (el.innerText || el.textContent || '').includes(want);
+                }""",
+                arg=[sel, want],
+                timeout=step.timeout_ms,
+            )
+            logger(f"[{ir.id}] 步骤{idx} wait_text {sel} 含 {want!r} ✓")
+        except Exception:  # noqa: BLE001
+            logger(f"[{ir.id}] 步骤{idx} wait_text {sel} 含 {want!r} 超时(继续采集)")
+    else:
+        raise ValueError(f"未知步骤类型: {step.action}")
