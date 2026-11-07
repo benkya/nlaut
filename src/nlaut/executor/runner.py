@@ -338,6 +338,28 @@ def _apply_postconditions(ir: TestCaseIR) -> None:
                 print(f"[{ir.id}] 后置钩子跳过: demo_app 不可导入")
 
 
+def llm_suite_case_ids(priorities: list[str] | None = None) -> list[str]:
+    """大模型能力测试的用例集 = cases/llm 目录（目录即集合边界）。
+
+    背景（2026-11-07 用户发现口径污染）：tc_agent_verify_001
+    （集成准入门禁 G-11，system_prompt「你是软件工厂的任务创建服务」——
+    被测对象是软件工厂任务落库，非模型对话能力）位于 cases/demo 且
+    channel:api + priority:P0，被 run_llm_batch 的 api+P0 过滤捞进
+    大模型能力批次：三批全部 need_review，拖低 P0 通过率 2.1pp
+    （46/47 vs 46/46）。修复：大模型能力批次按目录选集，
+    cases/demo、cases/giencoder、cases/sweng 的 api 用例不再混入。
+
+    参数 priorities: 优先级过滤（如 ["P0"]；None = 全部）。
+    注意：相对路径 cases/llm 依赖调用方工作目录在仓库根（与 run_store 一致）。
+    """
+    from ..ir.store import IRStore
+    irs = IRStore("cases/llm").load_all()
+    if priorities:
+        keep = set(priorities)
+        irs = [ir for ir in irs if ir.priority in keep]
+    return [ir.id for ir in irs]
+
+
 def run_store(
     store: IRStore | None = None,
     case_ids: list[str] | None = None,

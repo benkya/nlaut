@@ -43,8 +43,13 @@ def run_llm_batch(model_key: str, reasoning_effort: str = "",
 
     print(f"[对话能力] P0 批次: model={model_id} base={base_url}")
     t0 = time.time()
+    # 2026-11-07 口径修复：大模型能力批次只跑 cases/llm 目录（46 条 P0）。
+    # 此前 case_ids=None 按 api+P0 全局过滤，把 cases/demo 的
+    # tc_agent_verify_001（软件工厂集成门禁用例）也捞了进来。
+    from nlaut.executor.runner import llm_suite_case_ids
+    llm_ids = llm_suite_case_ids(["P0"])
     results = run_store(
-        case_ids=None,  # 全部 P0
+        case_ids=llm_ids,  # cases/llm 的 P0（目录即集合边界）
         channels=["api"],
         priorities=["P0"],
         api_config={
