@@ -1,0 +1,25 @@
+id: tc_ccproto_home_004
+title: 版本标识正确
+source: |
+  S1 用例集 CC-HOME-004：顶栏版本按钮显示 v1.0.6-alpha.20。
+req_ref: CC-HOME-004
+priority: P0
+channel: web
+quad:
+  actor: 用户
+  action: 查看版本标识
+  object: 顶栏 versionBtn
+  preconditions:
+    - 首页已加载
+data_ref: null
+steps:
+  - action: nav
+    path: file:///Users/Ben/Downloads/index.html
+  - action: wait_visible
+    selector: '#versionBtn'
+    timeout_ms: 8000
+assertions:
+  - kind: text_visible
+    selector: '#versionBtn'
+    expected: v1.0.6-alpha.20
+postconditions: []

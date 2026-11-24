@@ -1,0 +1,40 @@
+id: tc_ccproto_work_004
+title: 开发两阶段标签（A 变更分析 / B 代码生成与确认）
+source: |
+  S1 用例集 CC-WORK-004：开发工序分 A/B 两阶段 tab——A 变更分析（比对程序设计与 Git 分支）、
+  B 代码生成与确认（逐项生成、核对 spec 并确认）。
+req_ref: CC-WORK-004
+priority: P0
+channel: web
+quad:
+  actor: 开发人员
+  action: 查看开发阶段标签
+  object: .devPhaseTab
+  preconditions:
+    - 已进入工作台（当前工序为代码开发）
+data_ref: null
+steps:
+  - action: nav
+    path: file:///Users/Ben/Downloads/index.html
+  - action: wait_visible
+    selector: '#homeTasksToggle'
+    timeout_ms: 8000
+  - action: click
+    selector: '#homeTasksToggle'
+  - action: wait_visible
+    selector: '.taskItem'
+    timeout_ms: 5000
+  - action: click
+    selector: '.taskItem'
+  - action: wait_text
+    text: 工序进度
+    selector: 'body'
+    timeout_ms: 10000
+assertions:
+  - kind: text_visible
+    selector: '.devPhaseTab:has-text("变更分析")'
+    expected: 变更分析
+  - kind: text_visible
+    selector: '.devPhaseTab:has-text("代码生成与确认")'
+    expected: 代码生成与确认
+postconditions: []

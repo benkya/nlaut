@@ -1,0 +1,34 @@
+id: tc_ccproto_home_002
+title: 快速任务四类齐全
+source: |
+  S1 用例集 CC-HOME-002：首页快速任务区块包含缺陷修复/技术任务/需求编写/需求优化四类入口。
+req_ref: CC-HOME-002
+priority: P0
+channel: web
+quad:
+  actor: 用户
+  action: 查看快速任务入口
+  object: homeScenarios 区块
+  preconditions:
+    - 首页已加载
+data_ref: null
+steps:
+  - action: nav
+    path: file:///Users/Ben/Downloads/index.html
+  - action: wait_visible
+    selector: '#homeScenarios'
+    timeout_ms: 8000
+assertions:
+  - kind: text_visible
+    selector: '#homeScenarios button:has-text("缺陷修复")'
+    expected: 缺陷修复
+  - kind: text_visible
+    selector: '#homeScenarios button:has-text("技术任务")'
+    expected: 技术任务
+  - kind: text_visible
+    selector: '#homeScenarios button:has-text("需求编写")'
+    expected: 需求编写
+  - kind: text_visible
+    selector: '#homeScenarios button:has-text("需求优化")'
+    expected: 需求优化
+postconditions: []

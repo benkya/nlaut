@@ -1,0 +1,44 @@
+id: tc_ccproto_work_008
+title: 返回首页
+source: |
+  S1 用例集 CC-WORK-008：工作台点击「返回工作台首页」回到 home 视图。
+  断言用 body 可见文本含 home 视图独有文案「从一个想法开始」（innerText 排除 hidden 视图，
+  可区分「真的回去了」vs「DOM 里还留着」）。
+req_ref: CC-WORK-008
+priority: P0
+channel: web
+quad:
+  actor: 用户
+  action: 从工作台返回首页
+  object: homeView
+  preconditions:
+    - 已进入工作台
+data_ref: null
+steps:
+  - action: nav
+    path: file:///Users/Ben/Downloads/index.html
+  - action: wait_visible
+    selector: '#homeTasksToggle'
+    timeout_ms: 8000
+  - action: click
+    selector: '#homeTasksToggle'
+  - action: wait_visible
+    selector: '.taskItem'
+    timeout_ms: 5000
+  - action: click
+    selector: '.taskItem'
+  - action: wait_text
+    text: 工序进度
+    selector: 'body'
+    timeout_ms: 10000
+  - action: click
+    selector: '#workHomeBtn'
+  - action: wait_text
+    text: 从一个想法开始
+    selector: 'body'
+    timeout_ms: 8000
+assertions:
+  - kind: text_visible
+    selector: 'body'
+    expected: 从一个想法开始
+postconditions: []

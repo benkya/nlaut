@@ -126,6 +126,37 @@ def _question_for(a, ir: TestCaseIR | None, data: dict[str, str] | None = None):
             context={"mode": "response_length", "min_chars": a.min_chars, "max_chars": a.max_chars},
         )
 
+    if a.kind == "visual_regression":
+        # 视觉回归：SSIM 像素级比对（零 AI token）
+        return Question(
+            kind="noul",
+            text="",
+            context={
+                "mode": "visual_regression",
+                "baseline": a.baseline,
+                "min_similarity": a.min_similarity,
+                "require_same_size": a.require_same_size,
+            },
+        )
+
+    if a.kind == "process_state":
+        # 工序状态机断言：确定性引擎自己读工序快照（零 AI token）
+        return Question(
+            kind="noul",
+            text="",
+            context={
+                "mode": "process_state",
+                "rule": a.rule,
+                "expect": a.expect,
+                "task_id": a.task_id,
+                "node": a.node,
+                "exclude_legacy": a.exclude_legacy,
+                "exclude_flat_layout": a.exclude_flat_layout,
+                "min_severity": a.min_severity,
+                "from_probe": a.from_probe,
+            },
+        )
+
     # --- AI 判定断言（原有）---
     if a.kind == "visual_state":
         return Question(kind="noul", text=a.prompt)
@@ -146,6 +177,13 @@ def _question_for(a, ir: TestCaseIR | None, data: dict[str, str] | None = None):
                 "threshold": a.threshold,
             },
         )
+    if a.kind == "llm_verify":
+        # LLM-as-Judge：judge 只能读 Evidence 里已拼好的证据（db_state / llm_response）
+        return Question(
+            kind="noul",
+            text=a.question,
+            context={"threshold": a.threshold},
+        )
 
     raise ValueError(f"未知断言类型: {a.kind}")
 
@@ -158,6 +196,7 @@ def _engine_name(a) -> str:
         "response_exact", "response_contains", "response_not_contains",
         "response_json_schema", "tool_call_params", "response_time",
         "response_ttft", "response_length", "response_ttft_p95",
+        "visual_regression", "process_state",
     ):
         return "deterministic"
     # VLM 判定
@@ -166,6 +205,9 @@ def _engine_name(a) -> str:
     # Agent-as-Judge 判定（自主取证型）
     if kind == "agent_verify":
         return "agent"
+    # LLM-as-Judge 判定（证据已完整，一轮 LLM 判断）
+    if kind == "llm_verify":
+        return "llm"
     # Laya 判定
     return "laya"
 
@@ -181,6 +223,7 @@ def run_case(
     logger=print,
     session_log=None,
     api_config: dict | None = None,
+    registry_path: str = "config/truth_source_registry.yaml",
 ) -> dict:
     """执行单条用例并完成三级判定，返回完整结果记录。
 
@@ -190,10 +233,16 @@ def run_case(
              用 channel: electron 的用例走此通道。
     session_log: 可选 SessionLog——传入则每次执行全程留痕（harness 层审计材料），
     append-only JSONL 可回放。
+    registry_path: 真值源注册表 YAML 路径。声明的快照会注入 Evidence.db_state。
     """
     from ..ir.datafactory import DataFactory
     from ..judge import Evidence, route
     from ..judge.protocol import get_judge
+    from ..judge.truth_registry import (
+        collect_db_state,
+        load_registry,
+        registry_enabled,
+    )
 
     def _log(event: dict) -> None:
         if session_log is not None:
@@ -236,6 +285,49 @@ def run_case(
         )
     evidence = Evidence(case_id=ir.id, **ev_kw)
 
+    # 真值源注册表（v0.5.0 接线）：读 config/truth_source_registry.yaml，
+    # 把声明的真值源快照注入 db_state —— 让只读拼 prompt 的判定器
+    # （LLM-as-Judge 等）有真东西可读。
+    # 取证失败不阻断：记录带 error 字段，judge 把「取不到」当作一种证据。
+    if registry_enabled():
+        try:
+            reg = load_registry(registry_path)
+            if reg.entries:
+                db_state = collect_db_state(reg)
+                if db_state:
+                    evidence.db_state = {**(evidence.db_state or {}), **db_state}
+                    _log({"event": "truth_registry", "keys": sorted(db_state)})
+        except (OSError, ValueError, ImportError) as e:
+            _log({"event": "truth_registry", "error": f"{type(e).__name__}: {e}"})
+
+    # 工序域探针（process_probe 步骤）：通道已在步骤执行时采集并回传，
+    # 这里只做兜底 —— 通道没采到时（如 api 通道）再采一次。
+    # 通道无关 —— 工序域是文件系统，不依赖浏览器。
+    if not ev_kw.get("process_probes"):
+        probe_steps = [s for s in ir.steps if getattr(s, "action", "") == "process_probe"]
+        if probe_steps:
+            from ..judge.process_truth import collect_probe
+
+            ps = probe_steps[-1]
+            try:
+                probe_result = collect_probe(
+                    root=getattr(ps, "root", "~/.cecoder/engineering-workbench"),
+                    probe=getattr(ps, "probe", "node"),
+                    task_id=getattr(ps, "task_id", None),
+                    node=getattr(ps, "node", None),
+                )
+            except OSError as e:
+                probe_result = {"error": f"{type(e).__name__}: {e}"}
+            ev_kw["process_probes"] = [probe_result]
+            _log({"event": "process_probe", "probe": getattr(ps, "probe", "node"),
+                  "source": "runner_fallback"})
+    if ev_kw.get("process_probes"):
+        probes = ev_kw["process_probes"]
+        evidence.process_probes = probes if isinstance(probes, list) else [probes]
+        evidence.process_probe = evidence.process_probes[-1]
+        _log({"event": "process_probe", "count": len(evidence.process_probes),
+              "source": "channel"})
+
     # Agent-as-Judge 取证轨迹（若有）：报告层展示 judge 查了什么、拿到什么证据
     agent_trace = None
     agent_meta = None
@@ -260,13 +352,24 @@ def run_case(
             "confidence": verdict.confidence,
             "status": decision.status,
         })
+        # 说明列：路由理由 + 关键数值明细（让人知道「差在哪」而不只是「失败了」）
+        detail = decision.reason
+        raw_extras: dict = {}
+        for key in ("similarity", "min_similarity", "size_matched", "baseline_size",
+                    "current_size", "degraded", "mode"):
+            if key in verdict.raw:
+                raw_extras[key] = verdict.raw[key]
+        if raw_extras:
+            detail = f"{detail} | " + " ".join(
+                f"{k}={v}" for k, v in raw_extras.items()
+            )
         results.append({
             "assertion": a.kind,
             "engine": verdict.engine,
             "value": verdict.value,
             "confidence": verdict.confidence,
             "status": decision.status,
-            "detail": decision.reason,
+            "detail": detail,
             "latency_ms": round((time.time() - t1) * 1000, 1),
         })
         # Agent-as-Judge 取证轨迹：报告层展示 judge 查了什么、拿到什么证据

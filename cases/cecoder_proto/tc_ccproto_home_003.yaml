@@ -1,0 +1,37 @@
+id: tc_ccproto_home_003
+title: 五大工作台入口齐全
+source: |
+  S1 用例集 CC-HOME-003：首页提供需求/架构/交互/测试/开发五个工作台入口（aria-label「打开X工作台」）。
+req_ref: CC-HOME-003
+priority: P0
+channel: web
+quad:
+  actor: 用户
+  action: 查看工作台入口
+  object: homeRoles 区块
+  preconditions:
+    - 首页已加载
+data_ref: null
+steps:
+  - action: nav
+    path: file:///Users/Ben/Downloads/index.html
+  - action: wait_visible
+    selector: 'button[aria-label="打开需求分析工作台"]'
+    timeout_ms: 8000
+assertions:
+  - kind: text_visible
+    selector: 'button[aria-label="打开需求分析工作台"]'
+    expected: 需求
+  - kind: text_visible
+    selector: 'button[aria-label="打开架构设计工作台"]'
+    expected: 架构
+  - kind: text_visible
+    selector: 'button[aria-label="打开交互设计工作台"]'
+    expected: 交互
+  - kind: text_visible
+    selector: 'button[aria-label="打开测试工作台"]'
+    expected: 测试
+  - kind: text_visible
+    selector: 'button[aria-label="打开开发工作台"]'
+    expected: 开发
+postconditions: []

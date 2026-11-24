@@ -13,5 +13,7 @@ deliveries/
 .env
 # 本地真实系统测试资产（内网地址+凭据，仅本地使用，禁止入库）
 cases/sweng/
+# CeCoder 工序域用例（真实被测系统资产，含本机路径，禁止入库）
+cases/cecoder/
 data/datasets.local.yaml
 data/api_smoke_sweng.local.yaml

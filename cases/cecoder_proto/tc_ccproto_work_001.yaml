@@ -1,0 +1,42 @@
+id: tc_ccproto_work_001
+title: 点击任务进入工作台
+source: |
+  S1 用例集 CC-WORK-001：展开工作列表点击第一个任务（统一登录失败提示），进入工作台视图，
+  工序进度区可见。断言用 body 可见文本（innerText 排除 hidden 视图）。
+req_ref: CC-WORK-001
+priority: P0
+channel: web
+quad:
+  actor: 用户
+  action: 从首页任务列表进入工作台
+  object: work 视图
+  preconditions:
+    - 首页已加载
+    - 工作列表含任务（paa-workspace 目录下第一个任务）
+data_ref: null
+steps:
+  - action: nav
+    path: file:///Users/Ben/Downloads/index.html
+  - action: wait_visible
+    selector: '#homeTasksToggle'
+    timeout_ms: 8000
+  - action: click
+    selector: '#homeTasksToggle'
+  - action: wait_visible
+    selector: '.taskItem'
+    timeout_ms: 5000
+  - action: click
+    selector: '.taskItem'
+  - action: wait_text
+    text: 工序进度
+    selector: 'body'
+    timeout_ms: 10000
+assertions:
+  - kind: text_visible
+    selector: 'body'
+    expected: 工序进度
+  - kind: attribute
+    selector: '#workHomeBtn'
+    name: aria-label
+    expected: 返回工作台首页
+postconditions: []

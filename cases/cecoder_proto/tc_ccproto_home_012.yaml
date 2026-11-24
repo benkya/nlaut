@@ -1,0 +1,29 @@
+id: tc_ccproto_home_012
+title: 深色模式切换（data-theme 状态断言）
+source: |
+  S1 用例集 CC-HOME-012：点击「切换深色模式」后 html 的 data-theme 属性变为 dark。
+  断状态属性值而非节点存在性（SPA 状态残留防御）。
+req_ref: CC-HOME-012
+priority: P0
+channel: web
+quad:
+  actor: 用户
+  action: 切换深色模式
+  object: 顶栏 themeBtn / html[data-theme]
+  preconditions:
+    - 首页已加载（默认浅色）
+data_ref: null
+steps:
+  - action: nav
+    path: file:///Users/Ben/Downloads/index.html
+  - action: wait_visible
+    selector: '#themeBtn'
+    timeout_ms: 8000
+  - action: click
+    selector: '#themeBtn'
+assertions:
+  - kind: attribute
+    selector: 'html'
+    name: data:theme
+    expected: dark
+postconditions: []

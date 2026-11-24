@@ -1,0 +1,33 @@
+id: tc_ccproto_home_001
+title: 首页核心元素加载
+source: |
+  S1 用例集 CC-HOME-001（Cecoder 新原型 v1.0.6-alpha.20）：
+  打开原型首页，快速任务区块、任务输入框（placeholder「描述任务目标」）、发送按钮全部可见。
+req_ref: CC-HOME-001
+priority: P0
+channel: web
+quad:
+  actor: 用户
+  action: 打开 Cecoder 原型首页
+  object: 工作台首页（homeView）
+  preconditions:
+    - 原型文件存在于 /Users/Ben/Downloads/index.html
+data_ref: null
+steps:
+  - action: nav
+    path: file:///Users/Ben/Downloads/index.html
+  - action: wait_visible
+    selector: '#homeInput'
+    timeout_ms: 8000
+assertions:
+  - kind: text_visible
+    selector: '#homeScenarios'
+    expected: 快速任务
+  - kind: attribute
+    selector: '#homeInput'
+    name: placeholder
+    expected: 描述要解决的问题、目标或验收标准
+  - kind: text_visible
+    selector: '#homeSend'
+    expected: 发送
+postconditions: []

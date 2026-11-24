@@ -1,0 +1,53 @@
+id: tc_ccproto_work_003
+title: 主 pane 五标签齐全
+source: |
+  S1 用例集 CC-WORK-003：工作台主 pane 有代码开发/Git/Diff/终端/浏览器五个标签 + 新建标签入口。
+  每个标签用 :has-text 唯一定位（text_visible 采集只取首个匹配元素）。
+req_ref: CC-WORK-003
+priority: P0
+channel: web
+quad:
+  actor: 用户
+  action: 查看主 pane 标签
+  object: .tabMain 标签组
+  preconditions:
+    - 已进入工作台
+data_ref: null
+steps:
+  - action: nav
+    path: file:///Users/Ben/Downloads/index.html
+  - action: wait_visible
+    selector: '#homeTasksToggle'
+    timeout_ms: 8000
+  - action: click
+    selector: '#homeTasksToggle'
+  - action: wait_visible
+    selector: '.taskItem'
+    timeout_ms: 5000
+  - action: click
+    selector: '.taskItem'
+  - action: wait_text
+    text: 工序进度
+    selector: 'body'
+    timeout_ms: 10000
+assertions:
+  - kind: text_visible
+    selector: 'button.tabMain:has-text("代码开发")'
+    expected: 代码开发
+  - kind: text_visible
+    selector: 'button.tabMain:has-text("Git")'
+    expected: Git
+  - kind: text_visible
+    selector: 'button.tabMain:has-text("Diff")'
+    expected: Diff
+  - kind: text_visible
+    selector: 'button.tabMain:has-text("终端")'
+    expected: 终端
+  - kind: text_visible
+    selector: 'button.tabMain:has-text("浏览器")'
+    expected: 浏览器
+  - kind: attribute
+    selector: '#tabAdd'
+    name: aria-label
+    expected: 新建标签
+postconditions: []

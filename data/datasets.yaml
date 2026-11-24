@@ -80,3 +80,8 @@ d12_weather:
   prompt: "今天北京天气怎么样？"
   expected_function: "get_weather"
   expected_city: "北京"
+
+# --- Cecoder 原型 · 创建任务（口述用例 2026-11-23）---
+ccproto_create_task:
+  task_name: "验证统一登录失败提示优化"
+  task_goal: "统一登录失败提示，避免内部堆栈泄漏"

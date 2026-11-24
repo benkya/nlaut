@@ -1,0 +1,69 @@
+id: tc_ccproto_flow_001
+title: 创建任务功能-点击新建弹出弹框-填写并正式创建
+source: |
+  口述: 我要测试Cecoder的创建任务功能，点击创建任务后，应该弹出创建任务弹框，
+  并且可以输入对应内容并正式创建任务。
+req_ref: CC-FLOW-001
+priority: P0
+channel: web
+data_ref: ccproto_create_task
+quad:
+  actor: 用户
+  action: 点击新建任务，在弹框中填写任务信息并创建
+  object: quickTaskDialog（快速新建任务弹框）→ 任务列表
+  preconditions:
+    - 原型已加载且任务列表可展开（homeTasksToggle）
+    - 初始任务计数为 11
+steps:
+  - action: nav
+    path: file:///Users/Ben/Downloads/index.html
+  - action: wait_visible
+    selector: '#homeTasksToggle'
+    timeout_ms: 8000
+  - action: click
+    selector: '#homeTasksToggle'
+  - action: wait_text
+    text: '11'
+    selector: '#homeTasksTotal'
+    timeout_ms: 5000
+  - action: click
+    selector: '#homeNewTaskBtn'
+  - action: wait_visible
+    selector: '#quickTaskDialog'
+    timeout_ms: 5000
+  - action: click
+    selector: '#qtNext'
+  - action: wait_visible
+    selector: '#quickName'
+    timeout_ms: 5000
+  - action: fill
+    selector: '#quickName'
+    value: '$task_name'
+  - action: fill
+    selector: '#quickGoal'
+    value: '$task_goal'
+  - action: click
+    selector: '#qtCreate'
+  - action: wait_text
+    text: '已创建任务'
+    selector: 'body'
+    timeout_ms: 8000
+assertions:
+  # 断言1：弹框打开且进入工序选择步骤（弹框可见性已由 wait_visible 步骤把关）
+  - kind: text_visible
+    selector: '#quickTaskDialog'
+    expected: 快速新建任务
+  # 断言2：输入字段可填写——fill 步骤已执行，这里断采集值与数据集一致
+  - kind: attribute
+    selector: '#quickName'
+    name: value
+    expected: 验证统一登录失败提示优化
+  # 断言3：正式创建成功——toast 提示（wait_text 已等待出现）
+  - kind: text_visible
+    selector: 'body'
+    expected: 已创建任务
+  # 断言4：任务计数 11 → 12（状态属性值断言，非节点存在性）
+  - kind: text_visible
+    selector: '#homeTasksTotal'
+    expected: '12'
+postconditions: []

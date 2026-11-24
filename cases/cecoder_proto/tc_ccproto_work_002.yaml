@@ -1,0 +1,40 @@
+id: tc_ccproto_work_002
+title: 工序进度展示（3/8 · 代码开发）
+source: |
+  S1 用例集 CC-WORK-002：进入任务后工序进度条显示「工序进度 3/8 · 代码开发」。
+  expected 拆两条子串断言（innerText 可能含换行，避免整串匹配脆断）。
+req_ref: CC-WORK-002
+priority: P0
+channel: web
+quad:
+  actor: 用户
+  action: 查看工序进度
+  object: timelineToggle
+  preconditions:
+    - 已进入统一登录失败提示任务的工作台
+data_ref: null
+steps:
+  - action: nav
+    path: file:///Users/Ben/Downloads/index.html
+  - action: wait_visible
+    selector: '#homeTasksToggle'
+    timeout_ms: 8000
+  - action: click
+    selector: '#homeTasksToggle'
+  - action: wait_visible
+    selector: '.taskItem'
+    timeout_ms: 5000
+  - action: click
+    selector: '.taskItem'
+  - action: wait_text
+    text: 工序进度
+    selector: 'body'
+    timeout_ms: 10000
+assertions:
+  - kind: text_visible
+    selector: '#timelineToggle'
+    expected: 3/8
+  - kind: text_visible
+    selector: '#timelineToggle'
+    expected: 代码开发
+postconditions: []
