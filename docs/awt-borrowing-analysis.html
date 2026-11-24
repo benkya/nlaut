@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>awt-borrowing-analysis.md</title>
+<style>
+:root { --fg:#1f4e79; --tx:#16181c; --mut:#4a5058; --bd:#e2e6ea; --bg:#fff; --soft:#f7f9fb; }
+* { box-sizing: border-box; }
+body { margin:0; background:var(--bg); color:var(--tx);
+  font-family:-apple-system,"PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+  font-size:14px; line-height:1.75; }
+.page { max-width:900px; margin:0 auto; padding:48px 56px 72px; }
+h1 { font-size:26px; font-weight:700; line-height:1.45; margin:0 0 20px;
+  padding-bottom:14px; border-bottom:2px solid var(--fg); color:var(--tx); }
+h2 { font-size:19px; font-weight:700; color:var(--fg); margin:38px 0 14px;
+  padding-bottom:6px; border-bottom:1px solid var(--bd); }
+h3 { font-size:15.5px; font-weight:700; color:var(--tx); margin:26px 0 9px; }
+h4 { font-size:14px; font-weight:700; color:var(--mut); margin:20px 0 7px; }
+p { margin:10px 0; }
+ul, ol { margin:10px 0; padding-left:24px; }
+li { margin:4px 0; }
+blockquote { margin:14px 0; padding:9px 16px; border-left:3px solid var(--fg);
+  background:var(--soft); color:var(--mut); border-radius:0 4px 4px 0; }
+blockquote p { margin:4px 0; }
+table { border-collapse:collapse; width:100%; margin:14px 0; font-size:13px; }
+th, td { border:1px solid var(--bd); padding:7px 10px; text-align:left; vertical-align:top;
+  line-height:1.6; }
+th { background:var(--soft); font-weight:700; color:var(--tx); }
+tr:nth-child(even) td { background:#fcfdfe; }
+code { background:var(--soft); border:1px solid var(--bd); border-radius:3px;
+  padding:1px 5px; font-size:12.5px;
+  font-family:"SF Mono",Menlo,Consolas,monospace; color:#a3341f; }
+pre { background:#f8f9fb; border:1px solid var(--bd); border-radius:5px;
+  padding:12px 14px; overflow-x:auto; }
+pre code { background:none; border:none; padding:0; color:var(--tx); font-size:12.5px; }
+a { color:var(--fg); text-decoration:none; border-bottom:1px solid #c9d6e4; }
+a:hover { border-bottom-color:var(--fg); }
+hr { border:none; border-top:1px solid var(--bd); margin:30px 0; }
+strong { font-weight:700; }
+</style>
+</head>
+<body>
+<div class="page">
+<h1 id="awt">AWT 能力借鉴分析 —— 可实现性与实际意义</h1>
+<p><strong>日期</strong>：2026-11-14
+<strong>分析对象</strong>：AWT（AI Watch Tester，<code>aat-devqa</code> 1.8.0，本机已装）的三项增量能力
+<strong>参照基准</strong>：<code>~/workspace/awt-methodology/AWT_vs_nlaut_对比.md</code> 附录 A（2026-11-07 追加的分工结论）
+<strong>方法</strong>：全部结论基于本机实测（源码核实 + 真实运行 + 真实截图 SSIM 测量），非文档转述</p>
+<hr />
+<h2 id="_1">〇、结论先行</h2>
+<p><strong>该借鉴的只有 1 项，且已原生实现；另外 2 项对 CeCoder 这个 Electron 桌面端「技术上不可用」。</strong></p>
+<table>
+<thead>
+<tr>
+<th>AWT 增量能力</th>
+<th>对 CeCoder（Electron）的可实现性</th>
+<th>意义</th>
+<th>本轮处置</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>SSIM 视觉回归</strong></td>
+<td>✅ <strong>可独立实现</strong>（纯 OpenCV，零运行时耦合）</td>
+<td>🟡 <strong>有限但真实</strong>——只覆盖布局级回归</td>
+<td>✅ <strong>已实现并实测</strong></td>
+</tr>
+<tr>
+<td><strong>多视口响应式</strong></td>
+<td>❌ <strong>技术上不可用</strong></td>
+<td>🟠 Electron 应用窗口由用户决定，非响应式 Web</td>
+<td>不做</td>
+</tr>
+<tr>
+<td><strong>快速元素盘点（scan）</strong></td>
+<td>❌ <strong>技术上不可用</strong></td>
+<td>🔵 nlaut 的 selector 精度要求更高，scan 的视觉定位不适用</td>
+<td>不做</td>
+</tr>
+</tbody>
+</table>
+<p><strong>更重要的一条</strong>：AWT <strong>整体无法测 CeCoder</strong>——它零处支持 CDP / Electron。这不是「配置没配对」，是能力缺失。</p>
+<hr />
+<h2 id="awt-cecoder">一、AWT 对 CeCoder 完全不可用（硬证据）</h2>
+<h3 id="11-awt-cdp-electron">1.1 AWT 不支持 CDP / Electron</h3>
+<p>在 AWT 全部源码里检索（<code>$(uv tool dir)/aat-devqa/lib/python3.12/site-packages/aat/</code>）：</p>
+<table>
+<thead>
+<tr>
+<th>检索项</th>
+<th>命中数</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>connect_over_cdp</code></td>
+<td><strong>0</strong></td>
+</tr>
+<tr>
+<td><code>cdp_url</code></td>
+<td><strong>0</strong></td>
+</tr>
+<tr>
+<td><code>remote-debugging</code></td>
+<td><strong>0</strong></td>
+</tr>
+<tr>
+<td><code>electron</code>（不区分大小写）</td>
+<td><strong>0</strong></td>
+</tr>
+<tr>
+<td><code>chromium.launch</code></td>
+<td>1 —— 仅在 <code>reporters/pdf.py:446</code>，用于生成 PDF 报告，与测试执行无关</td>
+</tr>
+</tbody>
+</table>
+<p><strong>实测运行</strong>（<code>aat scan --url <a href="http://127.0.0.1:49791/">http://127.0.0.1:49791/</a></code>）：</p>
+<pre><code>[AWT] Scanning <a href="http://127.0.0.1:49791/...">http://127.0.0.1:49791/...</a>
+Error: Failed to start WebEngine: BrowserType.launch: Executable doesn't exist at ...
+</code></pre>
+<p>AWT 只会 <code>BrowserType.launch()</code> 自己起一个独立浏览器，<strong>无法附着到已运行的 Electron 应用</strong>。</p>
+<h3 id="12-nlaut">1.2 而 nlaut 原生支持</h3>
+<p><code>src/nlaut/executor/channels/electron.py:55</code>：</p>
+<pre><code class="language-python">browser = p.chromium.connect_over_cdp(cdp_url)
+</code></pre>
+<p><strong>这是 nlaut 相对 AWT 的结构性优势，不是可弥补的差距。</strong> CeCoder 是 Electron 桌面应用（<code>/Applications/Cecoder.app</code>），AWT 对它无路可走。</p>
+<blockquote>
+<p><strong>推论</strong>：任何「AWT 负责扫、nlaut 负责判」的分工建议，对 CeCoder 场景<strong>不成立</strong>——AWT 连扫都做不到。
+之前对比文档附录 A.4 的推荐链路（① AWT scan → ② 人写 IR → ③ nlaut 执行）只对<strong>纯 Web 系统</strong>成立。</p>
+</blockquote>
+<hr />
+<h2 id="ssim">二、SSIM 视觉回归：可实现，但意义有限（本轮已实现）</h2>
+<h3 id="21">2.1 为什么可以独立实现</h3>
+<p>AWT 的 SSIM 实现在 <code>aat/visual/comparator.py</code>（177 行），核心算法是：</p>
+<ul>
+<li>SSIM（Wang et al. 2004 公式）</li>
+<li><strong>纯 OpenCV 实现</strong>，<code>GaussianBlur</code> 11×11 σ=1.5，C1=(0.01·255)²，C2=(0.03·255)²</li>
+<li>不依赖 scikit-image</li>
+</ul>
+<p><strong>结论</strong>：算法是教科书公式，不含 AWT 的私有逻辑。nlaut 可独立实现，<strong>不调用 AWT CLI、不产生运行时耦合、不引入 license 依赖</strong>。</p>
+<p>本轮实现：<code>src/nlaut/judge/visual_regression.py</code>（独立模块，与 AWT 无 import 关系）。</p>
+<h3 id="22-ssim">2.2 实测：SSIM 能检出什么、不能检出什么</h3>
+<p>用真实 CeCoder 工序编排面板截图（3272×1922 视口模式），注入 4 种 CSS 改动后测 SSIM：</p>
+<table>
+<thead>
+<tr>
+<th>注入的改动</th>
+<th>SSIM</th>
+<th>0.98 阈值</th>
+<th>结论</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>标题文字改红</td>
+<td>0.999935</td>
+<td>❌ <strong>未检出</strong></td>
+<td>小面积颜色变化，结构不变</td>
+</tr>
+<tr>
+<td>工序名改灰 + 字号缩小</td>
+<td>0.995129</td>
+<td>❌ <strong>未检出</strong></td>
+<td>小面积文字级变化</td>
+</tr>
+<tr>
+<td>整个面板改红底</td>
+<td>0.955447</td>
+<td>✅ 检出</td>
+<td>大面积色变</td>
+</tr>
+<tr>
+<td>行间距加大（padding 8→20）</td>
+<td>0.927868</td>
+<td>✅ 检出</td>
+<td>布局位移</td>
+</tr>
+</tbody>
+</table>
+<p><strong>这不是实现缺陷，是 SSIM 的固有性质</strong>：结构相似度对「局部小面积变化」不敏感（11×11 窗口平均会抵消掉）。</p>
+<h3 id="23">2.3 所以它的定位是「布局级回归守门员」</h3>
+<table>
+<thead>
+<tr>
+<th>能力</th>
+<th>抓什么</th>
+<th>谁负责</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>SSIM</strong>（本轮实现）</td>
+<td>布局位移、间距变化、大面积配色变化</td>
+<td>零 token，确定性</td>
+</tr>
+<tr>
+<td><strong>VLM（<code>visual_state</code>，已有）</strong></td>
+<td>语义错：文字写错、状态不对、元素缺失</td>
+<td>有 token，语义层</td>
+</tr>
+<tr>
+<td><strong>确定性断言（已有）</strong></td>
+<td>文案、属性、禁用态</td>
+<td>零 token，最精确</td>
+</tr>
+</tbody>
+</table>
+<p><strong>三者不重叠。</strong> SSIM 填补的是「界面结构变了但语义还对」这一档——纯断言和 VLM 都可能漏掉。</p>
+<h3 id="24">2.4 本轮实测的端到端闭环</h3>
+<pre><code>用例: tc_cecoder_visual_001（CeCoder 工序编排面板视觉回归）
+执行: 打开新建任务弹窗 → 视口截图 → 与基线 SSIM 比对
+
+[     passed] tc_cecoder_visual_001  (34.2s)
+报告明细: visual_regression | deterministic | value=1.0 | confidence=1.0 | auto_pass
+          similarity=1.0 min_similarity=0.98 size_matched=True
+          baseline_size=(3272, 1922) current_size=(3272, 1922)
+</code></pre>
+<p><strong>关键工程细节（都是踩出来的）</strong>：</p>
+<ol>
+<li><strong>必须用视口截图，不能用 full_page</strong>。实测 <code>full_page=True</code> 时 Electron 页面高度 8740px（内容驱动，尺寸不稳定），SSIM 无从比对。本轮已改：通道层检测到 <code>visual_regression</code> 断言时自动切 <code>full_page=False</code>。</li>
+<li><strong>Electron 窗口高度有 2px 抖动</strong>：full_page 截图 1924 vs 视口 1922。视口模式连测 3 次稳定在 1922。</li>
+<li><strong>基线缺失必须转人工，不能判通过</strong>。本轮发现并修复了一个<strong>框架级严重缺陷</strong>——见 §四。</li>
+</ol>
+<hr />
+<h2 id="-responsivescan">三、多视口（<code>--responsive</code>）与元素盘点（<code>scan</code>）：不做</h2>
+<h3 id="31-electron">3.1 多视口响应式 —— 对 Electron 无意义</h3>
+<p><strong>AWT 的能力</strong>：<code>aat snapshot --responsive</code> 一次采 mobile / tablet / desktop 三档基线，用于测响应式 Web 布局。</p>
+<p><strong>为什么对 CeCoder 无意义</strong>：</p>
+<ul>
+<li>CeCoder 是<strong>桌面应用</strong>，窗口尺寸由用户拖拽决定，不是断点响应式布局</li>
+<li>nlaut 的 web 通道 viewport <strong>硬编码 1280×900</strong>（<code>web.py:108</code>），electron 通道用应用窗口尺寸</li>
+<li>「手机视口下的 CeCoder 工序编排面板长什么样」——这个问题不存在</li>
+</ul>
+<p><strong>可实现但无意义</strong> ≠ 不值得做。硬做只会增加维护面。</p>
+<h3 id="32-aat-scan-nlaut">3.2 快速元素盘点（<code>aat scan</code>）—— 与 nlaut 的方法论冲突</h3>
+<p><strong>AWT 的能力</strong>：<code>aat scan --url X</code> 扫页面，收集 selector + OCR 文本 + 坐标，产出 <code>scan_result.json</code>。</p>
+<p><strong>为什么不借鉴</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>维度</th>
+<th>AWT scan</th>
+<th>nlaut 的做法</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>元素定位</td>
+<td>视觉/OCR 匹配（<code>{selector, text, image, match_method}</code>）</td>
+<td>精确 CSS selector</td>
+</tr>
+<tr>
+<td>稳定性</td>
+<td>依赖像素与文字，抗改版差</td>
+<td>抗改版好</td>
+</tr>
+<tr>
+<td>可读性</td>
+<td>生成的 YAML 缺 <code>source</code>/<code>quad</code>，需人工重推</td>
+<td>IR 强制 <code>source</code> + <code>quad</code></td>
+</tr>
+</tbody>
+</table>
+<p>之前对比文档已确认：<strong>AWT 场景无法机械转成 nlaut IR</strong>（缺 <code>source</code> 与 <code>quad</code> 两个必填根字段）。</p>
+<p><strong>更根本的</strong>：nlaut 的用例本来就由「口述 → IR」生成（<code>verbal-to-ir-protocol.md</code>），元素清单不是必需品。引入 scan 只会多一个「扫出来的元素还得人工翻译成 IR」的中间层。</p>
+<p><strong>唯一可能有用的场景</strong>：给完全陌生的系统做「探测性摸底」，看看有哪些可测点。但 AWT 对 Electron 不支持（§一），对 CeCoder 连这条路都走不通。</p>
+<hr />
+<h2 id="_2">四、本轮顺带修掉的两个框架级缺陷</h2>
+<p>这两个都不是「AWT 借鉴」带来的，是实操过程中暴露的：</p>
+<h3 id="41-deterministic">4.1 严重：deterministic 降级态会被误判为「通过」</h3>
+<p><strong>现象</strong>：视觉回归基线缺失时，判定返回 <code>value=0.5, confidence=0.5</code>，
+但 <code>arbiter.py</code> 的 deterministic 分支<strong>只看 <code>value &gt;= 0.5</code> 就 auto_pass</strong> → <strong>基线不存在反而判「通过」</strong>。</p>
+<pre><code>基线缺失   value=0.5 conf=0.5 → auto_pass     ← 修复前（错误）
+无截图     value=0.5 conf=0.5 → auto_pass     ← 修复前（错误）
+</code></pre>
+<p><strong>影响面</strong>：不只是视觉回归。<code>deterministic.py</code> 里 <code>response_ttft_p95</code> 的降级也是 <code>value=0.5</code>——<strong>同一个既有 bug 已经存在于仓库里</strong>。</p>
+<p><strong>修复</strong>（<code>arbiter.py</code>）：deterministic 分支增加置信度守卫——</p>
+<pre><code class="language-python">if verdict.confidence &lt; 1.0:
+    return RouteDecision(&quot;human_review&quot;, &quot;确定性判定降级（confidence=...），转人工仲裁&quot;)
+</code></pre>
+<p>deterministic 的正常判定 confidence 恒为 1.0，故此守卫<strong>不影响任何既有行为</strong>（221 条原元测试全绿验证）。</p>
+<p>修复后：</p>
+<pre><code>基线缺失   value=0.5 conf=0.5 → human_review  ← 正确
+无截图     value=0.5 conf=0.5 → human_review  ← 正确
+相似度不足 value=0.0 conf=1.0 → auto_fail     ← 正确
+完全一致   value=1.0 conf=1.0 → auto_pass     ← 正确
+</code></pre>
+<h3 id="42">4.2 报告不展示判定数值明细</h3>
+<p>报告的「说明」列只有路由理由（"确定性判定，value&gt;=0.5 即裁决"），看不到 SSIM 分数。
+用户看到 <code>auto_fail</code> 不知道<strong>差在哪</strong>。</p>
+<p><strong>修复</strong>（<code>runner.py</code>）：把 raw 的关键数值（similarity / size_matched / 尺寸 / degraded）拼进 detail。
+现在报告直接显示：<code>similarity=1.0 min_similarity=0.98 size_matched=True baseline_size=(3272, 1922)</code>。</p>
+<hr />
+<h2 id="awt_1">五、给「AWT 到底有没有用」的最终回答</h2>
+<table>
+<thead>
+<tr>
+<th>问法</th>
+<th>回答</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>AWT 能测 CeCoder 吗？</td>
+<td><strong>不能</strong>。零 CDP / 零 Electron 支持，实测 <code>aat scan</code> 直接报启动失败</td>
+</tr>
+<tr>
+<td>那 AWT 对你有什么用？</td>
+<td>对<strong>纯 Web 系统</strong>（如源启智能软件工厂 <code>10.64.17.69:30972</code>）可能有用：SSIM 视觉回归 + 多视口</td>
+</tr>
+<tr>
+<td>要不要把它接进 nlaut？</td>
+<td><strong>不要</strong>。它的三项增量里，两项对 Electron 无意义、一项（SSIM）我们已经原生实现了而且不依赖它</td>
+</tr>
+<tr>
+<td>那要不要保留 AWT？</td>
+<td>作为<strong>独立工具</strong>保留即可（<code>aat snapshot</code>/<code>aat diff</code> 跑 Web 系统的视觉回归），<strong>不进 nlaut 依赖链</strong></td>
+</tr>
+</tbody>
+</table>
+<h3 id="_3">一句话结论</h3>
+<blockquote>
+<p><strong>AWT 的真正价值不在它的功能清单，而在它提醒了 nlaut 的一个真空：像素级视觉回归。</strong>
+这个真空我已经用独立实现补上了（177 行 → 60 行核心算法），不引入 AWT 依赖。
+而 AWT 作为工具对 CeCoder 完全无效，<strong>不应进入 nlaut 的依赖链或工作流</strong>。</p>
+</blockquote>
+<hr />
+<h2 id="_4">附：本轮改动清单</h2>
+<table>
+<thead>
+<tr>
+<th>文件</th>
+<th>改动</th>
+<th>类型</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>src/nlaut/judge/visual_regression.py</code></td>
+<td>新增：SSIM 比对 + diff 图生成</td>
+<td>新能力</td>
+</tr>
+<tr>
+<td><code>src/nlaut/ir/model.py</code></td>
+<td>新增 <code>AssertVisualRegression</code> 断言</td>
+<td>新能力</td>
+</tr>
+<tr>
+<td><code>src/nlaut/judge/deterministic.py</code></td>
+<td>新增 <code>visual_regression</code> mode</td>
+<td>新能力</td>
+</tr>
+<tr>
+<td><code>src/nlaut/executor/runner.py</code></td>
+<td>断言映射 + 引擎路由 + 报告明细</td>
+<td>新能力 + 缺陷修复</td>
+</tr>
+<tr>
+<td><code>src/nlaut/executor/channels/{web,electron}.py</code></td>
+<td>有视觉回归断言时改用视口截图</td>
+<td>新能力前置</td>
+</tr>
+<tr>
+<td><code>src/nlaut/judge/arbiter.py</code></td>
+<td>deterministic 降级守卫</td>
+<td><strong>缺陷修复（严重）</strong></td>
+</tr>
+<tr>
+<td><code>tests/visual_regression_test.py</code></td>
+<td>新增 13 条测试</td>
+<td>新能力</td>
+</tr>
+<tr>
+<td><code>cases/cecoder/tc_cecoder_visual_001.yaml</code></td>
+<td>CeCoder 视觉回归用例</td>
+<td>新用例</td>
+</tr>
+<tr>
+<td><code>baselines/cecoder/order_panel.png</code></td>
+<td>视觉回归基线</td>
+<td>新资产</td>
+</tr>
+<tr>
+<td><code>pyproject.toml</code></td>
+<td>新增 opencv-python-headless + numpy</td>
+<td>依赖</td>
+</tr>
+</tbody>
+</table>
+<p><strong>验证</strong>：234 条元测试全绿（原 221 + 新 13）；改动文件 ruff 全过；视觉回归用例真实跑通并量化了检出边界。</p>
+</div>
+</body>
+</html>

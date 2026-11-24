@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ir-schema.md</title>
+<style>
+:root { --fg:#1f4e79; --tx:#16181c; --mut:#4a5058; --bd:#e2e6ea; --bg:#fff; --soft:#f7f9fb; }
+* { box-sizing: border-box; }
+body { margin:0; background:var(--bg); color:var(--tx);
+  font-family:-apple-system,"PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+  font-size:14px; line-height:1.75; }
+.page { max-width:900px; margin:0 auto; padding:48px 56px 72px; }
+h1 { font-size:26px; font-weight:700; line-height:1.45; margin:0 0 20px;
+  padding-bottom:14px; border-bottom:2px solid var(--fg); color:var(--tx); }
+h2 { font-size:19px; font-weight:700; color:var(--fg); margin:38px 0 14px;
+  padding-bottom:6px; border-bottom:1px solid var(--bd); }
+h3 { font-size:15.5px; font-weight:700; color:var(--tx); margin:26px 0 9px; }
+h4 { font-size:14px; font-weight:700; color:var(--mut); margin:20px 0 7px; }
+p { margin:10px 0; }
+ul, ol { margin:10px 0; padding-left:24px; }
+li { margin:4px 0; }
+blockquote { margin:14px 0; padding:9px 16px; border-left:3px solid var(--fg);
+  background:var(--soft); color:var(--mut); border-radius:0 4px 4px 0; }
+blockquote p { margin:4px 0; }
+table { border-collapse:collapse; width:100%; margin:14px 0; font-size:13px; }
+th, td { border:1px solid var(--bd); padding:7px 10px; text-align:left; vertical-align:top;
+  line-height:1.6; }
+th { background:var(--soft); font-weight:700; color:var(--tx); }
+tr:nth-child(even) td { background:#fcfdfe; }
+code { background:var(--soft); border:1px solid var(--bd); border-radius:3px;
+  padding:1px 5px; font-size:12.5px;
+  font-family:"SF Mono",Menlo,Consolas,monospace; color:#a3341f; }
+pre { background:#f8f9fb; border:1px solid var(--bd); border-radius:5px;
+  padding:12px 14px; overflow-x:auto; }
+pre code { background:none; border:none; padding:0; color:var(--tx); font-size:12.5px; }
+a { color:var(--fg); text-decoration:none; border-bottom:1px solid #c9d6e4; }
+a:hover { border-bottom-color:var(--fg); }
+hr { border:none; border-top:1px solid var(--bd); margin:30px 0; }
+strong { font-weight:700; }
+</style>
+</head>
+<body>
+<div class="page">
+<h1 id="ir-schemacasesyaml">IR Schema（cases/*.yaml）</h1>
+<p>权威定义在 <code>src/nlaut/ir/model.py</code>（Pydantic）。本页是人读版。</p>
+<pre><code class="language-yaml">id: tc_login_001              # 必填，^tc_[a-z0-9_]+$
+title: 登录-错误密码-停留登录页并提示
+source: &quot;口述: 测一下登录，密码错误的情况&quot;   # 必填，原始输入文本（追溯锚点）
+req_ref: null                 # 可选，需求编号
+priority: P0                  # P0|P1|P2，默认 P1
+channel: web                  # web | electron | api
+quad:                         # 四元组
+  actor: 登录页
+  action: 提交错误密码
+  object: 登录表单
+  preconditions: [&quot;用户 $user 存在且启用&quot;]
+data_ref: login_invalid_pwd   # 可选，data/ 工厂 tag；用例不内嵌数据
+steps:                        # 声明式动作，min 1 条
+  - {action: nav, path: &quot;/login&quot;}
+  - {action: fill, selector: &quot;#username&quot;, value: &quot;$user&quot;}
+  - {action: click, selector: &quot;button[type=submit]&quot;}
+  - {action: wait_visible, selector: &quot;.error-msg&quot;, timeout_ms: 5000}
+assertions:                   # min 1 条，每条声明判定级别
+  - kind: text_visible        # 确定性：selector 文案包含
+    selector: &quot;.error-msg&quot;
+    expected: &quot;密码错误&quot;
+  - kind: visual_state        # VLM：结构化提问 + threshold
+    prompt: &quot;页面是否呈现登录失败且仍停留在登录页？&quot;
+    threshold: 0.9
+  - kind: noul                # System One：0-1 概率题
+    question: &quot;当前失败归因是否为'产品缺陷'？&quot;
+    threshold: 0.9
+postconditions:
+  - cleanup_tag: TEST_AUTO_   # 数据还原钩子
+</code></pre>
+<h2 id="api-v020">大模型 API 用例示例（v0.2.0）</h2>
+<pre><code class="language-yaml">id: tc_d04_p0_001
+title: 多步算术
+source: &quot;大模型测试用例集 v1 D04-P0-001：验证模型能正确完成多步算术（折扣+优惠券）&quot;
+req_ref: &quot;D04-P0-001&quot;
+priority: P0
+channel: api                  # API 通道：HTTP 调用 LLM
+quad: {actor: 大模型, action: 数学计算, object: 数学问题}
+data_ref: d04_multi_step      # prompt 走数据工厂，用例不内嵌
+steps:
+  - {action: api_call, prompt: &quot;$prompt&quot;}
+assertions:
+  - kind: response_contains   # 确定性：关键词匹配
+    keywords: [&quot;130&quot;]
+    min_match: 1
+  - kind: noul                # AI 判定兜底
+    question: &quot;模型是否正确计算出最终价格130元（200×0.8-30=130）？只答 yes 或 no。&quot;
+    threshold: 0.9
+</code></pre>
+<h2 id="steps">步骤类型（steps）</h2>
+<table>
+<thead>
+<tr>
+<th>action</th>
+<th>字段</th>
+<th>通道</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>nav</code></td>
+<td>path</td>
+<td>web/electron</td>
+<td>导航（web）/窗口切换（electron）</td>
+</tr>
+<tr>
+<td><code>fill</code></td>
+<td>selector, value</td>
+<td>web</td>
+<td>填充；<code>$var</code> 引用 data_ref 数据集字段</td>
+</tr>
+<tr>
+<td><code>click</code></td>
+<td>selector</td>
+<td>web</td>
+<td>点击</td>
+</tr>
+<tr>
+<td><code>select_option</code></td>
+<td>selector, value</td>
+<td>web</td>
+<td>下拉选择</td>
+</tr>
+<tr>
+<td><code>wait_visible</code></td>
+<td>selector, timeout_ms=5000</td>
+<td>web</td>
+<td>等待元素可见（禁止 sleep）</td>
+</tr>
+<tr>
+<td><code>api_call</code></td>
+<td>prompt, system_prompt?</td>
+<td>api</td>
+<td>单轮 LLM 调用；<code>$var</code> 引用数据集字段</td>
+</tr>
+<tr>
+<td><code>api_followup</code></td>
+<td>prompt</td>
+<td>api</td>
+<td>多轮对话追加用户消息（复用上文 messages）</td>
+</tr>
+<tr>
+<td><code>api_tool_call</code></td>
+<td>prompt, tools</td>
+<td>api</td>
+<td>带工具定义调用（OpenAI function schema）</td>
+</tr>
+<tr>
+<td><code>api_stream</code></td>
+<td>prompt, system_prompt?, repeat=1</td>
+<td>api</td>
+<td>流式调用（stream=true，收完比对）；v0.2.7 加 <code>repeat</code> 字段（1-20，多样本 P95）</td>
+</tr>
+<tr>
+<td><code>process_probe</code></td>
+<td>全部</td>
+<td>probe, task_id?, node?, root?</td>
+<td><strong>工序域探针</strong>：在动作执行时即时采集工序状态（v0.5.0 新增）；<code>task_id: "@latest"</code> 按落盘 mtime 定位新建任务（id 是动态 UUID）</td>
+</tr>
+</tbody>
+</table>
+<h2 id="assertions">断言类型（assertions）</h2>
+<table>
+<thead>
+<tr>
+<th>kind</th>
+<th>judge 引擎</th>
+<th>专有字段</th>
+<th>适用</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>text_visible</code></td>
+<td>deterministic</td>
+<td>selector, expected, negated</td>
+<td>DOM 文案</td>
+</tr>
+<tr>
+<td><code>attribute</code></td>
+<td>deterministic</td>
+<td>selector, name, expected, negated</td>
+<td>DOM 属性</td>
+</tr>
+<tr>
+<td><code>visual_state</code></td>
+<td>vlm（mlx-vlm）</td>
+<td>prompt, threshold=0.9</td>
+<td>页面视觉状态</td>
+</tr>
+<tr>
+<td><code>noul</code> / <code>choice</code> / <code>score</code></td>
+<td>systemone（laya-mlx）</td>
+<td>question, options(choice 必填), threshold</td>
+<td>语义判定/归因/量表</td>
+</tr>
+<tr>
+<td><code>response_exact</code></td>
+<td>deterministic</td>
+<td>expected, case_sensitive</td>
+<td>L1 精确匹配（数学/事实）</td>
+</tr>
+<tr>
+<td><code>response_contains</code></td>
+<td>deterministic</td>
+<td>keywords, min_match=1</td>
+<td>L2 关键词匹配</td>
+</tr>
+<tr>
+<td><code>response_not_contains</code></td>
+<td>deterministic</td>
+<td>forbidden</td>
+<td>L4 反向验证（安全性）</td>
+</tr>
+<tr>
+<td><code>response_json_schema</code></td>
+<td>deterministic</td>
+<td>required_fields, expected_values</td>
+<td>L3 JSON 结构</td>
+</tr>
+<tr>
+<td><code>tool_call_params</code></td>
+<td>deterministic</td>
+<td>expected_function, expected_params</td>
+<td>工具调用参数</td>
+</tr>
+<tr>
+<td><code>response_time</code></td>
+<td>deterministic</td>
+<td>max_seconds</td>
+<td>性能延迟断言</td>
+</tr>
+<tr>
+<td><code>response_ttft</code></td>
+<td>deterministic</td>
+<td>max_ms=3000</td>
+<td>流式首 token 延迟（D14；非流式调用转人工）</td>
+</tr>
+<tr>
+<td><code>response_ttft_p95</code></td>
+<td>deterministic</td>
+<td>max_p95_ms=3000</td>
+<td>流式 P95 首 token 延迟（D14 扩展；v0.2.7 多次采样 1-20 次）</td>
+</tr>
+<tr>
+<td><code>response_length</code></td>
+<td>deterministic</td>
+<td>min_chars, max_chars</td>
+<td>回答字符数区间（D15 字数约束）</td>
+</tr>
+<tr>
+<td><code>visual_regression</code></td>
+<td>deterministic</td>
+<td>baseline, min_similarity=0.98, require_same_size</td>
+<td>截图 SSIM 像素回归（v0.5.0 新增）</td>
+</tr>
+<tr>
+<td><code>process_state</code></td>
+<td>deterministic</td>
+<td>rule / from_probe, expect, task_id?, node?, min_severity?</td>
+<td><strong>工序状态机判定</strong>（v0.5.0 新增，零 AI token）</td>
+</tr>
+<tr>
+<td><code>agent_verify</code></td>
+<td>agent（Agent-as-Judge）</td>
+<td>objective, threshold=0.9, max_steps=6, system_prompt?</td>
+<td><strong>自主取证型判定</strong>：judge 自己调只读工具查证据后下结论（v0.4.0 新增）</td>
+</tr>
+</tbody>
+</table>
+<h2 id="process_statev050">工序状态机判定（<code>process_state</code>，v0.5.0）</h2>
+<p><strong>定位</strong>：能用 1° 绝不用 AI。状态机判定是纯结构比对，不该让模型推理算术。</p>
+<p>两种模式，<strong>二选一</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>模式</th>
+<th>字段</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>规则查</strong></td>
+<td><code>rule</code></td>
+<td>按规则名查违规清单（见 <code>process_truth.RULES</code>，9 条）</td>
+</tr>
+<tr>
+<td><strong>探针判</strong></td>
+<td><code>from_probe</code></td>
+<td>基于 <code>process_probe</code> 步骤采集的结果判定</td>
+</tr>
+</tbody>
+</table>
+<pre><code class="language-yaml"># 规则查：链顺序不变式（照搬 node-machine.ts:12 语义）
+- kind: process_state
+  rule: done_after_pending_breaks_chain_order
+  expect: none        # none=条件必须成立；any=条件必须不成立（反守门员）
+  min_severity: all   # high/medium/low/all（low 是观察项，默认不阻断）
+
+# 探针判：观察到的迁移
+- kind: process_state
+  from_probe: &quot;transition:ready&gt;running&quot;
+</code></pre>
+<p><strong>探针判定式</strong>：<code>status_eq:</code> / <code>status_in:</code> / <code>index_eq:</code> / <code>output_count_ge:</code> /
+<code>has_validation_ok</code> / <strong><code>transition:&lt;from&gt;&gt;&lt;to&gt;</code></strong>（需 ≥2 次探针）。</p>
+<p><strong>降级语义</strong>：工序目录不存在 / 规则名未知 / 探针缺失 → <code>value=0.5,
+confidence=0.5</code> → <code>route()</code> 转人工仲裁。<strong>绝不判通过</strong>——没有可比对象就没有结论。</p>
+<blockquote>
+<p>落地见 <code>docs/nlaut-cecoder-judge-benchmark-gap-analysis.md</code> §5.3–5.6。</p>
+</blockquote>
+<h2 id="agent-as-judge-agent_verifyv040">Agent-as-Judge 判定（<code>agent_verify</code>，v0.4.0）</h2>
+<p>与上表所有断言的<strong>本质差异</strong>：证据不是由通道预先塞进 <code>Evidence</code>，
+而是 <strong>judge 自己在运行时调工具去取</strong>。</p>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>判定目标</td>
+<td><code>objective</code>（judge 的取证任务描述，会被写进 system prompt）</td>
+</tr>
+<tr>
+<td>可用工具</td>
+<td>6 个<strong>只读</strong>工具：<code>query_db</code> / <code>http_probe</code> / <code>read_log</code> / <code>read_file</code> / <code>inspect_trace</code> / <code>list_registry</code></td>
+</tr>
+<tr>
+<td>终止条件</td>
+<td>模型不再请求工具（出结论）/ <code>max_steps</code> 耗尽 / 端点异常</td>
+</tr>
+<tr>
+<td>置信度</td>
+<td>模型自评 High/Medium/Low，<strong>强制封顶 0.85</strong></td>
+</tr>
+<tr>
+<td>路由结果</td>
+<td>因 0.85 &lt; 0.9 自动裁决线，<code>route()</code> 必定判 <code>human_review</code></td>
+</tr>
+<tr>
+<td>降级</td>
+<td>端点不可用 / 无 key / 步数耗尽 → <code>confidence=0</code> + <code>raw.degraded</code>，<strong>绝不误判为通过</strong></td>
+</tr>
+</tbody>
+</table>
+<p>环境变量：</p>
+<ul>
+<li><code>NLaut_AGENT_JUDGE_MODEL</code> — 指定模型（默认 <code>deepseek-v4-flash</code>）</li>
+<li><code>NLaut_AGENT_JUDGE_TOOLS</code> — 逗号分隔的工具名子集，用于做「有无工具」的消融对照</li>
+</ul>
+<blockquote>
+<p>落地位置见 <code>docs/agent-as-judge-design.md</code>（接口设计）与 <code>docs/agent-as-judge-poc-plan.md</code>（验证方案）。</p>
+</blockquote>
+<h2 id="_1">规则</h2>
+<ol>
+<li><code>source</code> 非空——任何用例必须能追溯到输入文本。</li>
+<li><code>choice</code> 断言必须提供 <code>options</code>（校验器强制）。</li>
+<li>未列出的 action/kind 一律校验失败（Pydantic 判别联合）。</li>
+<li>IR 是唯一事实源；<code>gen/</code> 代码永远可由 IR 重建。</li>
+<li><strong>API 用例不内嵌 prompt 值</strong>——prompt 走 <code>data_ref</code> 数据工厂（<code>$var</code> 引用），保证模型无关。</li>
+<li>确定性断言（L1-L4）优先，AI 判定（noul/choice/score）只兜底断言不可表达的场景。</li>
+</ol>
+<h2 id="v020">大模型测试执行（v0.2.0）</h2>
+<pre><code class="language-bash"># 单条 P0
+.venv/bin/python -m nlaut.cli --model deepseek-chat --api-only --case tc_d04_p0_001
+
+# 全量 API 通道（报告自动生成）
+.venv/bin/python -m nlaut.cli --model qwen-max --api-only --report artifacts/llm_report.html
+
+# 模型配置预设（config/models.yaml）
+.venv/bin/python -m nlaut.cli --model deepseek-chat --api-only   # base_url 从预设读取
+</code></pre>
+<p>模型配置：<code>config/models.yaml</code>（新模型接入只需追加一个条目）。
+API key 优先级：CLI <code>--api-key</code> &gt; 环境变量 <code>LLM_API_KEY</code> &gt; models.yaml <code>api_key_env</code> 指定的变量。</p>
+</div>
+</body>
+</html>

@@ -1,0 +1,1237 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>nlaut-cecoder-judge-benchmark-gap-analysis.md</title>
+<style>
+:root { --fg:#1f4e79; --tx:#16181c; --mut:#4a5058; --bd:#e2e6ea; --bg:#fff; --soft:#f7f9fb; }
+* { box-sizing: border-box; }
+body { margin:0; background:var(--bg); color:var(--tx);
+  font-family:-apple-system,"PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+  font-size:14px; line-height:1.75; }
+.page { max-width:900px; margin:0 auto; padding:48px 56px 72px; }
+h1 { font-size:26px; font-weight:700; line-height:1.45; margin:0 0 20px;
+  padding-bottom:14px; border-bottom:2px solid var(--fg); color:var(--tx); }
+h2 { font-size:19px; font-weight:700; color:var(--fg); margin:38px 0 14px;
+  padding-bottom:6px; border-bottom:1px solid var(--bd); }
+h3 { font-size:15.5px; font-weight:700; color:var(--tx); margin:26px 0 9px; }
+h4 { font-size:14px; font-weight:700; color:var(--mut); margin:20px 0 7px; }
+p { margin:10px 0; }
+ul, ol { margin:10px 0; padding-left:24px; }
+li { margin:4px 0; }
+blockquote { margin:14px 0; padding:9px 16px; border-left:3px solid var(--fg);
+  background:var(--soft); color:var(--mut); border-radius:0 4px 4px 0; }
+blockquote p { margin:4px 0; }
+table { border-collapse:collapse; width:100%; margin:14px 0; font-size:13px; }
+th, td { border:1px solid var(--bd); padding:7px 10px; text-align:left; vertical-align:top;
+  line-height:1.6; }
+th { background:var(--soft); font-weight:700; color:var(--tx); }
+tr:nth-child(even) td { background:#fcfdfe; }
+code { background:var(--soft); border:1px solid var(--bd); border-radius:3px;
+  padding:1px 5px; font-size:12.5px;
+  font-family:"SF Mono",Menlo,Consolas,monospace; color:#a3341f; }
+pre { background:#f8f9fb; border:1px solid var(--bd); border-radius:5px;
+  padding:12px 14px; overflow-x:auto; }
+pre code { background:none; border:none; padding:0; color:var(--tx); font-size:12.5px; }
+a { color:var(--fg); text-decoration:none; border-bottom:1px solid #c9d6e4; }
+a:hover { border-bottom-color:var(--fg); }
+hr { border:none; border-top:1px solid var(--bd); margin:30px 0; }
+strong { font-weight:700; }
+</style>
+</head>
+<body>
+<div class="page">
+<h1 id="nlaut-cecoder">nlaut 判定层基数缺口分析 —— 从 CeCoder 两轮工序实测中可提炼什么</h1>
+<p><strong>日期</strong>：2026-11-13
+<strong>分析对象</strong>：<code>/Users/Ben/workspace/nlaut</code>（main，HEAD <code>dc0f7c3</code>，<code>feature/agent-as-judge</code> 已合入）
+<strong>事实来源</strong>：会话 <code>local-767b63fd062c05d0a08017af8ff07d85b60fb6b320820c0836c2399c099adcb0</code> + 本机源码与运行数据交叉核实
+<strong>配套素材</strong>：<code>/Users/Ben/workspace/cecoder-evaluation/CeCoder两轮工序实测事实提取_判定基数素材_v1.0.md</code>（650 行 / 29 表）</p>
+<hr />
+<h2 id="_1">〇、结论先行</h2>
+<p><strong>你缺的不是「更多 Judge 引擎」，而是「让 Judge 敢下结论的基数」。三处硬伤，其中两处是实测数据可以直接补的。</strong></p>
+<p><strong>先说最底层的一条机制</strong>：<code>agent_judge.py:32</code> 的 <code>CONFIDENCE_CAP = 0.85</code> 低于 <code>arbiter.py:38</code> 的 0.9 自动裁决线——<strong>agent judge 的结论设计上就永远走人工仲裁</strong>。要论证性地调高这个封顶值，唯一依据是「在已知人工结论上的一致率有多高」，而这个数正是下面 H1 缺失的东西。<strong>标定是解锁自动放行的唯一钥匙。</strong></p>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>硬伤</th>
+<th>现状（实测）</th>
+<th>能否用 CeCoder 实测数据补</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>H1</strong></td>
+<td><strong>Judge 标定基准集是空的</strong></td>
+<td><code>config/calibrate_v2.json</code> 30 条，<code>annotator_a</code>/<code>annotator_b</code>/<code>agreement</code> <strong>全为 null</strong>，<code>annotation_status: "pending"</code></td>
+<td>✅ <strong>能</strong>——实测自带 20 条判定难点（J1~J20）可作题型蓝本</td>
+</tr>
+<tr>
+<td><strong>H2</strong></td>
+<td><strong>金标准回归样本量与文档承诺差 3 倍，且 CI 默认不跑</strong></td>
+<td><code>golden.jsonl</code> 10 条 / 3 张截图；文档三处宣称「≥30 张」「禁止绕过」</td>
+<td>✅ <strong>能</strong>——35 个真实任务的工序产物可批量生成标注样本</td>
+</tr>
+<tr>
+<td><strong>H3</strong></td>
+<td><strong>工序域 TruthSource 契约不存在</strong></td>
+<td><code>Evidence</code> 无工序节点/门禁/产物字段；<code>truth_source_registry.yaml</code> 只注册 2 个 gienx 路径</td>
+<td>✅ <strong>能</strong>——<code>tasks/*.json</code> 结构已核实可直接映射</td>
+</tr>
+<tr>
+<td><strong>H4</strong></td>
+<td><strong>五处「声明了但没接线」</strong></td>
+<td><code>llm_judge</code> 未注册 / registry 是死文件 / IR 静默丢 5 字段 / ToolPolicy 默认全拒 / <code>judge:</code> 是死字段</td>
+<td>❌ <strong>不能靠数据补</strong>——这是<strong>接线问题</strong>，必须改代码</td>
+</tr>
+</tbody>
+</table>
+<p><strong>H4 是本次分析最重要的发现</strong>，它改变优先级判断：</p>
+<blockquote>
+<p><strong><code>avg_tool_calls: 0</code> 不是模型不调工具，是框架层面根本没让它能调通的路径。</strong></p>
+</blockquote>
+<p>所以「先 H3 再 H1」的排序要修正——<strong>H4-2 / H4-3 / H4-4 是 H3 的前置</strong>：工序域 TruthSource 如果不接到 <code>build_tool_impls(truth_source=...)</code> 上、IR 不加 <code>truth_sources</code> 字段、ToolPolicy 不放行 <code>~/.cecoder</code> 路径，那新写的工序域用例<strong>照样只能靠夹具</strong>，标定数字依旧不可信。</p>
+<p><strong>最关键的一条发现</strong>：CeCoder 实测的 <strong>20 条判定难点（J1~J20）里，有 9 条是纯语义判定</strong>，正好是 LLM Judge 的用武之地；而 L1 确定性断言在工序域<strong>只能覆盖约 30%</strong>。这个比例决定了投入方向。</p>
+<p><strong>另有一条产品级阻塞</strong>：<code>requireDocument()</code> 只比对文件名不比对内容（D-1 家族），所以「产物是否符合规约」<strong>无法用确定性断言完成</strong>，必须走 L2。这是实测给 nlaut 的结构性提示，不是可选项。</p>
+<hr />
+<h2 id="_2">一、两轮工序实测到底测了什么（先对齐事实）</h2>
+<h3 id="11">1.1 两轮是有对照组的实验</h3>
+<table>
+<thead>
+<tr>
+<th>轮次</th>
+<th>执行方式</th>
+<th>任务</th>
+<th>工序节点</th>
+<th>有效样本</th>
+<th>会话</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>基线轮（第 1 轮）</td>
+<td>每道工序<strong>自动</strong>执行</td>
+<td>34</td>
+<td>187</td>
+<td>86</td>
+<td>115</td>
+</tr>
+<tr>
+<td>本轮（第 2 轮）</td>
+<td>每道工序<strong>人工点界面按钮</strong>推进</td>
+<td>+1</td>
+<td>+7</td>
+<td>+7</td>
+<td>+7</td>
+</tr>
+<tr>
+<td>全量合计</td>
+<td>—</td>
+<td><strong>35</strong></td>
+<td><strong>194</strong></td>
+<td><strong>95</strong></td>
+<td><strong>122</strong></td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>第 1 轮不是专门设计的测试，是本机 2026-11-06 ~ 11-13 用户真实使用留下的日志（<strong>回捞数据</strong>）</li>
+<li>第 2 轮是主动对照：同场景（银行柜面开户 PRD），新增 1 任务 7 节点，<strong>58 分钟</strong>跑通 7 道工序全 <code>done</code>，无门禁拦截</li>
+</ul>
+<h3 id="12-nlaut">1.2 对 nlaut 而言，这批数据的三重价值</h3>
+<p><strong>价值一：工序域的「结构化事实源」三件套齐全。</strong></p>
+<table>
+<thead>
+<tr>
+<th>数据源</th>
+<th>路径</th>
+<th>规模</th>
+<th>提供什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>工序节点状态</td>
+<td><code>~/.cecoder/engineering-workbench/tasks/*.json</code></td>
+<td>35 文件 / 194 节点</td>
+<td><code>status</code>、<code>assessment.gates</code>（start/complete/autoAdvance）、<code>outputs[]</code>、<code>startedAt</code>/<code>completedAt</code></td>
+</tr>
+<tr>
+<td>工序会话事件流</td>
+<td><code>~/.cecoder/sessions/*/session.jsonl.zstd</code></td>
+<td>963 文件 / 743,267 事件</td>
+<td><code>user/message</code>（人工介入唯一来源）、<code>turn/end</code> 的 <code>reason.kind</code>（失败归因）、<code>tool/call</code></td>
+</tr>
+<tr>
+<td>工序产物</td>
+<td><code>~/.cecoder/engineering-workbench/assets/&lt;taskId&gt;/</code></td>
+<td>34 目录</td>
+<td>产物正文 + <strong>对应规约模板</strong>（<code>templates/*.md</code>）</td>
+</tr>
+</tbody>
+</table>
+<p><strong>价值二：产物与规约成对存在 → 「产物是否符合规约」可自动构造判定题。</strong></p>
+<p>实测样本（<code>assets/09e282f6-.../</code>）：</p>
+<pre><code>templates/概要设计文档模板.md   ← 规约（标准，章节骨架固定）
+概要设计文档.md                  ← 产物（81179 字节，一一对应展开）
+</code></pre>
+<p>模板 9 章、产物 9 章一一对应。这意味着「章节齐全性」可走 L1 确定性断言，「内容是否符合规约」走 L2 语义判定——<strong>两级漏斗有天然的分工边界</strong>。</p>
+<p><strong>价值三：天然存在 trap 样本（判定反例）。</strong></p>
+<p>我实测扫出的 4 个矛盾样本，可直接做「表面正确实际错误」的陷阱题：</p>
+<table>
+<thead>
+<tr>
+<th>样本</th>
+<th>现象</th>
+<th>陷阱性质</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>task <code>271bd14b</code> / <code>67d4e277</code> UI 原型设计</td>
+<td><code>status=done</code> 但 <code>autoAdvance=block</code></td>
+<td>状态说完成，门禁说别放行</td>
+</tr>
+<tr>
+<td>task <code>1001</code> UI 原型设计</td>
+<td><code>status=done</code>、<code>gates: None</code>（门禁从未评估）、<code>outputs: []</code></td>
+<td>门禁缺失即放行</td>
+</tr>
+<tr>
+<td>task <code>1011</code> 概要设计</td>
+<td><code>status=done</code>、门禁全 allow，但 <code>task.json</code> 的 <code>outputs</code> 为空</td>
+<td><strong>产物实际在磁盘上</strong>（<code>01-concept-design/outputs/概要设计.md</code> 存在）→ 只看 task.json 会误判为「空产出」</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>task 1011 这条最有价值：<strong>它同时是陷阱样本和「单源取证不足」的证据</strong>。判「产物是否存在」必须同时查 <code>task.json</code> 和磁盘，只查一处必错。这正是 Agent-as-Judge 相对 LLM-as-Judge 的用武之地——但前提是 <code>Evidence</code> 里能装下这两个来源。</p>
+</blockquote>
+<p><strong>产物分布（任务级实测，可直接用于构造 trap 样本）</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>任务</th>
+<th>产物数</th>
+<th>done 节点</th>
+<th>场景</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>1015</code></td>
+<td>1115</td>
+<td>5</td>
+<td>创建一个简单的小超市收银系统</td>
+</tr>
+<tr>
+<td><code>1005</code></td>
+<td>387</td>
+<td>10</td>
+<td>银行柜面账户开立系统的设计</td>
+</tr>
+<tr>
+<td><code>1006</code></td>
+<td>353</td>
+<td>3</td>
+<td>实现个人存取款业务</td>
+</tr>
+<tr>
+<td><code>1007</code></td>
+<td>76</td>
+<td>4</td>
+<td>做个简单的资产盘点系统</td>
+</tr>
+<tr>
+<td><code>49b0bc46</code></td>
+<td>52</td>
+<td>7</td>
+<td>开发一个期货指数查询系统</td>
+</tr>
+<tr>
+<td><code>09e282f6</code></td>
+<td>38</td>
+<td>7</td>
+<td>创建一个 SSO 登录认证的 demo</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><code>1005</code>（10 工序全 done、387 个产物）与 <code>1015</code>（5 工序、1115 个产物）<strong>工序数与产物数不成正比</strong>——「产物数量」不能作为「工序执行质量」的代理指标。这类反直觉的分布正是标定集需要的素材：它能测出 Judge 是否会犯「数量多=质量高」的直觉错误。</p>
+</blockquote>
+<hr />
+<h2 id="nlaut">二、nlaut 判定层现状盘点（实测核实，非文档转述）</h2>
+<h3 id="21">2.1 引擎实现：完整</h3>
+<table>
+<thead>
+<tr>
+<th>模块</th>
+<th>职责</th>
+<th>依赖</th>
+<th>状态</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>protocol.py</code></td>
+<td>Judge 统一协议（<code>Evidence</code>/<code>Question</code>/<code>Verdict</code>）</td>
+<td>pydantic</td>
+<td>✅ 5 个引擎同接口</td>
+</tr>
+<tr>
+<td><code>deterministic.py</code></td>
+<td>1° 确定性断言，7 种判定模式（dom / response_exact / response_contains / response_json_schema / response_time / response_length / …）</td>
+<td>无</td>
+<td>✅ 零 AI 成本</td>
+</tr>
+<tr>
+<td><code>vlm_mlx.py</code></td>
+<td>2° 视觉判定</td>
+<td>本机 Qwen2.5-VL-3B-4bit</td>
+<td>✅ 懒加载</td>
+</tr>
+<tr>
+<td><code>laya.py</code></td>
+<td>3° laya-mlx System One（Noul/Choice/Score）</td>
+<td>本机 laya-mlx</td>
+<td>✅ 懒加载</td>
+</tr>
+<tr>
+<td><code>llm_judge.py</code></td>
+<td>LLM-as-Judge（无取证，单轮）</td>
+<td>HTTP 端点</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><code>agent_judge.py</code></td>
+<td>Agent-as-Judge（多轮 function calling）</td>
+<td>HTTP 端点 + 工具表</td>
+<td>✅ 7 类取证工具</td>
+</tr>
+<tr>
+<td><code>arbiter.py</code></td>
+<td>置信度路由</td>
+<td>—</td>
+<td>✅ 0.9 / 0.5 双阈值</td>
+</tr>
+<tr>
+<td><code>truth_source.py</code></td>
+<td>TruthSource 契约</td>
+<td>—</td>
+<td>⚠️ 5 个实现，<strong>无工序域</strong></td>
+</tr>
+</tbody>
+</table>
+<p><strong>路由实现位置</strong>：<code>src/nlaut/executor/runner.py:251-254</code>（唯一判定调用点）→ <code>get_judge(engine_name)</code> → <code>route(verdict, threshold=0.9)</code>。</p>
+<p><strong>Agent-as-Judge 的 7 类取证工具</strong>（<code>agent_tools.py</code>）：<code>_query_db</code> / <code>_http_probe</code> / <code>_read_log</code> / <code>_read_file</code> / <code>_inspect_trace</code> / <code>_list_registry</code> / <code>_locate_object</code>。</p>
+<h3 id="22-agent-as-judge">2.2 一个前置机制：Agent-as-Judge 的结论<strong>永远不能自动放行</strong></h3>
+<p><code>agent_judge.py:32</code> 定义 <code>CONFIDENCE_CAP = 0.85</code>，而 <code>arbiter.py:38</code> 的自动裁决线是 <code>confidence &gt;= 0.9</code>。</p>
+<p><strong>结果</strong>：agent judge 的 verdict 100% 走 <code>human_review</code> 分支。源码注释写得很直接：</p>
+<blockquote>
+<p>「agent judge 的置信度上限：低于 route() 的 0.9 自动裁决阈值，保证 agent judge 结论必须经人工仲裁（软件工厂出口把关场景的硬约束）」</p>
+</blockquote>
+<p><strong>这条机制解释了你的问题的本质</strong>：agent judge 不是「还不能放行」，而是<strong>设计上就不该单独放行</strong>。它要给放行提供依据，需要的是「在已知人工结论上的一致率有多高」——而这个数恰恰是 H1 缺失的东西（双盲标注全 null）。</p>
+<blockquote>
+<p>所以「缺基数」的真正含义不是「样本太少」，而是<strong>没有人工标注这个「真值」</strong>，导致置信度封顶 0.85 这个安全阀无法被论证性地调高。<strong>标定是解锁自动放行的唯一钥匙。</strong></p>
+</blockquote>
+<h3 id="23">2.3 三处硬伤（逐条实测）</h3>
+<h4 id="h1-judge">H1 — Judge 标定基准集是空的（最严重）</h4>
+<pre><code>config/calibrate_v2.json
+  metadata.annotation_status = &quot;pending&quot;        ← 未标注
+  samples: 30 条
+  human_annotation.judgement 非空: 30/30        ← 全部来自 golden_samples 复制
+  annotator_a 非空: 0/30                        ← 双盲标注者 A：零
+  annotator_b 非空: 0/30                        ← 双盲标注者 B：零
+  agreement 非空:    0/30                        ← 一致率：无法计算
+</code></pre>
+<p><strong>含义</strong>：<code>docs/judge-calibration-implementation-guide.md</code> 的核心纪律「未经与人工标注做过一致性标定的 Judge，评分结果不得作为放行依据」——<strong>这条纪律现在一条都没兑现</strong>。30 条样本的 <code>human_annotation</code> 是从 <code>golden_samples_20.json</code> 抄来的期望值，不是独立标注。</p>
+<p><strong>更硬的证据</strong>：<code>artifacts/agent_judge_calibration_v2.json</code> 报 <code>agreement_rate: 85.0</code>，但同一文件里 <strong><code>avg_tool_calls: 0</code></strong>。</p>
+<blockquote>
+<p>拆开看：这一批标定跑的是<strong>无工具</strong>的 judge，85% 一致率是纯 prompt 判断的结果。而 <code>artifacts/agent_judge_ablation.json</code> 里真正带工具的 <code>agent_tools</code> 臂（<code>tool_calls: 4</code>）准确率 100%、陷阱准确率 100%。<strong>两份数据被当同一件事引用，实际是两种配置。</strong> 做 CeCoder 门禁判定必须用后者，但后者的标定只覆盖了 V3 域的 20 条合成样本。</p>
+</blockquote>
+<p><strong>另有两处一致率数字低于门槛（已实测核对 artifacts）</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>标定</th>
+<th>一致率</th>
+<th>门槛</th>
+<th>结论</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>agent_judge_ablation.json</code> / <code>agent_tools</code> 臂</td>
+<td>100%（含陷阱 FP=0）</td>
+<td>≥85%</td>
+<td>✅ 达标，但仅 20 条 V3 域夹具</td>
+</tr>
+<tr>
+<td><code>agent_judge_calibration_v2.json</code></td>
+<td>85.0%</td>
+<td>≥85%</td>
+<td>⚠️ 勉强达标，但 <code>avg_tool_calls=0</code></td>
+</tr>
+<tr>
+<td><code>llm_judge_calibration.json</code></td>
+<td><strong>73.3%</strong></td>
+<td>≥85%</td>
+<td>❌ <strong>不达标</strong></td>
+</tr>
+<tr>
+<td><code>code_review_calibration.json</code></td>
+<td><strong>70.0%</strong></td>
+<td>≥85%</td>
+<td>❌ <strong>不达标</strong>（<code>docs/p1-tech-debt.md:11</code> 记为 Open 债务 TD-001）</td>
+</tr>
+</tbody>
+</table>
+<h4 id="h2">H2 — 金标准回归样本量不足，且默认不跑</h4>
+<p><code>tests/judge_golden/golden.jsonl</code> 共 <strong>10 条</strong>（3 张截图 × 正反问法）。文档三处宣称门禁：</p>
+<ul>
+<li><code>docs/judge-protocol.md:150</code>「判定层金标准回归 ≥30 张标注截图」</li>
+<li><code>docs/architecture.md:52</code>「任何判定引擎接入/变更必须通过本回归」</li>
+<li><code>AGENTS.md:44</code>「禁止绕过 tests/judge_golden 金标准回归接入新判定引擎」</li>
+</ul>
+<p><strong>实际落差</strong>（我已逐条核实）：</p>
+<table>
+<thead>
+<tr>
+<th>声称</th>
+<th>实际</th>
+<th>核实方式</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>golden.jsonl</code> 驱动回归</td>
+<td>该文件<strong>无任何代码读取</strong>（<code>grep -rn "golden.jsonl" --include="*.py"</code> 零命中）</td>
+<td>实测 grep</td>
+</tr>
+<tr>
+<td>≥30 张标注截图</td>
+<td>10 条 / 3 张截图</td>
+<td>实测</td>
+</tr>
+<tr>
+<td>「禁止绕过」的回归门禁</td>
+<td><code>laya_engine_test.py:79 test_golden_four</code>（硬编码 4 题，要求 ≥3/4）——<strong>存在但样本少</strong></td>
+<td>实测读码</td>
+</tr>
+<tr>
+<td>同上</td>
+<td><code>agent_judge_test.py:972 test_all_golden_samples_judged_correctly</code>（20 条全对门禁）——<strong>存在，但带 <code>@pytest.mark.agent</code></strong></td>
+<td>实测读码</td>
+</tr>
+<tr>
+<td>同上</td>
+<td><code>pyproject.toml</code> <code>addopts = "-m 'not mlx and not agent'"</code> → <strong>默认 CI 不跑 agent 回归</strong></td>
+<td>实测实测 collect</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>修正一处常见误读：不是「金标准完全形同虚设」。两处等价断言真实存在且有效。真正的问题是——<strong>样本量是承诺值的 1/3，且最关键的 agent 臂在常规 CI 中被排除</strong>。</p>
+</blockquote>
+<h4 id="h3-truthsource">H3 — 工序域 TruthSource 契约不存在</h4>
+<p><code>Evidence</code> 的字段集（<code>protocol.py:21-45</code>）：</p>
+<pre><code>case_id, screenshot, dom_state, response, db_state,
+llm_response, llm_response_json, tool_calls, latency_ms, conversation,
+ttft_ms, stream_chunks, ttft_samples, ttft_p95_ms
+</code></pre>
+<p><strong>没有任何字段能表达工序链语义</strong>：工序节点、门禁 <code>gates</code>、产物清单、产物与规约的对应关系、<code>completion: manual</code> 放行状态。</p>
+<p><code>config/truth_source_registry.yaml</code> 只注册 2 条：</p>
+<pre><code class="language-yaml">design_task_attachments: {path: ~/.dsh/design-task-attachments, type: file}
+design_tasks:            {path: ~/.gienx/design-task.json,      type: file}
+</code></pre>
+<p><strong>两条都是 gienx 旧路径，与 CeCoder 工序域无关。</strong></p>
+<p>另有一个具体小缺口：<code>LogTruthSource</code> 用 <code>Path.read_text()</code> 读纯文本，<strong>不支持 <code>.zstd</code></strong>（<code>truth_source.py:247</code>）。工序会话流全是 zstd 压缩 JSONL。</p>
+<h3 id="24-h3">2.4 五处「声明了但没接线」（比 H3 更根本）</h3>
+<p><strong>这一节是我在独立核实子代理线索后实测确认的</strong>。它们解释了一个核心疑问：<strong>为什么 Agent-as-Judge 的「自主取证」在真实模块上从未跑通过一次？</strong></p>
+<h4 id="h4-1-llm_judgepy">H4-1 <code>llm_judge.py</code> 是孤儿模块——生产路径走不到</h4>
+<pre><code>$ .venv/bin/python -c &quot;from nlaut.judge import get_judge; get_judge('llm')&quot;
+KeyError: &quot;未注册判定引擎: llm（已注册: ['deterministic', 'laya', 'mlx-vlm']，工厂: ['agent']）&quot;
+</code></pre>
+<p><code>src/nlaut/judge/__init__.py</code> 只注册了 3 个即时引擎 + 1 个工厂，<code>llm_judge.py</code> <strong>不在注册表</strong>。</p>
+<p><strong>后果</strong>：「LLM-as-Judge 作为 Agent-as-Judge 的对照基线」这个设计定位，<strong>在框架层根本没有接线</strong>。目前只能靠 <code>scripts/judge_calibration.py</code> 手工调用。你想比较「有工具 vs 无工具」的真实差异，走不了标准路径。</p>
+<h4 id="h4-2-truth_source_registryyaml">H4-2 <code>truth_source_registry.yaml</code> 是死文件</h4>
+<pre><code>$ grep -rn &quot;truth_source_registry&quot; --include=&quot;*.py&quot; .
+(零命中)
+</code></pre>
+<p><code>agent_tools.py:252</code> 的 <code>build_tool_impls(truth_source=...)</code> 参数<strong>没有任何生产调用点传入非 None 值</strong>。</p>
+<p><strong>后果</strong>：<code>query_db</code> / <code>locate_object</code> 永远走 <code>db_state</code> 夹具分支（<code>agent_tools.py:289</code> → <code>db_state_not_provided</code> 错误）。<strong>「自主取证」在真实模块上从未跑过一次</strong>——所有标定数据都来自夹具。</p>
+<blockquote>
+<p><code>docs/agent-as-judge-integration.md:207</code> 自己写着「P0：用真实模块重跑 20 样本金标准 —— <strong>夹具结果不能代替</strong>」。这条 P0 至今未做。</p>
+</blockquote>
+<h4 id="h4-3-assertagentverify-5">H4-3 <code>AssertAgentVerify</code> 静默丢弃 5 个配置字段</h4>
+<p>实测（加载 <code>cases/giencoder/tc_giencwb_design_006.yaml</code> 后 <code>model_validate</code>）：</p>
+<pre><code>YAML 里声明的 agent_verify 键: ['confidence_threshold', 'kind', 'max_cost_usd', 'objective', 'timeout_s', 'tools', 'truth_sources']
+IR 模型实际字段:             ['judge', 'kind', 'max_steps', 'objective', 'system_prompt', 'threshold']
+model_extra: None
+</code></pre>
+<p><code>src/nlaut/ir/model.py:296-301</code> 的 <code>AssertAgentVerify</code> 只有 6 个字段，多出来的 5 个被 pydantic <strong>静默丢弃</strong>（<code>model_config</code> 为空 → <code>model_extra</code> 默认 <code>ignore</code>）。</p>
+<p><strong>后果</strong>：这条用例宣称「按真值源取证、按 0.10 美元预算、0.85 置信阈值」，<strong>实际跑的是引擎默认值</strong>：<code>tools=DEFAULT_TOOLS</code>（7 个）、<code>max_cost_usd=0.50</code>、<code>threshold=0.9</code>。<strong>声明与执行行为不一致，且无任何告警。</strong></p>
+<h4 id="h4-4-toolpolicy">H4-4 <code>ToolPolicy</code> 默认全拒——真实取证跑不通</h4>
+<p><code>agent_tools.py:193-207</code>：</p>
+<pre><code class="language-python">def path_allowed(self, path: str) -&gt; bool:
+    if not self.allowed_path_roots:
+        return False  # 默认拒绝
+</code></pre>
+<p><code>allowed_hosts</code> / <code>allowed_path_roots</code> 默认为空集 → <code>read_file</code> / <code>read_log</code> / <code>http_probe</code> <strong>一律拒绝</strong>。</p>
+<p><strong>后果</strong>：<code>tc_giencwb_design_006.yaml</code> 的 objective 明确要求「读取 <code>~/.dsh/design-task.json</code>」，<strong>不配 <code>NLaut_AGENT_JUDGE_ALLOWED_PATHS</code> 就跑不通</strong>，judge 只能拿到 <code>scope_violation</code> 结构化错误 → 「无法取证 → 判不确定」。</p>
+<blockquote>
+<p>这是<strong>安全设计的正确默认值</strong>，不是 bug。但它意味着：每条要真取证的用例，都必须配环境变量。当前没有任何机制检查「用例声明了要取证但环境没放行」。</p>
+</blockquote>
+<h4 id="h4-5-ir-judge">H4-5 IR 的 <code>judge:</code> 字段是装饰性的（死字段）</h4>
+<p><code>src/nlaut/ir/model.py</code> 定义了 <code>judge: Literal["vlm"]</code> / <code>Literal["systemone"]</code>，cases 里实测有 <strong>20 条写 <code>judge: deterministic</code>、19 条写 <code>judge: systemone</code></strong>。</p>
+<p>但 <code>runner.py:153-170</code> 的 <code>_engine_name(a)</code> <strong>只看 <code>kind</code></strong>：</p>
+<pre><code class="language-python">if kind in (&quot;text_visible&quot;, &quot;attribute&quot;, &quot;response_exact&quot;, ...): return &quot;deterministic&quot;
+if kind == &quot;visual_state&quot;: return &quot;mlx-vlm&quot;
+if kind == &quot;agent_verify&quot;: return &quot;agent&quot;
+return &quot;laya&quot;   # ← 兜底：任何未识别 kind 静默落 laya
+</code></pre>
+<p><strong>后果</strong>：声明 <code>judge: deterministic</code> 的 <code>noul</code> 断言<strong>照样走 laya</strong>。而且<strong>这个路由不是「级联漏斗」，是「每条断言只走一个引擎」</strong>——没有「1° 判不过 → 降级 2°」的回退链。</p>
+<blockquote>
+<p><code>docs/agent-as-judge-design.md:50</code> 已指出此风险：「断言→引擎路由硬编码 if/元组，<strong>漏注册会静默落到 laya</strong>」。</p>
+</blockquote>
+<h4 id="h4">H4 汇总：真实问题清单</h4>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>问题</th>
+<th>证据</th>
+<th>阻塞了什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>H4-1</td>
+<td><code>llm_judge</code> 未注册</td>
+<td><code>get_judge('llm')</code> KeyError</td>
+<td>LLM/Agent 对照基线无法走标准路径</td>
+</tr>
+<tr>
+<td>H4-2</td>
+<td>registry 死文件</td>
+<td>grep 零命中</td>
+<td>自主取证从未真实生效</td>
+</tr>
+<tr>
+<td>H4-3</td>
+<td>IR 丢 5 个字段</td>
+<td><code>model_validate</code> 实测</td>
+<td>用例声明的门禁配置无效</td>
+</tr>
+<tr>
+<td>H4-4</td>
+<td>ToolPolicy 默认全拒</td>
+<td><code>agent_tools.py:193</code></td>
+<td>真取证用例必须手配环境变量</td>
+</tr>
+<tr>
+<td>H4-5</td>
+<td><code>judge:</code> 是死字段</td>
+<td><code>runner.py:153</code></td>
+<td>声明与执行不一致；无级联回退</td>
+</tr>
+</tbody>
+</table>
+<p><strong>这五条共同解释了一个数字</strong>：<code>artifacts/agent_judge_calibration_v2.json</code> 的 <code>avg_tool_calls: 0</code>——不是模型不调工具，是<strong>框架层面根本没有让它能调通的路径</strong>。</p>
+<h3 id="25">2.5 文档口径已过期（需同步）</h3>
+<p><code>docs/nlaut-vs-cecoder-verification-matching.md:68</code> 写「Judge 标定基准集 ❌ 无标定基准集 <strong>缺失</strong>」，<code>docs/judge-calibration-implementation-guide.md:17</code> 写「LLM Judge 和 Agent-as-Judge <strong>未做过人工标定</strong>」。</p>
+<p><strong>事实</strong>：文件已建（v1: 5 条 / v2: 30 条）、跑过标定（<code>artifacts/agent_judge_calibration_v2.json</code>）、做过消融（<code>artifacts/agent_judge_ablation.json</code>）。</p>
+<p><strong>真实缺口不是「没有基准集」，而是「基准集没有人工标注、没跑真实工具、没覆盖工序域」。</strong> 文档口径与代码现状的偏差会误导后续排期——这是本次分析的附带产出。</p>
+<hr />
+<h2 id="cecoder">三、CeCoder 实测能补什么（可落地的映射）</h2>
+<h3 id="31-20-judge">3.1 20 条判定难点 → Judge 题型蓝本</h3>
+<p>实测文档 §4.1 列出 J1~J20。按 nlaut 的三级漏斗重新归类：</p>
+<table>
+<thead>
+<tr>
+<th>归口</th>
+<th>判定难点</th>
+<th>所需引擎</th>
+<th>实测能否支撑</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>L1 确定性</strong>（9 条）</td>
+<td>J2 产物是否被人工放行（查 3 处埋点）、J5 人工介入次数、J6 介入耗时、J10 工序耗时 vs 会话时长、J11 剔除长时人工离开、J12 结果口径 vs 过程口径、J13 自动通过/人工放行分列、J14 锁定模型额度、J16 六层归因</td>
+<td>deterministic（JSON 字段断言）</td>
+<td>✅ 全部可做，<code>tasks/*.json</code> 字段齐全</td>
+</tr>
+<tr>
+<td><strong>L2 概率</strong>（9 条）</td>
+<td>J1 产物是否符合规约、J3 门禁是否真拦住（误拦率）、J4 「一次做对」vs「没人看」、J7 人工是否实际审阅、J8 人工 vs 自动收益、J9 24 次介入是真需要还是 AI 反复失败、J14 稳定性 CV、J15 消耗低≠质量好、J17 制品符合度归口</td>
+<td>LLM Judge + Agent-as-Judge</td>
+<td>⚠️ 需先有标注基线（H1）</td>
+</tr>
+<tr>
+<td><strong>L3 涌现</strong>（2 条）</td>
+<td>J19 工序触发与路由、J20 长链路后段丢失前段约束</td>
+<td>Trace 回放</td>
+<td>❌ 缺 Trace 层级结构</td>
+</tr>
+</tbody>
+</table>
+<p><strong>结论</strong>：L1 能覆盖 9/20，L2 需要 9/20，L3 缺 2/20。
+<strong>投入方向明确——先把 9 条 L1 做完（成本低、立刻见效），L2 的 9 条正好是标定集的题型需求。</strong></p>
+<h3 id="32-truthsource">3.2 工序域 TruthSource：可直接实现的契约</h3>
+<p>基于 <code>tasks/*.json</code> 实测结构（我已逐字段核实），建议新增：</p>
+<pre><code class="language-python"># 概念草案，非最终 API
+class ProcessNodeTruth:
+    instance_id: str          # &quot;n01&quot;
+    definition_id: str        # &quot;example.concept-design&quot;（运行时 id，非包目录名）
+    title: str                # &quot;概要设计&quot;
+    status: str               # done / failed / pending / ready / review / interrupted
+    gates: dict               # {start, complete, autoAdvance} 各 allow/block
+    outputs: list[str]        # 产物名清单
+    started_at: str | None    # ISO8601
+    completed_at: str | None
+    duration_min: float | None  # completedAt - startedAt（不是会话时长！J10）
+    assessment_kind: str | None  # normal / needs-assets / needs-confirmation / confirmed
+</code></pre>
+<p><strong>三个必须避开的坑（实测得来，不是推测）：</strong></p>
+<ol>
+<li><strong>运行时 <code>definitionId</code> ≠ 源码包目录名</strong>。<code>example.concept-design</code> ↔ <code>node-concept-design</code>；<code>implement</code> ↔ <code>node-implement</code>；<code>example.ui-prototype</code> ↔ <code>node-ui-design</code>。12 个运行时 id 映射见素材文档 §5.7。</li>
+<li><strong>工序耗时必须用 <code>completedAt − startedAt</code></strong>，不能用会话时长。实测「交付确认」工序自身耗时 0.1 min，会话时长 1441 min。</li>
+<li><strong>&gt; 180 min 的样本是跨夜运行或人工离开</strong>，必须剔除，否则污染耗时基线。</li>
+</ol>
+<p><strong>第四个坑（我实测踩到的，最容易写错）</strong>：</p>
+<blockquote>
+<p><strong>产物不落在节点的 <code>dirName</code> 目录，而在任务根目录（或根目录下的同名子目录）。</strong></p>
+</blockquote>
+<p>我第一次按 <code>nodes[].dirName</code> 去磁盘找产物，得出「102 个 done 节点中 77 个零产物」——<strong>这是错的</strong>。实测 task <code>09e282f6</code> 的 <code>n01 概要设计</code>，<code>dirName</code> 是 <code>01-concept-design</code>，但产物 <code>概要设计文档.md</code> 在<strong>任务根目录</strong>；task <code>1011</code> 的产物在 <code>01-concept-design/outputs/</code> 下，而根目录只有 <code>task.md</code>。</p>
+<p><strong>正确口径</strong>：按任务根目录递归扫描（排除 <code>templates/</code> <code>materials/</code>），得到 <strong>2287 个产物文件</strong>；按节点 <code>dirName</code> 精确匹配会漏掉 77/102 个节点。</p>
+<blockquote>
+<p>这条对 nlaut 的直接影响：<code>requireDocument()</code> 比对的是<strong>产物名</strong>，而产物名是 <code>概要设计文档.md</code> 这类固定名，不是路径。所以 TruthSource 必须建立「节点 → 产物名」映射，而不是「节点 → 目录」。</p>
+</blockquote>
+<h3 id="33-d-1">3.3 门禁判定的真实约束（D-1 家族，直接影响用例设计）</h3>
+<p><code>requireDocument()</code> 源码核实（<code>node-program-design/src/client/definition.ts:10</code>，<code>node-concept-design:10</code>、<code>node-detail-design:10</code> 同款）：</p>
+<pre><code class="language-ts">export function requireDocument(state: NodeState): CompleteDecision {
+  const artifacts = state.outputs.filter((a) =&gt; !a.isHandoff)
+  if (artifacts.length === 0) return { ok: false, reason: '还没有生成程序设计文档' }
+  const names = artifacts.map((a) =&gt; a.name)
+  const missing = STEP_OUTPUTS.map((o) =&gt; o.path).filter((p) =&gt; !names.includes(p))
+  if (missing.length === 0) return { ok: true }
+  return { ok: false, reason: `产物名与工序声明不一致：应为 ${missing.join('、')}...` }
+}
+</code></pre>
+<p><strong>三个关键性质（决定 nlaut 用例能断言什么）：</strong></p>
+<table>
+<thead>
+<tr>
+<th>性质</th>
+<th>后果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>只比对文件名，<strong>不比对内容</strong></td>
+<td><strong>空内容也通过</strong> → 「产物是否有实质内容」用 L1 判不了，必须 L2</td>
+</tr>
+<tr>
+<td>只做集合包含检查，<strong>不做多余产物检查</strong></td>
+<td>多产出文件不算失败 → 「是否有多余产物」只有 UI 原型设计查（<code>requirePrototypeFiles</code> 第 3 条）</td>
+</tr>
+<tr>
+<td>失败即 <code>failed</code> + 下一工序不放行</td>
+<td>状态机可断言（L1 可做）</td>
+</tr>
+</tbody>
+</table>
+<p><strong>另一处硬伤</strong>：<code>node-delivery</code> 的 <code>validateDelivery()</code> 恒 <code>return { ok: true }</code>（构建产物 <code>lib/client.js</code> 内核实）。<strong>交付确认工序的通过率在修复前不构成任何基线</strong>——nlaut 若照抄当前数据做阈值，会把假门禁固化成基线。</p>
+<h3 id="34">3.4 「误拦率」是最大的数据缺口，也是最容易补的</h3>
+<ul>
+<li>拦截侧有证据：25 个节点卡在 <code>start=block</code>（程序设计 9 / 代码变更设计 8 / UI 原型设计 4 / 详细设计 4）</li>
+<li><strong>误拦侧无样本</strong>：现有注入用例集全是违规样本，算不出误拦率</li>
+<li>补法：采集 <strong>≥200 条正常产出</strong>做回放集</li>
+</ul>
+<p><strong>好消息</strong>：正常产出<strong>已经存在</strong>（我已实测统计，不是推测）：</p>
+<table>
+<thead>
+<tr>
+<th>指标</th>
+<th>实测值</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>任务数</td>
+<td>35</td>
+</tr>
+<tr>
+<td><code>done</code> 节点数</td>
+<td>102</td>
+</tr>
+<tr>
+<td>产物文件总数（任务级，排除 <code>templates/</code> <code>materials/</code>）</td>
+<td><strong>2287</strong></td>
+</tr>
+<tr>
+<td>产物 ≥5 个的任务数</td>
+<td>23</td>
+</tr>
+</tbody>
+</table>
+<p>对照门槛是 ≥200 条 → <strong>实际可得 2287 条，超出 11 倍</strong>。<strong>回放集不需要重跑，只需要回捞。</strong> 这是本轮分析里投入产出比最高的一条。</p>
+<h3 id="35">3.5 「一次通过率」必须拆三列</h3>
+<p>实测口径警示：<code>gates.autoAdvance=allow</code> 且无风险时工序自动推进会跳过 <code>review</code>。只看是否到达 <code>done</code> 会把「自动放行」和「人工放行」混为一谈。</p>
+<p>实测证据：UI 原型设计第 2 轮<strong>自动通过 0.0% / 人工放行 100%</strong>——同一工序，只是走了人工确认路径。混计会把人工确认误判成门禁失效。</p>
+<p><strong>建议 nlaut 的工序域报告底表固定三列</strong>：</p>
+<pre><code>自动通过率（autoAdvance=allow 且无人工动作）
+人工放行率（assessment.kind ∈ {confirmed, needs-confirmation→confirmed}）
+门禁拦截率（gates.start=block 或 complete=block）
+</code></pre>
+<p>这与素材文档 J12 / J13 一致。</p>
+<hr />
+<h2 id="_3">四、方案选项</h2>
+<h3 id="h1">选项一：先补 H1（标定标注），再谈工序域</h3>
+<ul>
+<li>✅ <strong>直接兑现既有纪律</strong>：30 条样本补双盲标注，<code>agreement</code> 字段填上，一致率可算</li>
+<li>✅ <strong>成本最低</strong>（按素材文档口径，抽 20~30 份产物 2 人独立打分 = 约 3 人天）</li>
+<li>✅ <strong>一次性解决 H1</strong>，且标注模板可复用于后续 CeCoder 工序域样本</li>
+<li>❌ <strong>不解 H2/H3</strong>：工序域 TruthSource 仍不存在，CeCoder 用例一条都写不了</li>
+<li>❌ 现有 30 条全是 V3 域（<code>domain: V3</code> × 30），<strong>没有一条工序域样本</strong>，标完了也验不了工序判定</li>
+</ul>
+<h3 id="h3-truthsource-l1-h1">选项二：先补 H3（工序域 TruthSource + L1 用例），H1 并行</h3>
+<ul>
+<li>✅ <strong>立刻能产出 CeCoder 用例</strong>：9 条 L1 判定难点全部可做，成本低</li>
+<li>✅ <strong>不改判定引擎</strong>：只加 TruthSource 实现 + <code>Evidence</code> 字段扩展，风险可控</li>
+<li>✅ <strong>回放集顺带解决</strong>：采集正常产出做回放集，同时喂 L1 门禁用例和后续 L2 标定</li>
+<li>❌ <strong>L2 仍然无标定</strong>，AI 判定结论不可作放行依据（但 L1 不受影响）</li>
+<li>❌ 需要动 <code>Evidence</code> 协议（加工序字段），属于协议层改动，要考虑向后兼容</li>
+<li>❌ <strong>（新增）H4 未修</strong>：TruthSource 若不接到 <code>build_tool_impls(truth_source=)</code> 上，用例照样只能跑夹具</li>
+</ul>
+<h3 id="h4-h3">选项二·修订：H4 接线 + H3 用例（修正后的推荐路径）</h3>
+<p><strong>这是我在补入 H4 后调整的路径</strong>。理由：H4-2/H4-3/H4-4 是 H3 的前置，不先修则新写的工序域用例<strong>产出不了可信的标定数字</strong>。</p>
+<p><strong>第 0 步（半天，必做）——打通接线</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>动作</th>
+<th>文件</th>
+<th>目的</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>AssertAgentVerify</code> 加 <code>truth_sources</code>/<code>tools</code>/<code>max_cost_usd</code>/<code>timeout_s</code>/<code>confidence_threshold</code></td>
+<td><code>src/nlaut/ir/model.py:296</code></td>
+<td>让用例声明真正生效（现在静默丢弃）</td>
+</tr>
+<tr>
+<td>加 <code>registry</code> 加载器，把 <code>truth_source_registry.yaml</code> 接进 <code>build_tool_impls</code></td>
+<td>新增 + <code>src/nlaut/judge/__init__.py</code></td>
+<td>让「自主取证」有真路径（现在零命中）</td>
+</tr>
+<tr>
+<td>ToolPolicy 放行 <code>~/.cecoder</code> 路径（可用环境变量或用例级声明）</td>
+<td><code>src/nlaut/judge/agent_tools.py:193</code></td>
+<td>让工序域取证不被默认拒绝</td>
+</tr>
+<tr>
+<td>注册 <code>llm_judge</code></td>
+<td><code>src/nlaut/judge/__init__.py</code></td>
+<td>打通 LLM/Agent 对照基线的标准路径</td>
+</tr>
+</tbody>
+</table>
+<p><strong>收益</strong>：这 4 处修完，<code>avg_tool_calls: 0</code> 才会变成真实数字，「自主取证」才算第一次跑通。</p>
+<h3 id="10">选项三：按素材文档 §六 的 10 项待补齐清单全量推进</h3>
+<ul>
+<li>✅ 覆盖完整，一次做完所有 P0</li>
+<li>❌ <strong>P0 里 3 项是产品侧的事</strong>（埋点、假门禁修复、人工评分集），<strong>不在 nlaut 范围内</strong></li>
+<li>❌ 「产出物人工质量评分」依赖产品侧配合，nlaut 无法单方面闭环</li>
+<li>❌ 规模过大，难在一个迭代内出可验证结果</li>
+</ul>
+<h3 id="h4-h3-h1-h2">我的建议：H4 接线 → H3 用例 → H1 标定 → H2 回归</h3>
+<p><strong>理由</strong>（补入 H4 后修正）：</p>
+<p>选项二解决「能写用例」，选项一解决「结论可信」。但两者都缺一个前提：<strong>H4 的接线</strong>。不先修 H4，新写的工序域用例<strong>跑出来仍然是夹具数据</strong>——这正是当前 85% 一致率不可信的根源，不是新问题。</p>
+<p><strong>所以顺序是：</strong></p>
+<pre><code>H4（半天接线）
+  ↓
+H3（工序域 TruthSource + 10 条 L1 用例）
+  ↓
+H1（用它采 30 条工序域标注样本，双盲标注）
+  ↓
+H2（金标准回归接进 pytest + 补齐 30 张截图）
+</code></pre>
+<blockquote>
+<p>注意 H1 的样本来源变了：不再是标定现成的 V3 域 30 条，而是<strong>用 H3 采的工序域新样本</strong>。这是「先接线」的回报——否则标完了还是验不了工序判定。</p>
+</blockquote>
+<p><strong>最小可行建议（4 步，2~3 天）</strong></p>
+<p><strong>第 0 步（半天）：打通 H4 接线</strong></p>
+<ol>
+<li><code>AssertAgentVerify</code> 补 5 个字段（<code>src/nlaut/ir/model.py:296</code>）—— 现在静默丢弃，用例声明等于没写</li>
+<li>加 <code>truth_source_registry.yaml</code> 加载器，接进 <code>build_tool_impls</code> —— 现在零命中，「自主取证」无路径</li>
+<li>ToolPolicy 放行 <code>~/.cecoder</code>（<code>src/nlaut/judge/agent_tools.py:193</code>）</li>
+<li>注册 <code>llm_judge</code>（<code>src/nlaut/judge/__init__.py</code>）—— 打通对照基线</li>
+</ol>
+<p><strong>第 1 步（半天）：工序域 TruthSource</strong></p>
+<ol start="5">
+<li>实现 <code>ProcessTruthSource</code>：读 <code>tasks/*.json</code> + 任务根目录产物 + zstd 会话流。产出 §3.2 的字段集</li>
+<li><code>Evidence</code> 加 <code>process_nodes: list[dict]</code> 一项（不动现有字段）；<code>LogTruthSource</code> 加 zstd 支持</li>
+</ol>
+<p><strong>第 2 步（半天）：10 条 L1 工序域用例</strong></p>
+<ol start="7">
+<li>从 J2/J5/J10/J12/J13 选 10 条，走现有 deterministic 断言</li>
+</ol>
+<p>这 10 条<strong>不需要任何 AI 标定</strong>，纯字段断言，可以立刻作为 CeCoder 工序域的回归基线。</p>
+<p><strong>第 3 步（1~2 人天，可与第 2 步并行）：标定</strong></p>
+<ol start="8">
+<li>从 2287 个产物里筛 30 条（<strong>含 trap</strong>：产物缺失 / 命名不符 / 多余产物 / 假门禁放行），2 人双盲标注，填 <code>annotator_a/b/agreement</code></li>
+<li>跑真取证标定（带工具臂），得到可用的 <code>tool_calls &gt; 0</code> 的一致率</li>
+</ol>
+<hr />
+<h2 id="2026-11-14">五、2026-11-14 进展：本轮已解决的部分</h2>
+<table>
+<thead>
+<tr>
+<th>硬伤</th>
+<th>状态</th>
+<th>本轮产出</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>H3</strong> 工序域 TruthSource 契约不存在</td>
+<td>✅ <strong>部分解决</strong></td>
+<td><code>src/nlaut/judge/process_truth.py</code> —— <code>ProcessTruthSource</code> 一次跨 36 任务 / 201 节点聚合，输出 8 条规则查结果</td>
+</tr>
+<tr>
+<td><strong>H4-2</strong> registry 是死文件</td>
+<td>⚠️ <strong>部分解决</strong></td>
+<td>新增 <code>process_snapshot</code> agent 工具（不依赖 registry，直接读固定目录）；<code>registry.yaml</code> 本身仍未接线</td>
+</tr>
+<tr>
+<td><strong>H4-3</strong> IR 静默丢 5 字段</td>
+<td>⚠️ <strong>部分解决</strong></td>
+<td>新增 <code>AssertVisualRegression</code> 字段完整；但 <code>AssertAgentVerify</code> 的 5 个字段<strong>仍未补</strong>（<code>truth_sources</code>/<code>tools</code>/<code>max_cost_usd</code>/<code>timeout_s</code>/<code>confidence_threshold</code>）</td>
+</tr>
+<tr>
+<td><strong>H4-4</strong> ToolPolicy 默认全拒</td>
+<td>✅ <strong>绕过</strong></td>
+<td><code>process_snapshot</code> 不接受路径参数（只读固定目录），不受路径白名单限制</td>
+</tr>
+<tr>
+<td><strong>H4-1</strong> <code>llm_judge</code> 未注册</td>
+<td>❌ <strong>未解决</strong></td>
+<td>本轮未动</td>
+</tr>
+<tr>
+<td><strong>H4-5</strong> <code>judge:</code> 是死字段</td>
+<td>❌ <strong>未解决</strong></td>
+<td>本轮未动</td>
+</tr>
+<tr>
+<td><strong>H1</strong> 标定基准集是空的</td>
+<td>⚠️ <strong>有基础了</strong></td>
+<td>28 条工序域样本已具备（4 类规则、10 条违规），可作标注蓝本，但<strong>双盲标注仍未做</strong></td>
+</tr>
+<tr>
+<td><strong>H2</strong> 金标准回归量不足</td>
+<td>❌ <strong>未解决</strong></td>
+<td>本轮未动</td>
+</tr>
+</tbody>
+</table>
+<h3 id="51">5.1 新增能力：工序域真值源与状态机规则</h3>
+<p><strong><code>ProcessTruthSource</code></strong>（<code>src/nlaut/judge/process_truth.py</code>）—— 一次调用完成跨任务聚合：</p>
+<pre><code>实测对比（同一问题：交付确认门禁是否有问题）
+┌──────────────────┬──────────────┬────────────────────┐
+│                  │ 通用工具      │ process_snapshot   │
+├──────────────────┼──────────────┼────────────────────┤
+│ 工具调用          │ 10 次         │ 1 次               │
+│ 耗时              │ 24.2s        │ 2.9s               │
+│ 成本              │ $0.01215     │ $0.00319           │
+│ 找到违规          │ 6 条          │ 10 条（跨 4 类规则）│
+└──────────────────┴──────────────┴────────────────────┘
+</code></pre>
+<p><strong>8 条规则</strong>（全部由源码权威定义推导，非经验规则）：</p>
+<table>
+<thead>
+<tr>
+<th>规则</th>
+<th>依据</th>
+<th>真实数据命中</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>done_without_outputs</code></td>
+<td><code>requireDocument</code> 语义</td>
+<td><strong>1</strong></td>
+</tr>
+<tr>
+<td><code>done_but_gate_blocked</code></td>
+<td>门禁与状态矛盾（仅 start/complete）</td>
+<td><strong>0</strong></td>
+</tr>
+<tr>
+<td><code>outputs_not_written_back</code></td>
+<td>双源交叉</td>
+<td><strong>1</strong></td>
+</tr>
+<tr>
+<td><code>done_without_gate_evaluation</code></td>
+<td>门禁未评估即放行</td>
+<td><strong>0</strong></td>
+</tr>
+<tr>
+<td><code>pending_with_outputs</code></td>
+<td>产物归属错位（按任务聚合）</td>
+<td>11（low）</td>
+</tr>
+<tr>
+<td><code>done_after_pending_breaks_chain_order</code></td>
+<td><code>node-machine.ts:12</code></td>
+<td><strong>0</strong></td>
+</tr>
+<tr>
+<td><code>executing_not_current_node</code></td>
+<td><code>node-machine.ts:48</code></td>
+<td><strong>0</strong></td>
+</tr>
+<tr>
+<td><code>review_without_validation_ok</code></td>
+<td><code>node-machine.ts:77</code></td>
+<td><strong>0</strong></td>
+</tr>
+<tr>
+<td><code>unknown_status_value</code></td>
+<td><code>NODE_STATUSES</code> 封闭集</td>
+<td><strong>0</strong></td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>状态机 4 条规则零命中 = 阴性但有价值的结论</strong>：CeCoder 的状态机实现<strong>自洽</strong>，
+没有链顺序错乱 / 多节点并发执行 / review 卡死 / 非法状态值。
+这同时说明这些断言作为<strong>回归守门员</strong>是有意义的 —— 它们能守住这个"自洽"。</p>
+</blockquote>
+<h3 id="511-8-2026-11-14">5.1.1 首版实现有 8 条假阳性，已修正（2026-11-14 二轮）</h3>
+<p>首版规则无条件化，实测报出 10 条违规。逐条核实源码后确认<strong>其中 8 条是假阳性</strong>，
+根因是三类<strong>合法形态</strong>被误判：</p>
+<table>
+<thead>
+<tr>
+<th>合法形态</th>
+<th>源码依据</th>
+<th>误报效果</th>
+<th>修正</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>legacy 迁移任务</strong>（<code>task.legacySource</code> 存在，如 1001/1002）</td>
+<td>迁移路径不写 run/gates/outputs</td>
+<td>3 条 <code>done_without_gate_evaluation</code> + 1 条 <code>done_without_outputs</code> 假阳性</td>
+<td>全部规则排除 legacy</td>
+</tr>
+<tr>
+<td><strong><code>autoAdvance:block</code> + <code>complete:allow</code></strong></td>
+<td><code>node-lifecycle.ts:169</code> —— autoAdvance 只在 <code>automatic===true</code> 时校验；人工确认完成合法</td>
+<td>3 条 <code>done_but_gate_blocked</code> 假阳性</td>
+<td>该规则只看 <code>start</code>/<code>complete</code> 两个硬门禁</td>
+</tr>
+<tr>
+<td><strong>平铺布局</strong>（<code>assetLayout.kind=='task'</code>）</td>
+<td><code>node-machine.ts:64-72</code> —— applyTurnEnd 按目录扫描，共享根目录的产物会写回每个节点</td>
+<td>「pending 但有 outputs」在平铺下合法</td>
+<td>排除平铺，且按任务聚合（22 条 → 11 条）</td>
+</tr>
+</tbody>
+</table>
+<p><strong>修正后：high/medium 只剩 2 条，且都是真问题</strong>（task 1011 概要设计：非 legacy、非平铺，
+<code>outputs=[]</code> 但磁盘有 6 个产物 —— 产物清单未回写）。</p>
+<blockquote>
+<p><strong>这是「规则查」必须条件化的实证</strong>：不看源码的判定规则会持续产出假阳性，
+而假阳性会让整个检查失去可信度。
+状态机的 4 条规则之所以零命中，正是因为它们直接照搬源码语义，没有猜测成分。</p>
+</blockquote>
+<h3 id="52">5.2 顺带修掉的框架缺陷</h3>
+<table>
+<thead>
+<tr>
+<th>缺陷</th>
+<th>严重度</th>
+<th>修复</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>arbiter</code> 把 deterministic 降级态（<code>value=0.5</code>）误判为 <strong>auto_pass</strong></td>
+<td><strong>高</strong></td>
+<td>加置信度守卫（<code>confidence&lt;1.0</code> → human_review）；原 221 条元测试全绿验证不影响既有行为</td>
+</tr>
+<tr>
+<td><code>base_url</code> 斜杠不规范化 → <code><a href="http://host:port//">http://host:port//</a></code> 路由失配</td>
+<td>中</td>
+<td>新增 <code>_join_url()</code>（web + electron 双通道）</td>
+</tr>
+<tr>
+<td>报告不展示判定数值明细</td>
+<td>低</td>
+<td><code>detail</code> 列补充 raw 关键值（similarity / 尺寸 / degraded）</td>
+</tr>
+<tr>
+<td><code>read_file</code> 不展开 <code>~</code></td>
+<td>中</td>
+<td><code>expanduser</code></td>
+</tr>
+<tr>
+<td>agent 无「列目录」能力</td>
+<td>中</td>
+<td>新增 <code>list_dir</code> 工具</td>
+</tr>
+<tr>
+<td><code>read_file</code> 读不完大 JSON（432KB）</td>
+<td>中</td>
+<td>新增 <code>query_json</code> 工具（按字段筛选）</td>
+</tr>
+<tr>
+<td><code>STATUS_VALUES</code> 漏 <code>validating</code>（源码 8 态，我写 7 态）</td>
+<td>中</td>
+<td>按 <code>NODE_STATUSES</code> 修正</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="2026-11-15-v050">五之二、2026-11-15 进展：工序状态机测试能力落地（v0.5.0）</h2>
+<p>上一节解决了「<strong>事后扫静态快照</strong>」的规则查。但那有个根本限制：</p>
+<blockquote>
+<p>规则查只能看<strong>当前终态</strong>。「历史上是否发生过非法迁移」——比如
+<code>pending → done</code> 跳过 review——<strong>在只存当前 status 的数据结构下无法判定</strong>。</p>
+</blockquote>
+<p>本节新增的两项能力把「状态机测试」从「事后体检」升级为「<strong>动作 → 观察迁移</strong>」。</p>
+<h3 id="53-process_state-ai-token">5.3 <code>process_state</code> 断言（零 AI token 的状态机判定）</h3>
+<p><strong>定位</strong>：把「能用 1° 绝不用 AI」贯彻到工序域。状态机判定是纯结构比对，
+不该让模型推理算术。</p>
+<pre><code class="language-yaml">assertions:
+  - kind: process_state
+    rule: done_after_pending_breaks_chain_order   # 规则名（查 RULES 注册表）
+    expect: none        # none=条件必须成立；any=反守门员
+    task_id: &quot;1011&quot;     # 可选：限定任务
+    min_severity: all   # high/medium/low/all（low 是观察项，默认不阻断）
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>参数</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>rule</code></td>
+<td>规则名，见 <code>process_truth.RULES</code>（9 条）</td>
+</tr>
+<tr>
+<td><code>expect</code></td>
+<td><code>none</code>=条件必须成立；<code>any</code>=条件必须<strong>不</strong>成立（反守门员）</td>
+</tr>
+<tr>
+<td><code>task_id</code> / <code>node</code></td>
+<td>限定范围</td>
+</tr>
+<tr>
+<td><code>exclude_legacy</code> / <code>exclude_flat_layout</code></td>
+<td>排除 legacy 迁移任务 / 平铺布局（默认 True）</td>
+</tr>
+<tr>
+<td><code>min_severity</code></td>
+<td>严重度下限（默认 <code>medium</code>，low 不阻断）</td>
+</tr>
+<tr>
+<td><code>from_probe</code></td>
+<td>改为基于探针结果判定（见 5.4），与 <code>rule</code> 二选一</td>
+</tr>
+</tbody>
+</table>
+<p><strong>降级语义</strong>（关键）：工序目录不存在 / 规则名未知 / 探针缺失 → <code>value=0.5,
+confidence=0.5</code> → <code>route()</code> 转人工仲裁。<strong>绝不判通过</strong>——没有可比对象就没有结论。</p>
+<h3 id="54-process_probe">5.4 <code>process_probe</code> 步骤 + 探针判定式</h3>
+<p><strong>这是真正的状态机测试能力</strong>：在通道执行步骤时<strong>即时采集</strong>工序状态，
+支持「动作 → 观察 → 动作 → 观察」的编排序列。</p>
+<pre><code class="language-yaml">steps:
+  - action: nav
+    path: '/'
+  - action: process_probe
+    probe: node        # node | chain | snapshot | violations
+    task_id: &quot;1011&quot;
+    node: &quot;n01&quot;
+  - action: process_probe
+    probe: snapshot
+assertions:
+  - kind: process_state
+    from_probe: &quot;status_eq:running&quot;
+</code></pre>
+<p><strong>可用判定式</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>判定式</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>status_eq:&lt;值&gt;</code></td>
+<td>状态等于该值</td>
+</tr>
+<tr>
+<td><code>status_in:&lt;v1,v2&gt;</code></td>
+<td>状态在集合内</td>
+</tr>
+<tr>
+<td><code>index_eq:&lt;n&gt;</code></td>
+<td>序号等于 n</td>
+</tr>
+<tr>
+<td><code>output_count_ge:&lt;n&gt;</code></td>
+<td>产物数 ≥ n</td>
+</tr>
+<tr>
+<td><code>has_validation_ok</code></td>
+<td>validation_ok 为真</td>
+</tr>
+<tr>
+<td><strong><code>transition:&lt;from&gt;&gt;&lt;to&gt;</code></strong></td>
+<td><strong>状态从 from 变为 to（需 ≥2 次探针）</strong></td>
+</tr>
+</tbody>
+</table>
+<p><code>transition</code> 是核心：它判定的是<strong>迁移</strong>而非状态。例如「非法迁移反守门员」：</p>
+<pre><code class="language-yaml">- kind: process_state
+  from_probe: &quot;transition:pending&gt;done&quot;
+  expect: any     # 条件（发生了 pending→done）必须不成立 → 发生即失败
+</code></pre>
+<h3 id="55">5.5 实测验证</h3>
+<table>
+<thead>
+<tr>
+<th>项目</th>
+<th>结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>新增元测试</td>
+<td>26 条（<code>tests/process_state_assert_test.py</code>）</td>
+</tr>
+<tr>
+<td>全量元测试</td>
+<td><strong>289 passed</strong>（原 263）</td>
+</tr>
+<tr>
+<td>ruff（8 个改动文件）</td>
+<td>All checks passed</td>
+</tr>
+<tr>
+<td>真实用例</td>
+<td><code>tc_cecoder_process_001</code> —— <strong>passed，7.8s，零 AI token</strong></td>
+</tr>
+<tr>
+<td>探针采集真实性</td>
+<td>36 任务 / 207 节点 / 6 种状态（done 109、pending 69、ready 13、failed 7、interrupted 2、review 1）</td>
+</tr>
+<tr>
+<td>链顺序断言</td>
+<td>通过（真实链序均为 done 前缀 + failed/pending 后缀）</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>探针不是空数据假通过</strong>：探针缺失会降级为 <code>value=0.5</code> 转人工，
+不可能判 <code>auto_pass</code>。上表数据证明探针确实采到了真实工序链。</p>
+</blockquote>
+<p><strong>与 <code>chain_003</code>（agent_verify）的分工</strong>：</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th><code>chain_003</code>（agent_verify）</th>
+<th><code>tc_cecoder_process_001</code>（process_state）</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>判定方式</td>
+<td>agent 自主取证 + 模型推理结论</td>
+<td>确定性结构比对</td>
+</tr>
+<tr>
+<td>token</td>
+<td>~$0.003/次</td>
+<td><strong>0</strong></td>
+</tr>
+<tr>
+<td>可复现</td>
+<td>否（模型有波动）</td>
+<td><strong>是</strong></td>
+</tr>
+<tr>
+<td>判「语义对不对」</td>
+<td>✅</td>
+<td>❌</td>
+</tr>
+<tr>
+<td>判「结构对不对」</td>
+<td>勉强</td>
+<td>✅</td>
+</tr>
+</tbody>
+</table>
+<h3 id="56-statushistory">5.6 仍然存在的缺口：<code>statusHistory</code> 未持久化</h3>
+<p><code>process_state</code> 的 <code>transition</code> 判定式目前<strong>只能基于探针的两次采样</strong>，
+即「本次会话内观察到的迁移」。<strong>跨会话的历史迁移仍然不可测</strong>，
+因为 CeCoder 的工序 JSON 只存当前 <code>status</code>，不存迁移历史。</p>
+<p><strong>这不是 nlaut 侧能解决的</strong> —— 需要基座在落盘时记录迁移历史。
+已产出对接文档：
+<code>~/workspace/cecoder-evaluation/CeCoder工序状态迁移留痕契约建议_v1.0.md</code>（含字段契约、
+合法迁移集、禁止迁移集、分阶段落地建议）。</p>
+<p><strong>nlaut 侧消费能力已就绪</strong>：契约落地后，<code>transition</code> 判定式可直接改为读
+<code>statusHistory</code>，无需改用例结构。</p>
+<hr />
+<h2 id="_4">六、边界声明</h2>
+<p><strong>已核实（可回溯）</strong></p>
+<ul>
+<li>全部 nlaut 侧的代码事实：<code>grep</code> / <code>read_file</code> 实读，标注了 <code>file:line</code></li>
+<li>全部 CeCoder 数据事实：本机 <code>tasks/*.json</code>（35 文件 / 194 节点）、<code>assets/</code>（34 目录）、<code>sessions/</code>（963 文件 / 743,267 事件）实扫</li>
+<li><code>requireDocument()</code> / <code>validateDelivery()</code> 源码实读</li>
+<li>两轮实测的数字：全部来自素材文档，源自会话原始输出与产物文件</li>
+<li><strong>H4 五条</strong>：逐条实跑确认，非二手结论——</li>
+<li><code>get_judge('llm')</code> 实抛 KeyError（附完整报错文本）</li>
+<li><code>grep -rn "truth_source_registry" --include="*.py"</code> 零命中</li>
+<li><code>TestCaseIR.model_validate()</code> 实跑，YAML 7 键 → IR 6 键，<code>model_extra: None</code></li>
+<li><code>agent_tools.py:193</code> 实读 <code>path_allowed</code> 默认 <code>return False</code></li>
+<li><code>runner.py:153-170</code> 实读 <code>_engine_name</code> 确认不读 <code>judge:</code> 字段</li>
+</ul>
+<p><strong>[推测]（已标注，需实测确认）</strong></p>
+<ul>
+<li>「工序域 TruthSource 加进 <code>Evidence</code> 后不影响现有 173 条用例」——未跑回归验证</li>
+<li>「9 条 L1 判定难点可直接实现」——基于字段结构推演，未逐条写用例验证</li>
+<li>「H4 四处修完后 <code>avg_tool_calls</code> 会变成 &gt; 0」——逻辑推断，需实际跑一次带工具标定确认</li>
+</ul>
+<p><strong>已实测推翻的原推测（保留记录，避免后人重踩）</strong></p>
+<ul>
+<li>原写「34 个资产目录的正常产出足够凑 ≥200 条回放集（未逐目录统计）」→ <strong>已实测：产物文件总数 2287，超门槛 11 倍</strong></li>
+<li>原按 <code>nodes[].dirName</code> 定位产物，得出「102 个 done 节点中 77 个零产物」→ <strong>错。产物不在 <code>dirName</code> 目录，而在任务根目录。正确口径 2287 个文件。</strong> 见 §3.2 第四个坑</li>
+<li>初版结论写「缺的是样本量」→ <strong>错。缺的是人工标注这个真值；样本量反而充足（2287 条可用）。</strong> 见 §2.2 的 <code>CONFIDENCE_CAP</code> 机制说明</li>
+</ul>
+<p><strong>未做</strong></p>
+<ul>
+<li>未修改 nlaut 任何代码或配置</li>
+<li>未重跑任何 CeCoder 采集脚本</li>
+<li>未新增任何数字；文中所有数字均可回溯到会话原始输出、源码或本机数据文件</li>
+</ul>
+<hr />
+<p><strong>文档版本</strong>：v1.0
+<strong>生成时间</strong>：2026-11-13</p>
+</div>
+</body>
+</html>

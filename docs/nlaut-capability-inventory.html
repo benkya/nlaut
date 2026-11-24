@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>nlaut-capability-inventory</title>
+<style>
+:root{
+  --fg:#24292f; --muted:#57606a; --bd:#d0d7de; --bg:#ffffff;
+  --accent:#0969da; --code-bg:#f6f8fa; --th-bg:#f6f8fa;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  font-size:15px;line-height:1.75;color:var(--fg);background:var(--bg);}
+.wrap{max-width:1080px;margin:0 auto;padding:32px 28px 80px}
+h1{font-size:26px;font-weight:650;padding:22px 24px;margin-bottom:26px;
+  background:#f6f8fa;border:1px solid var(--bd);border-radius:10px;line-height:1.45}
+h2{font-size:20px;font-weight:650;margin:38px 0 14px;padding-bottom:8px;border-bottom:1px solid var(--bd)}
+h3{font-size:16px;font-weight:650;margin:24px 0 10px;color:#111}
+p{margin:11px 0}
+ul{margin:11px 0 11px 24px}
+li{margin:5px 0}
+strong{font-weight:650;color:#111}
+em{color:var(--muted)}
+hr{border:none;border-top:1px solid var(--bd);margin:28px 0}
+blockquote{background:#fff8c5;border-left:4px solid #d4a72c;padding:12px 18px;margin:14px 0;border-radius:0 6px 6px 0}
+blockquote p{margin:4px 0}
+code{background:var(--code-bg);padding:2px 6px;border-radius:5px;
+  font-family:ui-monospace,SFMono-Regular,"SF Mono",Menlo,monospace;font-size:13.5px}
+pre{background:var(--code-bg);border:1px solid var(--bd);border-radius:8px;
+  padding:14px 16px;margin:14px 0;overflow-x:auto;line-height:1.6}
+pre code{background:none;padding:0;font-size:13px;white-space:pre}
+.tw{overflow-x:auto;margin:14px 0}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th{background:var(--th-bg);text-align:left;padding:9px 12px;border:1px solid var(--bd);font-weight:650;white-space:nowrap}
+td{padding:9px 12px;border:1px solid var(--bd);vertical-align:top}
+tbody tr:hover{background:var(--th-bg)}
+footer{margin-top:44px;padding-top:18px;border-top:1px solid var(--bd);color:var(--muted);font-size:13px;text-align:center}
+@media(max-width:700px){.wrap{padding:18px 14px 60px}h1{font-size:21px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>nlaut 框架完整能力清单</h1>
+<p><strong>版本</strong>: v0.5.0</p>
+<p><strong>日期</strong>: 2026-11-15</p>
+<p><strong>用途</strong>: 能力盘点 / 对外汇报 / 缺口识别基线</p>
+<hr>
+<h2>一、总览</h2>
+<div class="tw"><table><thead><tr><th>维度</th><th>规模</th></tr></thead><tbody><tr><td>判定断言类型</td><td><strong>19 种</strong></td></tr><tr><td>步骤动作</td><td><strong>11 种</strong></td></tr><tr><td>执行通道</td><td><strong>3 条</strong>（web / electron / api）</td></tr><tr><td>判定引擎</td><td><strong>5 类</strong>（deterministic / mlx-vlm / laya / agent / llm）</td></tr><tr><td>agent 取证工具</td><td><strong>10 个</strong>（只读）</td></tr><tr><td>真值源注册表</td><td>已接线（file / http / sql 三类读操作）</td></tr><tr><td>用例资产</td><td><strong>185 条</strong>（5 个业务域）</td></tr><tr><td>视觉基线</td><td><strong>1 套</strong>（cecoder/order_panel.png）</td></tr><tr><td>自动化测试</td><td><strong>393 条</strong>（20 个测试文件）</td></tr><tr><td>运行脚本</td><td><strong>31 个</strong></td></tr></tbody></table></div>
+<p><strong>核心设计原则</strong>：能用 1° 绝不用 AI —— 确定性判定优先，AI 只用于真正需要语义推理的部分。</p>
+<hr>
+<h2>二、判定断言类型（19 种）</h2>
+<h3>2.1 确定性判定（deterministic，零 AI token）</h3>
+<div class="tw"><table><thead><tr><th>kind</th><th>专有字段</th><th>判定内容</th></tr></thead><tbody><tr><td><code>text_visible</code></td><td>selector, expected, negated</td><td>DOM 文案包含</td></tr><tr><td><code>attribute</code></td><td>selector, name, expected, negated</td><td>DOM 属性值</td></tr><tr><td><code>response_exact</code></td><td>expected, case_sensitive</td><td>L1 精确匹配</td></tr><tr><td><code>response_contains</code></td><td>keywords, min_match=1</td><td>L2 关键词匹配</td></tr><tr><td><code>response_not_contains</code></td><td>forbidden</td><td>L4 反向验证（安全性）</td></tr><tr><td><code>response_json_schema</code></td><td>required_fields, expected_values</td><td>L3 JSON 结构</td></tr><tr><td><code>tool_call_params</code></td><td>expected_function, expected_params</td><td>工具调用参数</td></tr><tr><td><code>response_time</code></td><td>max_seconds</td><td>整体响应延迟</td></tr><tr><td><code>response_ttft</code></td><td>max_ms=3000</td><td>流式首 token 延迟</td></tr><tr><td><code>response_ttft_p95</code></td><td>max_p95_ms=3000</td><td>流式 P95 首 token 延迟</td></tr><tr><td><code>response_length</code></td><td>min_chars, max_chars</td><td>回答字符数区间</td></tr><tr><td><strong><code>visual_regression</code></strong></td><td>baseline, min_similarity=0.98, require_same_size</td><td><strong>截图 SSIM 像素回归</strong>（v0.5.0）</td></tr><tr><td><strong><code>process_state</code></strong></td><td>rule / from_probe, expect, task_id?, node?, min_severity?</td><td><strong>工序状态机判定</strong>（v0.5.0）</td></tr></tbody></table></div>
+<h3>2.2 AI 判定</h3>
+<div class="tw"><table><thead><tr><th>kind</th><th>引擎</th><th>专有字段</th><th>判定内容</th></tr></thead><tbody><tr><td><code>visual_state</code></td><td>mlx-vlm</td><td>prompt, threshold=0.9</td><td>页面视觉状态语义</td></tr><tr><td><code>noul</code></td><td>laya（systemone）</td><td>question, threshold</td><td>System One 0-1 概率题</td></tr><tr><td><code>choice</code></td><td>laya</td><td>question, options, threshold</td><td>单选归因</td></tr><tr><td><code>score</code></td><td>laya</td><td>question, threshold</td><td>量表打分</td></tr><tr><td><strong><code>agent_verify</code></strong></td><td>agent</td><td>objective, threshold=0.9, max_steps=6, system_prompt?</td><td><strong>自主取证型判定</strong>（v0.4.0）</td></tr></tbody></table></div>
+<h3>2.3 <code>process_state</code> 的两种模式（v0.5.0）</h3>
+<div class="tw"><table><thead><tr><th>模式</th><th>字段</th><th>用途</th></tr></thead><tbody><tr><td>规则查</td><td><code>rule</code></td><td>按规则名查违规清单（9 条规则）</td></tr><tr><td>探针判</td><td><code>from_probe</code></td><td>基于 <code>process_probe</code> 步骤采集结果判定</td></tr></tbody></table></div>
+<p><strong>探针判定式</strong>：<code>status_eq:</code> / <code>status_in:</code> / <code>index_eq:</code> / <code>output_count_ge:</code> /</p>
+<p><code>has_validation_ok</code> / <strong><code>transition:&lt;from&gt;&gt;&lt;to&gt;</code></strong>（判定迁移而非状态）</p>
+<p><strong>降级语义</strong>：工序目录不存在 / 规则名未知 / 探针缺失 → <code>value=0.5</code> → 转人工仲裁。<strong>绝不判通过</strong>。</p>
+<hr>
+<h2>三、步骤动作（11 种）</h2>
+<h3>3.1 GUI 交互（web / electron 通道）</h3>
+<div class="tw"><table><thead><tr><th>action</th><th>专有字段</th><th>说明</th></tr></thead><tbody><tr><td><code>nav</code></td><td>path</td><td>导航（相对路径会与 base_url 规范化拼接）</td></tr><tr><td><code>fill</code></td><td>selector, value</td><td>填输入框</td></tr><tr><td><code>click</code></td><td>selector</td><td>点击</td></tr><tr><td><code>select_option</code></td><td>selector, value</td><td>下拉选择</td></tr><tr><td><code>wait_visible</code></td><td>selector, timeout_ms</td><td>等元素可见</td></tr><tr><td><code>wait_text</code></td><td>text, selector?, timeout_ms</td><td>等文案出现（消除 XHR 渲染竞态）</td></tr></tbody></table></div>
+<h3>3.2 工序域（v0.5.0）</h3>
+<div class="tw"><table><thead><tr><th>action</th><th>专有字段</th><th>说明</th></tr></thead><tbody><tr><td><strong><code>process_probe</code></strong></td><td>probe, task_id?, node?, root?</td><td><strong>在动作执行时即时采集工序状态</strong>，支持「动作→观察迁移」编排</td></tr></tbody></table></div>
+<p>probe 取值：<code>node</code>（单节点）/ <code>chain</code>（整链序列）/ <code>snapshot</code>（全量统计）/ <code>violations</code>（违规清单）</p>
+<h3>3.3 API 通道</h3>
+<div class="tw"><table><thead><tr><th>action</th><th>专有字段</th><th>说明</th></tr></thead><tbody><tr><td><code>api_call</code></td><td>prompt, system_prompt?</td><td>单轮 LLM 调用</td></tr><tr><td><code>api_followup</code></td><td>prompt</td><td>多轮对话追加</td></tr><tr><td><code>api_tool_call</code></td><td>prompt, tools</td><td>带工具定义调用</td></tr><tr><td><code>api_stream</code></td><td>prompt, system_prompt?, repeat=1</td><td>流式调用（repeat 1-20 支持 P95）</td></tr></tbody></table></div>
+<hr>
+<h2>四、执行通道（3 条）</h2>
+<div class="tw"><table><thead><tr><th>通道</th><th>技术</th><th>支持被测对象</th></tr></thead><tbody><tr><td><code>web</code></td><td>Playwright Chromium</td><td>Web 应用</td></tr><tr><td><code>electron</code></td><td>Playwright + CDP 连接</td><td>Electron 桌面应用（如 CeCoder）</td></tr><tr><td><code>api</code></td><td>OpenAI-compatible HTTP</td><td>大模型 API</td></tr></tbody></table></div>
+<p><strong>通道无关能力</strong>：<code>process_probe</code> / <code>process_state</code> 在三条通道都可用（读文件系统）。</p>
+<p><strong>已修的通道缺陷</strong>：</p>
+<ul><li><code>base_url</code> 斜杠不规范化 → <code>http://host:port//</code> 路由失配（已加 <code>_join_url()</code>）</li><li>视觉回归必须用视口截图（<code>full_page=False</code>），否则页面高度随内容漂移无法比对</li></ul>
+<hr>
+<h2>五、判定引擎（4 类）</h2>
+<div class="tw"><table><thead><tr><th>引擎</th><th>机制</th><th>适用</th><th>token</th></tr></thead><tbody><tr><td><code>deterministic</code></td><td>结构比对 / 算术</td><td>能规则化的全部断言</td><td><strong>0</strong></td></tr><tr><td><code>mlx-vlm</code></td><td>本地 MLX 视觉模型</td><td>页面视觉状态语义</td><td>本地推理</td></tr><tr><td><code>laya</code></td><td>System One（laya-mlx）</td><td>noul/choice/score 语义判定</td><td>本地推理</td></tr><tr><td><code>agent</code></td><td>Agent-as-Judge</td><td>需自主取证 + 语义推理</td><td>远程 API</td></tr></tbody></table></div>
+<h3>5.1 置信度路由（<code>arbiter.route()</code>）</h3>
+<div class="tw"><table><thead><tr><th>条件</th><th>路由结果</th></tr></thead><tbody><tr><td><code>value &gt;= threshold</code> 且 <code>confidence &gt;= 0.9</code></td><td><code>auto_pass</code> / <code>auto_fail</code></td></tr><tr><td>置信度不足（agent 封顶 0.85）</td><td><code>human_review</code></td></tr><tr><td>确定性降级态（<code>value=0.5</code>）</td><td><code>human_review</code>（<strong>不判通过</strong>）</td></tr></tbody></table></div>
+<p><strong>已修的路由缺陷</strong>：确定性降级态曾被误判为 <code>auto_pass</code>（已加置信度守卫）。</p>
+<h3>5.2 Agent-as-Judge 特性</h3>
+<ul><li><strong>10 个只读取证工具</strong>：<code>query_db</code> / <code>http_probe</code> / <code>read_log</code> / <code>read_file</code> /</li></ul>
+<p>  <code>list_dir</code> / <code>process_snapshot</code> / <code>query_json</code> / <code>inspect_trace</code> / <code>list_registry</code> /</p>
+<p>  <code>locate_object</code></p>
+<ul><li><strong>默认拒绝式作用域</strong>：<code>ToolPolicy</code> 需显式放行主机/路径（<code>NLaut_AGENT_JUDGE_ALLOWED_HOSTS</code> /</li></ul>
+<p>  <code>NLaut_AGENT_JUDGE_ALLOWED_PATHS</code>）</p>
+<ul><li><strong>置信度强制封顶 0.85</strong> → 必定走 <code>human_review</code>（设计上不自动裁决）</li><li><strong>实测性能</strong>：<code>process_snapshot</code> 1 次调用 2.9s / $0.0032，对比通用工具 10 次调用 24.2s / $0.0122</li></ul>
+<hr>
+<h2>六、工序域能力（v0.5.0，CeCoder 专用）</h2>
+<h3>6.1 工序状态真值源</h3>
+<p><code>src/nlaut/judge/process_truth.py</code> —— 一次取证拿到全量工序状态 + 已判定违规清单。</p>
+<p><strong>9 条规则</strong>（全部由源码权威定义推导，非经验规则）：</p>
+<div class="tw"><table><thead><tr><th>规则</th><th>严重度</th><th>依据</th></tr></thead><tbody><tr><td><code>done_without_outputs</code></td><td>high</td><td><code>requireDocument</code> 语义</td></tr><tr><td><code>done_but_gate_blocked</code></td><td>high</td><td>门禁与状态矛盾（仅 start/complete 硬门禁）</td></tr><tr><td><code>outputs_not_written_back</code></td><td>medium</td><td>双源交叉（task.json vs 磁盘）</td></tr><tr><td><code>done_without_gate_evaluation</code></td><td>medium</td><td>门禁未评估即放行</td></tr><tr><td><code>pending_with_outputs</code></td><td>low</td><td>产物归属错位（按任务聚合）</td></tr><tr><td><code>done_after_pending_breaks_chain_order</code></td><td>high</td><td><code>node-machine.ts:12</code></td></tr><tr><td><code>executing_not_current_node</code></td><td>high</td><td><code>node-machine.ts:48</code></td></tr><tr><td><code>review_without_validation_ok</code></td><td>medium</td><td><code>node-machine.ts:77</code></td></tr><tr><td><code>unknown_status_value</code></td><td>high</td><td><code>NODE_STATUSES</code> 封闭集</td></tr></tbody></table></div>
+<h3>6.2 规则必须条件化（实测教训）</h3>
+<p>首版无条件化时假阳性率 <strong>80%</strong>（10 条里 8 条是假的）。三类合法形态被误判：</p>
+<div class="tw"><table><thead><tr><th>合法形态</th><th>依据</th><th>修正</th></tr></thead><tbody><tr><td>legacy 迁移任务（<code>task.legacySource</code>）</td><td>迁移路径不写 run/gates/outputs</td><td>全部规则排除 <code>legacy</code></td></tr><tr><td><code>autoAdvance:block</code> + <code>complete:allow</code></td><td><code>node-lifecycle.ts:169</code>（autoAdvance 仅自动时校验，人工确认合法）</td><td>硬门禁只看 <code>start</code>/<code>complete</code></td></tr><tr><td>平铺布局（<code>assetLayout.kind=='task'</code>）</td><td><code>node-machine.ts:64-72</code>（applyTurnEnd 按目录扫描）</td><td>排除平铺 + 按任务聚合</td></tr></tbody></table></div>
+<h3>6.3 实测数据</h3>
+<div class="tw"><table><thead><tr><th>指标</th><th>数值</th></tr></thead><tbody><tr><td>任务数 / 节点数</td><td>36 / 207</td></tr><tr><td>状态分布</td><td>done 109、pending 69、ready 13、failed 7、interrupted 2、review 1</td></tr><tr><td>结构类不变量违规</td><td><strong>0</strong></td></tr><tr><td>数据类不变量违规</td><td>2（task 1011 产物清单未回写）</td></tr></tbody></table></div>
+<hr>
+<h2>七、视觉回归能力（v0.5.0）</h2>
+<p><strong>独立实现 SSIM</strong>（OpenCV + NumPy），<strong>不运行时依赖 AWT</strong>。</p>
+<div class="tw"><table><thead><tr><th>项</th><th>实测</th></tr></thead><tbody><tr><td>基准一致</td><td><code>1.0</code></td></tr><tr><td>标题改红</td><td><code>0.999935</code>（<strong>漏检</strong>）</td></tr><tr><td>名字变灰变小</td><td><code>0.995129</code>（<strong>漏检</strong>）</td></tr><tr><td>面板改红底</td><td><code>0.955447</code></td></tr><tr><td>行距加大</td><td><code>0.927868</code></td></tr></tbody></table></div>
+<p><strong>结论</strong>：SSIM 是<strong>布局/结构守门员</strong>，对小幅颜色/字号变化不敏感。</p>
+<p>小语义变化仍需 VLM <code>visual_state</code> 覆盖 —— 两者<strong>互补</strong>，不可互相替代。</p>
+<hr>
+<h2>八、环境前置健康检查（v0.5.0）</h2>
+<p><code>src/nlaut/harness/health.py</code> —— 把「30 秒内给出明确结论」变成默认行为。</p>
+<div class="tw"><table><thead><tr><th>检查</th><th>判据</th><th>失败含义</th></tr></thead><tbody><tr><td><code>cdp</code></td><td>CDP 端口 <code>/json/version</code> 可达</td><td>应用没带调试端口启动</td></tr><tr><td><code>auth_backend</code></td><td>auth 配置 baseUrl TCP 可达</td><td>登录态校验失败 → 应用进 login 模式</td></tr><tr><td><code>login_overlay</code></td><td>页面 <code>[data-shell-overlay="true"]</code> 内容含「登录」</td><td>遮罩拦截全部指针事件</td></tr></tbody></table></div>
+<p><strong>用例分类</strong>：<code>split_cases()</code> 把用例分为 GUI 依赖 / 纯工序域两类。</p>
+<p>环境不可用时，GUI 用例<strong>提前中止</strong>（退出码 3），纯工序域用例<strong>照跑</strong>。</p>
+<p><strong>实测价值</strong>：此前 5 条 GUI 用例批量失败，报错看不出是环境问题，为此排查约 15 分钟</p>
+<p>（选择器 → DOM → overlay → TCP 探测 → 应用日志）。现在 30 秒内给出结论。</p>
+<hr>
+<h2>九、用例资产（182 条）</h2>
+<div class="tw"><table><thead><tr><th>目录</th><th>条数</th><th>领域</th></tr></thead><tbody><tr><td><code>cases/llm/</code></td><td>93</td><td>大模型 API（流式/工具调用/延迟/结构）</td></tr><tr><td><code>cases/demo/</code></td><td>40</td><td>框架自带演示系统</td></tr><tr><td><code>cases/sweng/</code></td><td>34</td><td>软件工程场景</td></tr><tr><td><code>cases/cecoder/</code></td><td>9</td><td><strong>CeCoder 工序域</strong>（本地资产，gitignored）</td></tr><tr><td><code>cases/giencoder/</code></td><td>6</td><td>编码助手</td></tr></tbody></table></div>
+<h3>9.1 CeCoder 用例构成（11 条）</h3>
+<div class="tw"><table><thead><tr><th>用例</th><th>类型</th><th>依赖 GUI</th><th>触发执行</th></tr></thead><tbody><tr><td><code>tc_cecoder_order_001~004</code></td><td>GUI 确定性断言</td><td>是</td><td>否</td></tr><tr><td><code>tc_cecoder_visual_001</code></td><td>视觉回归（SSIM）</td><td>是</td><td>否</td></tr><tr><td><code>tc_cecoder_process_001</code></td><td><strong>工序状态机（零 token）</strong></td><td><strong>否</strong></td><td>否</td></tr><tr><td><code>tc_cecoder_chain_001~003</code></td><td>agent 自主取证</td><td>否（只 nav）</td><td>否</td></tr><tr><td><strong><code>tc_cecoder_exec_001</code></strong></td><td><strong>工序执行迁移（ready→running）</strong></td><td>是</td><td><strong>是（1 次 LLM）</strong></td></tr><tr><td><strong><code>tc_cecoder_exec_002</code></strong></td><td><strong>执行守卫（全 done 无执行入口）</strong></td><td>是</td><td><strong>否（零 LLM）</strong></td></tr><tr><td><strong><code>tc_cecoder_exec_003</code></strong></td><td><strong>全流程同步层（创建→自动执行→启动断言）</strong></td><td>是</td><td><strong>是（1 次 LLM）</strong></td></tr></tbody></table></div>
+<blockquote>exec 系列覆盖了此前缺失的「<strong>执行环节</strong>」：exec_001 测正路径<br>（点执行 → 状态真迁移），exec_002 测守卫路径（全完成任务无执行入口），<br>exec_003 测全流程启动层。探针用 <code>task_id: "@latest"</code> 定位新建任务<br>（id 是动态 UUID）。<br><strong>完整 7 工序串行 = exec_003（同步层）+ driver（长时层）</strong>：<br><code>scripts/cecoder_full_workflow_driver.py</code> 长轮询驱动 + 自动模拟两个人工<br>介入点（选设计系统 / 点「确认完成」），终态校验迁移序列合法性 +<br>链序 + 产物齐全。<strong>实测发现</strong>：「自动执行」按钮不能全自动跑完 7 道<br>—— 产品在 n02（UI 原型需选设计系统，start:block）和各工序<br>needs-confirmation（review 需人工点「确认完成」）设计了两类人工介入点。<br><strong>全链实测（d52e0133，2026-11-16）</strong>：n01-n06 全部走通（含 n05 瞬态失败<br>自动重试），<strong>15 次状态迁移零非法</strong>（10 direct + 5 路径压缩）。n07 交付确认<br>会话<strong>假启动挂死</strong>（会话文件 75 分钟零写入、UI 无恢复入口、唤醒无响应）<br>—— 环境侧缺陷如实记录（<code>artifacts/full_workflow_d52e0133.json</code>），<br>非用例/driver 缺陷。<br><strong>四个关键行为发现（全部固化进 driver/watch 代码与单测）</strong>：<br>1. normal 工序 review 推进有<strong>分钟级延迟</strong>（n04 实测约 10 分钟）—— 勿误判死锁<br>2. 瞬态失败「会话服务尚未就绪」<strong>可重试</strong>（failed→ready→running 合法）<br>3. 采样式迁移观察存在<strong>路径压缩</strong>（15s 轮询跳过秒级 validating/review）<br>—— <code>transition_kind()</code> 限深 BFS 三态判定（19 条单测）<br>4. <strong>介入前必先导航到目标任务详情页</strong>（设计系统/确认按钮只在激活视图层）</blockquote>
+<hr>
+<h2>十、辅助设施</h2>
+<h3>10.1 运行脚本（31 个）</h3>
+<div class="tw"><table><thead><tr><th>类别</th><th>代表</th></tr></thead><tbody><tr><td>CeCoder 批量</td><td><code>run_cecoder_cases.sh</code> / <code>cecoder_cdp_url.sh</code></td></tr><tr><td>判定标定</td><td><code>judge_calibration.py</code> / <code>agent_judge_calibration_v2.py</code></td></tr><tr><td>消融对照</td><td><code>agent_judge_ablation.py</code> / <code>agent_judge_repeatability.py</code></td></tr><tr><td>模型对比</td><td><code>compare_models.py</code> / <code>probe_qwen27b.py</code></td></tr><tr><td>端点探活</td><td><code>api_smoke.py</code> / <code>probe_ds41f_sglang.py</code></td></tr><tr><td>用例生成</td><td><code>excel_to_ir.py</code> / <code>export_all_cases.py</code></td></tr></tbody></table></div>
+<h3>10.2 配置</h3>
+<div class="tw"><table><thead><tr><th>文件</th><th>用途</th></tr></thead><tbody><tr><td><code>config/models.yaml</code></td><td>模型端点 / 模型 ID / api_key 环境变量映射</td></tr><tr><td><code>config/calibrate_v2.json</code></td><td>judge 标定样本（30 条）</td></tr><tr><td><code>config/golden_samples_20.json</code></td><td>金标准集（20 条）</td></tr><tr><td><code>config/truth_source_registry.yaml</code></td><td>真值源注册表（<strong>当前未接线</strong>）</td></tr></tbody></table></div>
+<h3>10.3 报告</h3>
+<p>HTML 单文件报告，含断言明细（引擎 / value / 置信度 / 路由 / 判定理由 / 取证轨迹）。</p>
+<hr>
+<h2>十一、已知缺口（诚实清单）</h2>
+<div class="tw"><table><thead><tr><th>#</th><th>缺口</th><th>性质</th><th>影响</th></tr></thead><tbody><tr><td>1</td><td><strong><code>statusHistory</code> 未持久化</strong></td><td><strong>被测系统侧</strong></td><td>跨会话的迁移级缺陷不可测（CeCoder 侧契约建议已产出）</td></tr><tr><td>2</td><td>~~<code>truth_source_registry.yaml</code> 未接线~~</td><td><strong>已修（v0.5.0）</strong></td><td>新增 <code>judge/truth_registry.py</code>，runner 注入 <code>Evidence.db_state</code></td></tr><tr><td>3</td><td>~~<code>llm_judge.py</code> 孤儿模块~~</td><td><strong>已修（v0.5.0）</strong></td><td>新增 <code>llm_verify</code> 断言 + 注册到引擎表；置信度封顶 0.85</td></tr><tr><td>4</td><td>~~<code>code_review_tools.py</code> ruff 6 处~~</td><td><strong>已修（v0.5.0）</strong></td><td>全仓 ruff 已全绿</td></tr><tr><td>5</td><td>SSIM 对小幅颜色/字号不敏感</td><td>能力边界</td><td>需 VLM 互补（已明确分工）</td></tr><tr><td>6</td><td>agent judge 置信度封顶 0.85</td><td>设计约束</td><td>agent 判定<strong>永远</strong>走人工复核，不自动裁决</td></tr><tr><td>7</td><td>judge 标定双标<strong>工具已就绪，人工待做</strong></td><td>数据缺口</td><td>新增 <code>scripts/dual_annotation.py</code>（导出/回填/Kappa/一致性统计）；<strong>但 <code>annotator_a</code>/<code>annotator_b</code> 仍 0/30</strong> —— 需真人填写，工具不伪造</td></tr><tr><td>8</td><td>~~GUI 用例选择器单点脆弱~~</td><td><strong>已修（v0.5.0）</strong></td><td>新增 <code>executor/selectors.py</code>：候选降级 + 逐候选诊断；9 条用例已改候选列表</td></tr><tr><td>9</td><td><code>statusHistory</code> 未持久化</td><td><strong>被测系统侧</strong></td><td>已产出<strong>落地排期建议</strong>（P0 1.5 人天，改动点集中在 <code>patchNode</code> 单一函数）</td></tr></tbody></table></div>
+<hr>
+<h2>十一之二、v0.5.0 补齐的 4 项（2026-11-15）</h2>
+<h3>11.2.1 真值源注册表接线（缺口 #2）</h3>
+<p><code>src/nlaut/judge/truth_registry.py</code> —— 读 <code>config/truth_source_registry.yaml</code>，</p>
+<p>把声明的真值源快照注入 <code>Evidence.db_state</code>。</p>
+<div class="tw"><table><thead><tr><th>真值源类型</th><th>实现</th><th>说明</th></tr></thead><tbody><tr><td><code>file</code></td><td><code>LogTruthSource</code></td><td>读本地文件（<strong>支持 <code>~</code> 展开</strong>）</td></tr><tr><td><code>http</code></td><td><code>HttpTruthSource</code></td><td>只发 GET</td></tr><tr><td><code>sql</code></td><td><code>SqlTruthSource</code></td><td>只执行 SELECT（需外部 executor）</td></tr></tbody></table></div>
+<p><strong>实测</strong>：本机 3 个声明源中 2 个采到真实数据（design_tasks 4087 字符 / dev_tasks 1436 字符），</p>
+<p>第 3 个路径不存在 → 记录 error 而非崩溃。</p>
+<h3>11.2.2 LLM-as-Judge 接线（缺口 #3）</h3>
+<p>新增 <code>llm_verify</code> 断言（第 19 种）+ <code>llm</code> 引擎注册。</p>
+<div class="tw"><table><thead><tr><th>特性</th><th>说明</th></tr></thead><tbody><tr><td>与 <code>agent_verify</code> 的差异</td><td>只读拼进 prompt 的证据（无自主取证），一轮调用</td></tr><tr><td>置信度封顶</td><td><strong>0.85</strong>（与 agent 同规则）→ 必定转人工</td></tr><tr><td>端点失败降级</td><td><code>value=0.5</code> + <code>confidence=0</code> + <code>degraded</code> → <strong>绝不误判通过或失败</strong></td></tr></tbody></table></div>
+<p><strong>修掉的解析 bug</strong>：「不通过」含「通过」、「不成立」含「成立」——</p>
+<p>原实现先判肯定词，会把否定结论<strong>读反</strong>。已改为先判否定。</p>
+<h3>11.2.3 选择器降级（缺口 #8）</h3>
+<p><code>src/nlaut/executor/selectors.py</code> —— 让 <code>click</code> / <code>wait_visible</code> 支持</p>
+<p><strong>逗号分隔的候选列表</strong>，逐个尝试，第一个「存在+可见+可用」者胜出。</p>
+<div class="tw"><table><thead><tr><th>能力</th><th>说明</th></tr></thead><tbody><tr><td>候选降级</td><td>aria-label / class / 文本 任一未变就能救回来</td></tr><tr><td>逐候选诊断</td><td>失败时报出每个候选的原因（不存在/不可见/禁用/语法错），不再是无信息的 TimeoutError</td></tr><tr><td><code>SelectorNotFound</code></td><td>专用异常类型，与 Playwright 原生错误区分</td></tr></tbody></table></div>
+<p><strong>实测</strong>：9 条 CeCoder 用例改候选列表后 <strong>6 passed + 3 need_review，0 failed</strong>；</p>
+<p>其中 <code>click</code> 步骤实际降级到第二候选（<code>has-text</code>）救回 —— 这正是设计目的。</p>
+<h3>11.2.4 标定双标工作流（缺口 #7 的工具侧）</h3>
+<p><code>scripts/dual_annotation.py</code> —— 4 个子命令：</p>
+<div class="tw"><table><thead><tr><th>命令</th><th>作用</th></tr></thead><tbody><tr><td><code>export</code></td><td>导出 CSV 标注工作单（标注员只填 judgement 列）</td></tr><tr><td><code>import</code></td><td>回填进 <code>calibrate_v2.json</code>，自动重算 agreement</td></tr><tr><td><code>stats</code></td><td>一致率 + Cohen's Kappa + 与金标准对照</td></tr><tr><td><code>derive</code></td><td>机械第二标注员（<strong>derived，非 human</strong>）</td></tr><tr><td><code>verify</code></td><td>Kappa 算法自测</td></tr></tbody></table></div>
+<p><strong>诚实边界</strong>：工具<strong>不会伪造</strong>人工标注。<code>annotator_a</code>/<code>annotator_b</code> 只能由真人填写。</p>
+<p><code>derive</code> 产出的第二意见单独存 <code>annotations/derived_mechanical.json</code>，<strong>不污染人工字段</strong>。</p>
+<p><strong>Kappa 算法自测发现的陷阱</strong>：边际偏斜时 Kappa 会远低于直觉一致率</p>
+<p>（8 一致 + 2 分歧 → 观察一致率 80%，但 Pe=0.82 → Kappa=-0.111）。</p>
+<p>这是 Kappa 的已知性质，<strong>不是公式错</strong> —— 但解读时必须知道。</p>
+<hr>
+<h2>十二、验证记录</h2>
+<div class="tw"><table><thead><tr><th>验证项</th><th>结果</th></tr></thead><tbody><tr><td>自动化测试</td><td><strong>393 passed</strong>（v0.5.0 累计 +80）</td></tr><tr><td>ruff（<strong>全仓</strong> src/ tests/）</td><td><strong>All checks passed</strong>（历史 12 处遗留已清零）</td></tr><tr><td>bash 语法检查</td><td>OK</td></tr><tr><td>CeCoder 用例批量跑</td><td><strong>6 passed</strong> + 3 need_review，<strong>0 failed</strong></td></tr><tr><td>工序状态机用例</td><td>passed，<strong>6.1s，零 AI token</strong></td></tr><tr><td>健康检查（环境正常）</td><td>3 项全绿 → 环境可用</td></tr><tr><td>健康检查（环境故障模拟）</td><td>准确识别 + 提前中止 + 给出处置建议</td></tr><tr><td>真值源注册表</td><td>3 声明源 → 2 个采到真实数据，1 个记 error 不崩</td></tr><tr><td>LLM judge 引擎</td><td><code>get_judge('llm')</code> 可取；置信度封顶 0.85</td></tr><tr><td>选择器降级</td><td>9 条用例全过；click 步骤实测降级到第 2 候选</td></tr><tr><td>双标工具往返</td><td>export→填→import→stats 全通（Kappa=1.0 时验证）</td></tr><tr><td><strong>工序执行迁移（exec_001）</strong></td><td><strong>passed 8.6s</strong>：新建任务→执行第一道工序→<code>transition:ready&gt;running</code>（1 次 LLM）</td></tr><tr><td><strong>执行守卫（exec_002）</strong></td><td><strong>passed 97.3s</strong>：全 done 任务无执行入口（零 LLM）</td></tr><tr><td><strong>全流程同步层（exec_003）</strong></td><td><strong>passed 11.1s</strong>：创建→自动执行→启动断言（1 次 LLM）</td></tr><tr><td><strong>@latest 探针</strong></td><td>修掉 <code>~</code> 展开缺失后 transition 断言从 ['done','done'] → [ready,running]</td></tr><tr><td><strong>全链串行（exec_003+driver）</strong></td><td><strong>15 次迁移零非法</strong>（10 direct + 5 路径压缩），6/7 done；n07 会话假启动挂死（环境侧，见下）</td></tr></tbody></table></div>
+<hr>
+<h2>十三、一句话总结</h2>
+<blockquote>nlaut v0.5.0 是一个<strong>多层判定</strong>的自动化测试框架：<br>18 种断言 × 3 条通道 × 4 类引擎，核心设计是<strong>能用确定性就不用 AI</strong>。<br>在 CeCoder 工序域上已落地<strong>零 token 的状态机判定 + 视觉回归 + 环境健康检查</strong>，<br>并对「规则必须条件化」「SSIM 是布局守门员不是语义守门员」<br>「健康检查前置」三条实测教训做了固化。</blockquote>
+<hr>
+<h2>附录 A：关键源码位置</h2>
+<div class="tw"><table><thead><tr><th>能力</th><th>文件</th></tr></thead><tbody><tr><td>IR 定义（18 断言 / 11 步骤）</td><td><code>src/nlaut/ir/model.py</code></td></tr><tr><td>判定协议 + 路由</td><td><code>src/nlaut/judge/protocol.py</code> / <code>arbiter.py</code></td></tr><tr><td>确定性引擎（12 种 mode）</td><td><code>src/nlaut/judge/deterministic.py</code></td></tr><tr><td>工序状态真值源</td><td><code>src/nlaut/judge/process_truth.py</code></td></tr><tr><td>SSIM 视觉回归</td><td><code>src/nlaut/judge/visual_regression.py</code></td></tr><tr><td>agent 取证工具（10 个）</td><td><code>src/nlaut/judge/agent_tools.py</code></td></tr><tr><td>环境健康检查</td><td><code>src/nlaut/harness/health.py</code></td></tr><tr><td>三条通道</td><td><code>src/nlaut/executor/channels/{web,electron,api}.py</code></td></tr><tr><td>执行编排</td><td><code>src/nlaut/executor/runner.py</code></td></tr></tbody></table></div>
+<h2>附录 B：CeCoder 侧对接文档</h2>
+<p><code>~/workspace/cecoder-evaluation/CeCoder工序状态迁移留痕契约建议_v1.0.md</code></p>
+<p>—— 含 <code>statusHistory</code> 字段契约、合法迁移集、禁止迁移集、三阶段落地建议。</p>
+<footer>由 nlaut 模型上线测试流程生成 · nlaut-capability-inventory</footer>
+</div>
+</body>
+</html>
