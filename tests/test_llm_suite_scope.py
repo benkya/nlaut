@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """大模型能力批次选集守卫（cases/llm 目录即集合边界）
 
 背景（2026-11-07 用户发现）：tc_agent_verify_001（集成准入门禁 G-11，
@@ -18,7 +17,7 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "src"))
 
-from nlaut.executor.runner import llm_suite_case_ids  # noqa: E402
+from nlaut.executor.runner import llm_suite_case_ids
 
 
 def test_llm_suite_excludes_other_dirs():

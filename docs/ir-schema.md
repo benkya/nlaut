@@ -69,6 +69,7 @@ assertions:
 | `api_followup` | prompt | api | 多轮对话追加用户消息（复用上文 messages） |
 | `api_tool_call` | prompt, tools | api | 带工具定义调用（OpenAI function schema） |
 | `api_stream` | prompt, system_prompt?, repeat=1 | api | 流式调用（stream=true，收完比对）；v0.2.7 加 `repeat` 字段（1-20，多样本 P95） |
+| `process_probe` | 全部 | probe, task_id?, node?, root? | **工序域探针**：在动作执行时即时采集工序状态（v0.5.0 新增）；`task_id: "@latest"` 按落盘 mtime 定位新建任务（id 是动态 UUID） |
 
 ## 断言类型（assertions）
 
@@ -87,7 +88,40 @@ assertions:
 | `response_ttft` | deterministic | max_ms=3000 | 流式首 token 延迟（D14；非流式调用转人工） |
 | `response_ttft_p95` | deterministic | max_p95_ms=3000 | 流式 P95 首 token 延迟（D14 扩展；v0.2.7 多次采样 1-20 次） |
 | `response_length` | deterministic | min_chars, max_chars | 回答字符数区间（D15 字数约束） |
+| `visual_regression` | deterministic | baseline, min_similarity=0.98, require_same_size | 截图 SSIM 像素回归（v0.5.0 新增） |
+| `process_state` | deterministic | rule / from_probe, expect, task_id?, node?, min_severity? | **工序状态机判定**（v0.5.0 新增，零 AI token） |
 | `agent_verify` | agent（Agent-as-Judge） | objective, threshold=0.9, max_steps=6, system_prompt? | **自主取证型判定**：judge 自己调只读工具查证据后下结论（v0.4.0 新增） |
+
+## 工序状态机判定（`process_state`，v0.5.0）
+
+**定位**：能用 1° 绝不用 AI。状态机判定是纯结构比对，不该让模型推理算术。
+
+两种模式，**二选一**：
+
+| 模式 | 字段 | 含义 |
+| --- | --- | --- |
+| **规则查** | `rule` | 按规则名查违规清单（见 `process_truth.RULES`，9 条） |
+| **探针判** | `from_probe` | 基于 `process_probe` 步骤采集的结果判定 |
+
+```yaml
+# 规则查：链顺序不变式（照搬 node-machine.ts:12 语义）
+- kind: process_state
+  rule: done_after_pending_breaks_chain_order
+  expect: none        # none=条件必须成立；any=条件必须不成立（反守门员）
+  min_severity: all   # high/medium/low/all（low 是观察项，默认不阻断）
+
+# 探针判：观察到的迁移
+- kind: process_state
+  from_probe: "transition:ready>running"
+```
+
+**探针判定式**：`status_eq:` / `status_in:` / `index_eq:` / `output_count_ge:` /
+`has_validation_ok` / **`transition:<from>><to>`**（需 ≥2 次探针）。
+
+**降级语义**：工序目录不存在 / 规则名未知 / 探针缺失 → `value=0.5,
+confidence=0.5` → `route()` 转人工仲裁。**绝不判通过**——没有可比对象就没有结论。
+
+> 落地见 `docs/nlaut-cecoder-judge-benchmark-gap-analysis.md` §5.3–5.6。
 
 ## Agent-as-Judge 判定（`agent_verify`，v0.4.0）
 

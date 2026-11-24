@@ -10,10 +10,10 @@
 from __future__ import annotations
 
 import ast
+import os
 import re
 import subprocess
 import tempfile
-from typing import Any
 
 
 def execute_test_cases(code: str, test_cases: list[dict], timeout: float = 5.0) -> dict:
@@ -31,9 +31,12 @@ def execute_test_cases(code: str, test_cases: list[dict], timeout: float = 5.0) 
     passed = 0
     failed = 0
 
-    for i, tc in enumerate(test_cases):
+    for tc in test_cases:
         input_args = tc.get("input", [])
         expected = tc.get("expected")
+        # temp_file 必须在 try 外初始化 —— 否则 finally 里引用未定义变量
+        # （NamedTemporaryFile 创建失败时会走到 finally，2026-11-15 实测踩坑）
+        temp_file: str | None = None
 
         try:
             # 创建临时文件执行代码
@@ -48,15 +51,15 @@ def execute_test_cases(code: str, test_cases: list[dict], timeout: float = 5.0) 
                 capture_output=True,
                 text=True,
                 timeout=timeout,
+                check=False,
             )
 
             if proc.returncode == 0:
                 actual = proc.stdout.strip()
                 # 尝试解析输出
                 try:
-                    import ast
                     actual_parsed = ast.literal_eval(actual)
-                except:
+                except (ValueError, SyntaxError):
                     actual_parsed = actual
 
                 # 比较结果
@@ -91,22 +94,22 @@ def execute_test_cases(code: str, test_cases: list[dict], timeout: float = 5.0) 
                 "passed": False,
                 "error": f"Timeout after {timeout}s",
             })
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — 单个用例失败不该中断整批
             failed += 1
             results.append({
                 "input": input_args,
                 "expected": expected,
                 "actual": None,
                 "passed": False,
-                "error": str(e),
+                "error": f"{type(e).__name__}: {e}",
             })
         finally:
             # 清理临时文件
-            try:
-                import os
-                os.unlink(temp_file)
-            except:
-                pass
+            if temp_file:
+                try:
+                    os.unlink(temp_file)
+                except OSError:
+                    pass
 
     return {
         "results": results,

@@ -16,7 +16,6 @@ from __future__ import annotations
 import json
 import os
 import time
-from typing import Any
 
 import httpx
 
@@ -26,10 +25,15 @@ from .protocol import Evidence, Question, Verdict
 class LLMJudge:
     """LLM-as-Judge 判定器"""
 
+    #: 置信度封顶（v0.5.0）。
+    #: 与 agent judge 同理 —— LLM 自报 High 也不该自动裁决。
+    #: 封顶后必定 < 0.9 的自动裁决线 → route() 转 human_review。
+    CONFIDENCE_CAP = 0.85
+
     def __init__(
         self,
-        base_url: str = None,
-        api_key: str = None,
+        base_url: str | None = None,
+        api_key: str | None = None,
         model: str = "deepseek-chat",
         timeout: float = 30.0,
     ):
@@ -95,12 +99,16 @@ judgement: false
                 )
                 response.raise_for_status()
                 result = response.json()
-        except Exception as e:
-            # 失败时返回降级 verdict
+        except Exception as e:  # noqa: BLE001 — 端点任何异常都应降级而非中断判定
+            # 失败时返回降级 verdict。
+            # v0.5.0 修正：原实现返回 value=0.0 + confidence=0.0 ——
+            # value=0.0 会被 route() 看成「明确判定失败」，而实际是
+            # 「压根没判成」。改为 value=0.5（不确定）+ degraded 标记，
+            # 配合 arbiter 的降级守卫 → 转人工，绝不误判为通过或失败。
             return Verdict(
                 engine="llm",
                 kind=question.kind,
-                value=0.0,
+                value=0.5,
                 confidence=0.0,
                 evidence_refs=[],
                 raw={"error": str(e), "degraded": True},
@@ -112,19 +120,23 @@ judgement: false
         # 解析判定结果
         judgement = self._parse_judgement(content)
         confidence = self._parse_confidence(content)
-        
+        # 强制封顶 —— 与 agent judge 同规则（v0.5.0）
+        capped = min(confidence, self.CONFIDENCE_CAP)
+
         elapsed = time.time() - start_time
-        
+
         return Verdict(
             engine="llm",
             kind=question.kind,
             value=1.0 if judgement else 0.0,
-            confidence=confidence,
+            confidence=capped,
             evidence_refs=[],
             raw={
                 "content": content,
                 "elapsed_s": elapsed,
                 "model": self.model,
+                "confidence_reported": confidence,
+                "confidence_capped": capped != confidence,
             },
         )
 
@@ -132,26 +144,25 @@ judgement: false
         """解析判定结果"""
         if not text:
             return False
-        
+
         lower = text.lower()
-        
+
         # 查找 judgement 标记
         for marker in ("judgement:", "judgement：", "判定:", "判定："):
             idx = lower.find(marker)
             if idx != -1:
                 seg = lower[idx + len(marker): idx + len(marker) + 20]
-                if any(p in seg for p in ("true", "yes", "通过", "成立", "是")):
-                    return True
+                # ⚠️ 必须先判否定 —— 「不通过」含「通过」，「不成立」含「成立」。
+                # 先判肯定会把否定结论读反（2026-11-15 实测踩坑）。
                 if any(p in seg for p in ("false", "no", "不通过", "不成立", "否")):
                     return False
-        
+                if any(p in seg for p in ("true", "yes", "通过", "成立", "是")):
+                    return True
+
         # 启发式
-        if any(p in lower[:300] for p in ("true", "yes", "通过", "成立")):
-            return True
         if any(p in lower[:300] for p in ("false", "no", "不通过", "不成立")):
             return False
-        
-        return False
+        return any(p in lower[:300] for p in ("true", "yes", "通过", "成立"))
 
     def _parse_confidence(self, text: str) -> float:
         """解析置信度"""

@@ -54,8 +54,351 @@ class DeterministicJudge:
             return self._judge_response_ttft_p95(evidence, question, ctx)
         if mode == "response_length":
             return self._judge_response_length(evidence, question, ctx)
+        if mode == "visual_regression":
+            return self._judge_visual_regression(evidence, question, ctx)
+        if mode == "process_state":
+            return self._judge_process_state(evidence, question, ctx)
 
         raise ValueError(f"DeterministicJudge 未知判定模式: {mode!r}")
+
+    def _judge_visual_regression(self, evidence: Evidence, question: Question, ctx: dict) -> Verdict:
+        """视觉回归：当前截图 vs 基线截图的 SSIM 比对（零 AI token）。
+
+        降级语义（关键）：基线缺失、opencv 不可用、图片无法解码 ——
+        一律返回 value=0.5 / confidence=0.5 → route() 转人工仲裁。
+        **绝不判通过**：没有可比对象就没有结论。
+        """
+        from .visual_regression import VisionUnavailableError, compare_images
+
+        baseline = str(ctx.get("baseline") or "")
+        min_similarity = float(ctx.get("min_similarity", 0.98))
+        require_same_size = bool(ctx.get("require_same_size", True))
+        current = evidence.screenshot or ""
+
+        if not current:
+            return Verdict(
+                engine=self.engine,
+                kind="noul",
+                value=0.5,
+                confidence=0.5,
+                evidence_refs=[evidence.case_id],
+                raw={
+                    "mode": "visual_regression",
+                    "degraded": "no_screenshot",
+                    "reason": "本次执行未产出截图，无法做视觉回归",
+                    "baseline": baseline,
+                },
+            )
+
+        try:
+            diff = compare_images(
+                baseline, current, diff_out=None
+            )
+        except VisionUnavailableError as e:
+            return Verdict(
+                engine=self.engine,
+                kind="noul",
+                value=0.5,
+                confidence=0.5,
+                evidence_refs=[evidence.case_id],
+                raw={
+                    "mode": "visual_regression",
+                    "degraded": "vision_unavailable",
+                    "reason": str(e),
+                    "baseline": baseline,
+                    "current": current,
+                },
+            )
+
+        size_ok = diff.size_matched or not require_same_size
+        passed = diff.similarity >= min_similarity and size_ok
+        raw: dict = {
+            "mode": "visual_regression",
+            "similarity": round(diff.similarity, 6),
+            "min_similarity": min_similarity,
+            "size_matched": diff.size_matched,
+            "baseline_size": diff.baseline_size,
+            "current_size": diff.current_size,
+            "baseline": baseline,
+            "current": current,
+        }
+        if not diff.size_matched:
+            raw["reason"] = (
+                "两图尺寸不一致，分数是 resize 后的结果，"
+                "不能直接作为「界面没变」的证据"
+            )
+        return Verdict(
+            engine=self.engine,
+            kind="noul",
+            value=1.0 if passed else 0.0,
+            confidence=1.0,
+            evidence_refs=[evidence.case_id],
+            raw=raw,
+        )
+
+    def _judge_process_state(self, evidence: Evidence, question: Question, ctx: dict) -> Verdict:
+        """工序状态机断言：读工序工作台快照，按规则集判定。零 AI token。
+
+        降级语义：工序域目录不存在 / 规则名未知 → value=0.5, confidence=0.5
+        → route() 转人工仲裁。**绝不判通过**：没有可比对象就没有结论。
+        """
+        from .process_truth import RULES, ProcessTruthSource
+
+        rule = str(ctx.get("rule") or "")
+        expect = str(ctx.get("expect") or "none")
+        root = str(ctx.get("root") or "~/.cecoder/engineering-workbench")
+        from_probe = ctx.get("from_probe")
+
+        # --- 探针模式：基于 process_probe 步骤采集的结果判定 ---
+        if from_probe:
+            return self._judge_process_probe(evidence, from_probe, expect)
+
+        if rule not in RULES:
+            return Verdict(
+                engine=self.engine,
+                kind="noul",
+                value=0.5,
+                confidence=0.5,
+                evidence_refs=[evidence.case_id],
+                raw={
+                    "mode": "process_state",
+                    "degraded": "unknown_rule",
+                    "reason": f"未知规则: {rule!r}（可用: {', '.join(sorted(RULES))}）",
+                },
+            )
+
+        try:
+            ts = ProcessTruthSource(root)
+            if not (ts.root / "tasks").is_dir():
+                return Verdict(
+                    engine=self.engine,
+                    kind="noul",
+                    value=0.5,
+                    confidence=0.5,
+                    evidence_refs=[evidence.case_id],
+                    raw={
+                        "mode": "process_state",
+                        "degraded": "process_dir_not_found",
+                        "reason": f"工序工作台目录不存在: {ts.root / 'tasks'}",
+                        "rule": rule,
+                    },
+                )
+            result = ts.check_rule(
+                rule,
+                task_id=ctx.get("task_id"),
+                node=ctx.get("node"),
+                exclude_legacy=bool(ctx.get("exclude_legacy", True)),
+                exclude_flat_layout=bool(ctx.get("exclude_flat_layout", True)),
+                min_severity=str(ctx.get("min_severity", "medium")),
+            )
+        except KeyError as e:
+            return Verdict(
+                engine=self.engine,
+                kind="noul",
+                value=0.5,
+                confidence=0.5,
+                evidence_refs=[evidence.case_id],
+                raw={
+                    "mode": "process_state",
+                    "degraded": "unknown_rule",
+                    "reason": str(e),
+                    "rule": rule,
+                },
+            )
+        except OSError as e:
+            return Verdict(
+                engine=self.engine,
+                kind="noul",
+                value=0.5,
+                confidence=0.5,
+                evidence_refs=[evidence.case_id],
+                raw={
+                    "mode": "process_state",
+                    "degraded": "process_snapshot_failed",
+                    "reason": f"{type(e).__name__}: {e}",
+                    "rule": rule,
+                },
+            )
+
+        count = result["violation_count"]
+        # expect=none：无违规即通过；expect=any：有违规即通过
+        passed = (count == 0) if expect == "none" else (count > 0)
+        raw = {
+            "mode": "process_state",
+            "rule": rule,
+            "rule_desc": result["rule_desc"],
+            "expect": expect,
+            "violation_count": count,
+            "severity": result["severity"],
+            "violations": result["violations"][:20],
+        }
+        return Verdict(
+            engine=self.engine,
+            kind="noul",
+            value=1.0 if passed else 0.0,
+            confidence=1.0,
+            evidence_refs=[evidence.case_id],
+            raw=raw,
+        )
+
+    def _judge_process_probe(self, evidence: Evidence, spec: str, expect: str) -> Verdict:
+        """基于 `process_probe` 步骤采集结果的判定。
+
+        spec 语法:
+        - ``status_eq:<值>``      状态等于该值
+        - ``status_in:<v1,v2>``   状态在集合内
+        - ``index_eq:<n>``        序号等于 n
+        - ``output_count_ge:<n>`` 产物数 ≥ n
+        - ``has_validation_ok``   validation_ok 为真
+
+        这是「执行一个动作 → 观察状态迁移」的判定入口。
+        探针缺失 → 降级转人工（绝不判通过）。
+        """
+        spec = str(spec).strip()
+        probe = evidence.process_probe
+        if not probe:
+            return Verdict(
+                engine=self.engine,
+                kind="noul",
+                value=0.5,
+                confidence=0.5,
+                evidence_refs=[evidence.case_id],
+                raw={
+                    "mode": "process_state",
+                    "degraded": "no_probe_result",
+                    "reason": "未采集到 process_probe 结果（用例里缺 process_probe 步骤？）",
+                    "spec": spec,
+                },
+            )
+        if probe.get("error"):
+            return Verdict(
+                engine=self.engine,
+                kind="noul",
+                value=0.5,
+                confidence=0.5,
+                evidence_refs=[evidence.case_id],
+                raw={
+                    "mode": "process_state",
+                    "degraded": "probe_error",
+                    "reason": str(probe.get("error")),
+                    "spec": spec,
+                },
+            )
+        if probe.get("found") is False:
+            return Verdict(
+                engine=self.engine,
+                kind="noul",
+                value=0.5,
+                confidence=0.5,
+                evidence_refs=[evidence.case_id],
+                raw={
+                    "mode": "process_state",
+                    "degraded": "probe_node_not_found",
+                    "reason": (
+                        f"探针未找到节点: task={probe.get('task_id')} node={probe.get('node')}"
+                    ),
+                    "spec": spec,
+                },
+            )
+
+        op, _, arg = spec.partition(":")
+        op = op.strip()
+        arg = arg.strip()
+        actual = probe.get("status")
+        matched = False
+
+        if op == "status_eq":
+            matched = actual == arg
+        elif op == "status_in":
+            allowed = {x.strip() for x in arg.split(",") if x.strip()}
+            matched = actual in allowed
+        elif op == "index_eq":
+            try:
+                matched = int(probe.get("index")) == int(arg)  # type: ignore[arg-type]
+            except (TypeError, ValueError):
+                matched = False
+        elif op == "output_count_ge":
+            try:
+                matched = int(probe.get("output_count") or 0) >= int(arg)
+            except (TypeError, ValueError):
+                matched = False
+        elif op == "has_validation_ok":
+            matched = probe.get("validation_ok") is True
+        elif op == "transition":
+            # 迁移判定：status 从 <from> 变为 <to>
+            # 需要用例里有 ≥2 次 process_probe（前后各一次）
+            probes = evidence.process_probes or []
+            seq = [p.get("status") for p in probes
+                   if isinstance(p, dict) and p.get("probe") == "node"]
+            if len(seq) < 2:
+                return Verdict(
+                    engine=self.engine,
+                    kind="noul",
+                    value=0.5,
+                    confidence=0.5,
+                    evidence_refs=[evidence.case_id],
+                    raw={
+                        "mode": "process_state",
+                        "degraded": "not_enough_probes",
+                        "reason": (
+                            f"迁移判定需要 ≥2 次 process_probe，实际 {len(seq)} 次"
+                            f"（序列: {seq}）"
+                        ),
+                        "spec": spec,
+                    },
+                )
+            src, _, dst = arg.partition(">")
+            src = src.strip()
+            dst = dst.strip()
+            matched = (seq[-2] == src and seq[-1] == dst)
+            return Verdict(
+                engine=self.engine,
+                kind="noul",
+                value=1.0 if (matched if expect == "none" else not matched) else 0.0,
+                confidence=1.0,
+                evidence_refs=[evidence.case_id],
+                raw={
+                    "mode": "process_state",
+                    "from_probe": spec,
+                    "expect": expect,
+                    "matched": matched,
+                    "status_sequence": seq,
+                    "transition": f"{seq[-2]}→{seq[-1]}" if len(seq) >= 2 else None,
+                },
+            )
+        else:
+            return Verdict(
+                engine=self.engine,
+                kind="noul",
+                value=0.5,
+                confidence=0.5,
+                evidence_refs=[evidence.case_id],
+                raw={
+                    "mode": "process_state",
+                    "degraded": "unknown_probe_spec",
+                    "reason": (
+                        f"未知探针判定式: {spec!r}"
+                        "（可用: status_eq / status_in / index_eq / output_count_ge / has_validation_ok）"
+                    ),
+                    "spec": spec,
+                },
+            )
+
+        passed = matched if expect == "none" else not matched
+        return Verdict(
+            engine=self.engine,
+            kind="noul",
+            value=1.0 if passed else 0.0,
+            confidence=1.0,
+            evidence_refs=[evidence.case_id],
+            raw={
+                "mode": "process_state",
+                "from_probe": spec,
+                "expect": expect,
+                "matched": matched,
+                "probe": probe,
+            },
+        )
 
     # --- DOM 模式（原有，向后兼容）---
 

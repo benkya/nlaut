@@ -1,8 +1,20 @@
+# 真值源注册表（v0.5.0 接线）
+#
+# 声明式配置：runner 每条用例执行后读本文件，把声明的真值源快照注入
+# Evidence.db_state，供只读拼 prompt 的判定器（llm_verify 等）取证。
+#
+# 只读约束：只允许 file / http(GET) / sql(SELECT) 三种读操作。
+#
+# 路径支持 `~`（会自动展开）。
+design_tasks:
+  description: 设计任务文件，包含所有设计任务记录
+  path: ~/.cecoder/design-task.json
+  type: file
 design_task_attachments:
   description: 设计任务附件目录
   path: ~/.dsh/design-task-attachments
   type: file
-design_tasks:
-  description: 设计任务文件，包含所有设计任务记录
-  path: ~/.gienx/design-task.json
+dev_tasks:
+  description: 开发任务文件
+  path: ~/.cecoder/dev-task.json
   type: file

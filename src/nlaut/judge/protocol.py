@@ -43,6 +43,17 @@ class Evidence(BaseModel):
     # --- v0.2.7 P95 TTFT 维度（v0.2.7 TASK-001）---
     ttft_samples: list[float] = Field(default_factory=list)  # 多次采样的 TTFT 列表
     ttft_p95_ms: float | None = None  # P95 算子输出的 P95 值（毫秒）
+    # --- v0.5.0 工序域探针（process_probe 步骤注入）---
+    process_probe: dict | None = None
+    """工序域探针结果：{probe, task_id, node, status, ...}。
+
+    由 `process_probe` 步骤在动作执行后采集，让「执行一个动作 → 观察状态迁移」
+    成为可编排的步骤序列（而不只是事后扫静态快照）。"""
+    process_probes: list | None = None
+    """多个探针的结果序列（用例里有多次 process_probe 时）。
+
+    顺序即时间顺序 —— 可用于判定「迁移」而非仅「状态」。
+    """
 
 
 class Question(BaseModel):

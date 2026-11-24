@@ -31,6 +31,7 @@ ev = ts.snapshot("task")          # -> TruthEvidence
 from __future__ import annotations
 
 import json
+import os
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -247,6 +248,9 @@ class LogTruthSource:
                 source="file://",
                 error=f"no_path_configured: {key}",
             )
+        # 展开 ~ —— 注册表里写 `~/.cecoder/xxx` 是常规写法，
+        # 不展开会导致 FileNotFoundError（2026-11-15 实测踩坑）
+        path = os.path.expanduser(path)
         try:
             text = Path(path).read_text(encoding="utf-8", errors="replace")
         except OSError as e:

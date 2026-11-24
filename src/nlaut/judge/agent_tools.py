@@ -88,6 +88,85 @@ READ_FILE_TOOL: dict = {
     },
 }
 
+LIST_DIR_TOOL: dict = {
+    "type": "function",
+    "function": {
+        "name": "list_dir",
+        "description": (
+            "列出目录下的文件与子目录（只读）。"
+            "不知道有哪些文件时先列目录，别猜文件名——"
+            "read_file 不能读目录，猜错只会得到 file_not_found。"
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "目录路径"},
+                "max_entries": {"type": "integer", "description": "最多返回条目数，默认 200"},
+            },
+            "required": ["path"],
+        },
+    },
+}
+
+PROCESS_SNAPSHOT_TOOL: dict = {
+    "type": "function",
+    "function": {
+        "name": "process_snapshot",
+        "description": (
+            "取工序工作台的全量快照（状态分布 + 已判定的违规清单），一次跨所有任务聚合。"
+            "问「工序链有没有异常」「门禁有没有放行空产物」「有多少条完整链」这类"
+            "跨任务问题时用这个，别挨个读 task JSON 再自己汇总。"
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "key": {
+                    "type": "string",
+                    "description": (
+                        "取什么: violations(默认，违规清单+统计) / nodes(全量节点) / tasks(任务清单) / stats(仅统计)"
+                    ),
+                },
+                "root": {
+                    "type": "string",
+                    "description": "工序工作台根目录，默认 ~/.cecoder/engineering-workbench",
+                },
+            },
+            "required": [],
+        },
+    },
+}
+
+QUERY_JSON_TOOL: dict = {
+    "type": "function",
+    "function": {
+        "name": "query_json",
+        "description": (
+            "读 JSON 文件并按条件筛选其中的元素（只读）。"
+            "大 JSON（如几百 KB 的任务快照）用 read_file 读不完，"
+            "必须用本工具按字段筛选——例如「取出所有 definitionId 等于 X 的节点」。"
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "JSON 文件路径"},
+                "array_path": {
+                    "type": "string",
+                    "description": "数组在 JSON 中的路径，如 nodes 或 data.items；留空则自动探测顶层数组",
+                },
+                "field": {"type": "string", "description": "筛选字段名，如 definitionId"},
+                "equals": {"type": "string", "description": "筛选值（等值匹配）"},
+                "max_items": {"type": "integer", "description": "最多返回条目数，默认 20"},
+                "fields": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "只返回这些字段（如 status/definitionId/outputs）；留空返回全部",
+                },
+            },
+            "required": ["path"],
+        },
+    },
+}
+
 INSPECT_TRACE_TOOL: dict = {
     "type": "function",
     "function": {
@@ -143,6 +222,9 @@ DEFAULT_TOOLS: list[dict] = [
     HTTP_PROBE_TOOL,
     READ_LOG_TOOL,
     READ_FILE_TOOL,
+    LIST_DIR_TOOL,
+    QUERY_JSON_TOOL,
+    PROCESS_SNAPSHOT_TOOL,
     INSPECT_TRACE_TOOL,
     LIST_REGISTRY_TOOL,
     LOCATE_OBJECT_TOOL,
@@ -338,6 +420,139 @@ def build_tool_impls(
             return {"error": "file_reader_not_configured", "path": path}
         return file_reader(path, max_bytes)
 
+    def _list_dir(args: dict) -> Any:
+        """列出目录条目（只读）。agent 不知道有哪些文件时先列目录，别猜文件名。"""
+        path = args.get("path", "")
+        max_entries = int(args.get("max_entries") or 200)
+        if not pol.path_allowed(path):
+            return pol.record_violation(
+                "list_dir",
+                path,
+                f"路径不在允许根目录 {sorted(pol.allowed_path_roots)}",
+            )
+        try:
+            expanded = os.path.expanduser(path)
+            names = sorted(os.listdir(expanded))
+        except FileNotFoundError:
+            return {"error": "dir_not_found", "path": path}
+        except OSError as e:
+            return {"error": "dir_unreadable", "path": path, "detail": f"{type(e).__name__}: {e}"}
+        entries = []
+        for name in names[:max_entries]:
+            full = os.path.join(expanded, name)
+            try:
+                is_dir = os.path.isdir(full)
+            except OSError:
+                is_dir = False
+            entries.append({"name": name, "is_dir": is_dir})
+        return {
+            "path": path,
+            "total": len(names),
+            "returned": len(entries),
+            "truncated": len(names) > max_entries,
+            "entries": entries,
+        }
+
+    def _query_json(args: dict) -> Any:
+        """读 JSON 文件并按条件筛选元素（只读）。
+
+        大 JSON 用 read_file 读不完（默认 8000 字节，几百 KB 的任务快照里
+        目标节点可能在文件末尾），必须按字段筛选定位。
+        """
+        path = args.get("path", "")
+        if not pol.path_allowed(path):
+            return pol.record_violation(
+                "query_json",
+                path,
+                f"路径不在允许根目录 {sorted(pol.allowed_path_roots)}",
+            )
+        try:
+            expanded = os.path.expanduser(path)
+            with open(expanded, encoding="utf-8", errors="replace") as f:
+                data = json.load(f)
+        except FileNotFoundError:
+            return {"error": "file_not_found", "path": path}
+        except json.JSONDecodeError as e:
+            return {"error": "invalid_json", "path": path, "detail": str(e)}
+        except OSError as e:
+            return {"error": "file_unreadable", "path": path, "detail": f"{type(e).__name__}: {e}"}
+
+        # 定位数组：显式 array_path 优先，否则自动探测顶层数组
+        array_path = str(args.get("array_path") or "").strip()
+        if array_path:
+            cur = data
+            for part in array_path.split("."):
+                if not part:
+                    continue
+                if isinstance(cur, dict) and part in cur:
+                    cur = cur[part]
+                else:
+                    return {"error": "array_path_not_found", "array_path": array_path}
+            if not isinstance(cur, list):
+                return {"error": "array_path_not_a_list", "array_path": array_path}
+            items = cur
+        else:
+            items = data if isinstance(data, list) else None
+            if items is None:
+                found = None
+                for key, val in data.items() if isinstance(data, dict) else []:
+                    if isinstance(val, list):
+                        found = val
+                        array_path = key
+                        break
+                if found is None:
+                    return {"error": "no_array_found", "path": path, "top_keys": sorted(data)[:40]
+                            if isinstance(data, dict) else None}
+                items = found
+
+        total = len(items)
+        field = str(args.get("field") or "").strip()
+        equals = args.get("equals")
+        if field and equals is not None:
+            items = [it for it in items if isinstance(it, dict) and str(it.get(field)) == str(equals)]
+
+        max_items = int(args.get("max_items") or 20)
+        picked = items[:max_items]
+        fields = args.get("fields") or []
+        if fields:
+            picked = [
+                {k: it.get(k) for k in fields if k in it} if isinstance(it, dict) else it
+                for it in picked
+            ]
+        return {
+            "path": path,
+            "array_path": array_path,
+            "total_in_array": total,
+            "matched": len(items),
+            "returned": len(picked),
+            "truncated": len(items) > max_items,
+            "items": picked,
+        }
+
+    def _process_snapshot(args: dict) -> Any:
+        """工序域快照：一次拿到全量工序状态 + 已判定的违规清单。
+
+        不接受路径参数——只读固定的工序工作台目录，避免绕过 ToolPolicy 的路径白名单。
+        跨任务聚合（36 个 task JSON）在这里一次算完，
+        避免 agent 挨个读文件再自行汇总（实测 10~17 次工具调用 + 模型推理）。
+        """
+        from .process_truth import ProcessTruthSource
+
+        root = args.get("root") or "~/.cecoder/engineering-workbench"
+        try:
+            ts = ProcessTruthSource(root)
+            snap = ts.collect()
+        except Exception as e:  # noqa: BLE001 — 取证失败不当成判定失败
+            return {"error": "process_snapshot_failed", "detail": f"{type(e).__name__}: {e}"}
+        key = str(args.get("key") or "violations")
+        if key == "nodes":
+            return {"nodes": [n.to_dict() for n in snap.nodes], "stats": snap.stats}
+        if key == "tasks":
+            return {"tasks": snap.tasks, "stats": snap.stats}
+        if key == "stats":
+            return snap.stats
+        return {"violations": snap.violations, "stats": snap.stats}
+
     def _inspect_trace(args: dict) -> Any:
         start = int(args.get("start") or 0)
         count = int(args.get("count") or 20)
@@ -398,6 +613,9 @@ def build_tool_impls(
     impls["http_probe"] = _http_probe
     impls["read_log"] = _read_log
     impls["read_file"] = _read_file
+    impls["list_dir"] = _list_dir
+    impls["query_json"] = _query_json
+    impls["process_snapshot"] = _process_snapshot
     impls["inspect_trace"] = _inspect_trace
     impls["list_registry"] = _list_registry
     impls["locate_object"] = _locate_object
@@ -417,9 +635,15 @@ def default_log_reader(path: str, tail_lines: int) -> str:
 
 
 def default_file_reader(path: str, max_bytes: int) -> str:
-    """默认文件读取实现：读文件前 max_bytes 字节。"""
+    """默认文件读取实现：读文件前 max_bytes 字节。
+
+    展开 `~` 到用户家目录：agent 取证时天然会写 `~/.cecoder/...`，
+    不展开会让这类路径必然 file_not_found（2026-11-13 实测踩到，
+    17 次工具调用里 1 次用了 `~` 形式，全部失败）。
+    """
     try:
-        with open(path, encoding="utf-8", errors="replace") as f:
+        expanded = os.path.expanduser(path)
+        with open(expanded, encoding="utf-8", errors="replace") as f:
             return f.read(max_bytes)
     except FileNotFoundError:
         return f"[file_not_found] {path}"

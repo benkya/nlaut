@@ -76,6 +76,28 @@ class StepWaitText(_StepBase):
     timeout_ms: int = Field(default=15000, ge=100, le=60000)
 
 
+class StepProcessProbe(BaseModel):
+    """工序域探针步骤：在动作执行后采集工序状态快照。
+
+    让「执行一个动作 → 观察状态迁移」成为可编排的步骤序列，
+    而不只是事后扫静态快照。这是真正的状态机测试能力。
+
+    采集结果写入 Evidence.process_probe，后续断言可据此判定状态迁移。
+
+    v0.5.0 新增。
+    """
+    action: Literal["process_probe"]
+    probe: Literal["snapshot", "node", "chain", "violations"] = "node"
+    """采什么: node=单个节点状态（默认）; chain=整条链状态序列;
+    snapshot=全量统计; violations=违规清单。"""
+    task_id: str | None = None
+    """限定任务；None = 全部任务（probe=chain/snapshot/violations 时用）。"""
+    node: str | None = None
+    """限定节点（instanceId 或 definitionId）。probe=node 时必填。"""
+    root: str = "~/.cecoder/engineering-workbench"
+    """工序工作台根目录。"""
+
+
 # --- API 通道步骤（v0.2.0 新增）---
 
 
@@ -109,7 +131,7 @@ class StepApiStream(BaseModel):
 
 Step = Annotated[
     StepNav | StepFill | StepClick | StepSelectOption | StepWaitVisible | StepWaitText
-    | StepApiCall | StepApiFollowup | StepApiToolCall | StepApiStream,
+    | StepProcessProbe | StepApiCall | StepApiFollowup | StepApiToolCall | StepApiStream,
     Field(discriminator="action"),
 ]
 
@@ -280,6 +302,94 @@ class AssertResponseTtftP95(BaseModel):
     judge: Literal["deterministic"] = "deterministic"
 
 
+class AssertVisualRegression(BaseModel):
+    """视觉回归断言：当前截图 vs 基线截图的 SSIM 像素级比对。
+
+    与 `visual_state`（VLM）的分工——两者不重复：
+    - `visual_state` 判「语义对不对」（文字写错了但位置没变 → VLM 能发现）
+    - 本断言判「像素变了没」（布局位移 / 样式回归 / 元素错位 → VLM 常漏）
+
+    零 AI token：纯 OpenCV 计算 SSIM（Wang et al. 2004）。
+
+    基线缺失时**不判通过**，而是降级为「不确定」转人工 —— 没有基线就不该有结论。
+    v0.5.0 新增。
+    """
+    kind: Literal["visual_regression"]
+    baseline: str = Field(min_length=1)  # 基线截图路径（相对仓库根或绝对路径）
+    min_similarity: float = Field(default=0.98, ge=0.0, le=1.0)
+    """SSIM 分数下限。低于此值判不通过。默认 0.98 —— 像素级回归必须严。"""
+    require_same_size: bool = True
+    """尺寸不一致时是否直接判不通过。默认 True —— resize 会掩盖布局位移。"""
+    judge: Literal["deterministic"] = "deterministic"
+
+
+class AssertProcessState(BaseModel):
+    """工序状态机断言：读工序工作台快照，按声明的规则集判定。零 AI token。
+
+    与 `agent_verify` 的分工——两者不可混：
+    - 本断言判「结构对不对」（状态、门禁、链序、迁移合法性）——纯比对，确定性
+    - `agent_verify` 判「语义对不对」（如「这份交付报告的血缘链是否真覆盖了需求→设计→程序」）
+
+    **为什么不下沉成 agent 的 objective**：那是让模型推理算术，
+    违反「能用 1° 绝不用 AI」。状态机判定是纯结构比对，必须走确定性代码。
+
+    规则名对应 `nlaut.judge.process_truth` 里的规则（见 `RULES`）。
+    v0.5.0 新增。
+    """
+    kind: Literal["process_state"]
+    rule: str = ""
+    """规则名，如 done_without_outputs / chain_order / single_current_node。
+
+    与 ``from_probe`` 二选一：填了 from_probe 就按探针判，不查规则。"""
+    expect: Literal["none", "any"] = "none"
+    """期望: none=条件必须成立（无违规即通过）; any=条件必须不成立（反守门员）。"""
+    task_id: str | None = None
+    """限定任务；None = 全部任务。"""
+    node: str | None = None
+    """限定节点（instanceId 或 definitionId）；None = 全部。"""
+    exclude_legacy: bool = True
+    """排除 legacy 迁移任务（迁移路径天然无 run/gates/outputs）。"""
+    exclude_flat_layout: bool = True
+    """排除平铺布局（多工序共享任务根目录，产物归属天然错位）。"""
+    min_severity: Literal["high", "medium", "low", "all"] = "medium"
+    """只关心不低于该严重度的违规（low 是观察项，默认不阻断）。"""
+    from_probe: str | None = None
+    """改为基于 `process_probe` 步骤采集的结果判定，而非全量规则查。
+
+    可选值:
+    - ``status_eq:<值>`` —— 探针节点状态等于该值（如 status_eq:running）
+    - ``status_in:<v1,v2>`` —— 状态在集合内
+    - ``index_eq:<n>`` —— 探针节点序号等于 n
+    - ``output_count_ge:<n>`` —— 产物数 ≥ n
+    - ``has_validation_ok`` —— 探针节点的 validation_ok 为真
+
+    与 ``rule`` 二选一：填了 from_probe 就按探针判，不查规则。"""
+    judge: Literal["deterministic"] = "deterministic"
+
+
+class AssertLlmVerify(BaseModel):
+    """LLM-as-Judge 判定：证据已完整时的一轮 LLM 判定。
+
+    与 `agent_verify` 的本质差异：
+    - **本断言**：judge 只能读调用方拼进 prompt 的证据（Evidence.db_state /
+      llm_response），无法自主调工具取证 —— 一轮调用，无多轮循环
+    - `agent_verify`：judge 自己调只读工具取证，多轮循环
+
+    适用：证据已经完整、只需要一次语义判断的场景，以及作为
+    `agent_verify` 的**对照基线**（同样证据下谁判得更准）。
+
+    降级：端点不可用 / 无 key / 响应无法解析 → `confidence=0` + `raw.degraded`，
+    **绝不误判为通过**。
+
+    v0.5.0 新增（原 llm_judge.py 是孤儿模块，生产路径走不到）。
+    """
+    kind: Literal["llm_verify"]
+    question: str = Field(min_length=1)
+    """判定问题，如「系统自述已完成，实际数据里是否真的有记录？」"""
+    threshold: float = Field(default=0.9, ge=0.0, le=1.0)
+    judge: Literal["llm"] = "llm"
+
+
 class AssertAgentVerify(BaseModel):
     """Agent-as-Judge 断言：judge 自主取证后判定目标是否成立。
 
@@ -306,7 +416,7 @@ Assertion = Annotated[
     | AssertResponseExact | AssertResponseContains | AssertResponseNotContains
     | AssertResponseJsonSchema | AssertToolCallParams | AssertResponseTime
     | AssertResponseTtft | AssertResponseLength | AssertResponseTtftP95
-    | AssertAgentVerify,
+    | AssertVisualRegression | AssertProcessState | AssertLlmVerify | AssertAgentVerify,
     Field(discriminator="kind"),
 ]
 

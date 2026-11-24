@@ -1,0 +1,34 @@
+[
+  {
+    "id": "calibrate_001",
+    "category": "real_pass",
+    "gold": true,
+    "derived": true,
+    "reason": "机械推导：real_pass 类样本 db_state 非空",
+    "agrees_with_gold": true
+  },
+  {
+    "id": "calibrate_002",
+    "category": "real_pass",
+    "gold": true,
+    "derived": true,
+    "reason": "机械推导：real_pass 类样本 db_state 非空",
+    "agrees_with_gold": true
+  },
+  {
+    "id": "calibrate_003",
+    "category": "real_fail",
+    "gold": false,
+    "derived": false,
+    "reason": "机械推导：real_fail 类样本 db_state 为空",
+    "agrees_with_gold": true
+  },
+  {
+    "id": "calibrate_004",
+    "category": "real_fail",
+    "gold": false,
+    "derived": false,
+    "reason": "机械推导：real_fail 类样本 db_state 为空",
+    "agrees_with_gold": true
+  }
+]

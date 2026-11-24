@@ -9,6 +9,7 @@ import os
 from .arbiter import RouteDecision, route
 from .deterministic import DeterministicJudge
 from .laya import LayaJudge
+from .llm_judge import LLMJudge
 from .protocol import (
     Evidence,
     Judge,
@@ -23,6 +24,27 @@ from .vlm_mlx import MlxVlmJudge
 register_judge("deterministic", DeterministicJudge())
 register_judge("mlx-vlm", MlxVlmJudge())  # 模型懒加载，import 零开销
 register_judge("laya", LayaJudge())  # 同上：首次 judge 时才加载权重
+
+
+def _build_llm_judge() -> Judge:
+    """构造 LLM-as-Judge 引擎（工厂模式）。
+
+    端点 / key 从环境变量读，构造失败**抛异常**而不是静默返回 None ——
+    静默降级会让「LLM judge 不可用」被误读成「LLM judge 判定通过」。
+
+    环境变量：
+    - `NLaut_LLM_JUDGE_URL`  端点（默认取 DEEPSEEK_V4_FLASH_URL）
+    - `NLaut_LLM_JUDGE_KEY`  key（默认取 DEEPSEEK_V4_FLASH_KEY）
+    - `NLaut_LLM_JUDGE_MODEL` 模型（默认 deepseek-chat）
+    """
+    return LLMJudge(
+        base_url=os.environ.get("NLaut_LLM_JUDGE_URL"),
+        api_key=os.environ.get("NLaut_LLM_JUDGE_KEY"),
+        model=os.environ.get("NLaut_LLM_JUDGE_MODEL", "deepseek-chat"),
+    )
+
+
+register_judge_factory("llm", _build_llm_judge)
 
 
 def _build_agent_judge() -> Judge:
