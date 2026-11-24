@@ -62,7 +62,7 @@ assertions:
 | --- | --- | --- | --- |
 | `nav` | path | web/electron | 导航（web）/窗口切换（electron） |
 | `fill` | selector, value | web | 填充；`$var` 引用 data_ref 数据集字段 |
-| `upload` | selector=`input[type=file]`, files[], timeout_ms=10000 | web/electron | **文件上传**（v0.5.0 新增）：`set_input_files` 注入本地文件；`files` 支持 `~` 与 `$var`；**文件不存在直接报错不静默跳过**；多文件需 input 带 `multiple` |
+| `upload` | selector=`input[type=file]` / trigger?, files[], timeout_ms=10000 | web/electron | **文件上传**（v0.5.0 新增）：`files` 支持 `~` 与 `$var`；**文件不存在直接报错不静默跳过**；多文件需 input 带 `multiple`；页面有多个隐藏 input 时用 `trigger` |
 | `click` | selector | web | 点击 |
 | `select_option` | selector, value | web | 下拉选择 |
 | `wait_visible` | selector, timeout_ms=5000 | web | 等待元素可见（禁止 sleep） |
@@ -92,9 +92,32 @@ assertions:
 - 多文件必须 input 带 `multiple`，否则 Playwright 报错——如实暴露而非吞掉。
 - 需要「传不传都行」时用 `optional: true`，走统一的 optional 降级通道。
 
-**原生对话框**：`set_input_files` 不触发系统文件选择框，直接塞 `FileList`。
-若页面用 `showOpenFilePicker` 之类的 API（非 input 元素），本步骤不适用，
-需改用 CDP `DOM.setFileInputFiles` 或 `page.on("filechooser")`。
+**两种触发方式（真机实测得出）**：
+
+| 模式 | 字段 | 适用 |
+| --- | --- | --- |
+| 直连 input | `selector` | file input 唯一/可精确选中（如新建任务弹框附件区） |
+| 按钮触发 | `trigger` | 上传按钮触发**隐藏** input，且页面有多个同名 input |
+
+```yaml
+# trigger 模式：CeCoder 工序节点「补充本地材料」的真实形态
+- action: upload
+  trigger: 'button:has-text("上传附件")'
+  files:
+    - data/cecoder_assets/变更资产清单.yaml
+```
+
+**为什么需要 trigger**（CeCoder.app 2026-11-24 实测）：单页同时存在 **3 个
+`input[type=file]`**（新建任务弹框 / 工序节点「补充本地材料」/ 会话输入框），
+全部 `display:none`。此时 `selector: 'input[type=file]'` 命中多个 →
+Playwright strict mode 报错。框架对此**明确报错并提示改用 trigger**，不猜第几个。
+
+`trigger` 走 `expect_file_chooser`：点按钮 → 捕获文件选择器 → `set_files`。
+按钮点了没弹选择器 → `RuntimeError`，不静默当成功。
+
+**原生对话框边界**：`set_input_files` 不弹系统文件框，直接塞 `FileList`。
+若页面用 `showOpenFilePicker`（非 input 元素），本步骤不适用，
+需改用 CDP `DOM.setFileInputFiles`。
 
 ## 断言类型（assertions）
 

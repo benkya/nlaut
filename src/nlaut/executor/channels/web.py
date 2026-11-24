@@ -250,9 +250,13 @@ def _run_step(page, step, ir, idx: int, data: dict[str, str], base_url: str,
 
 def _do_upload(page, step, ir, idx: int, data: dict[str, str],
                logger: Callable[[str], None]) -> None:
-    """upload 步骤的通道无关实现（web / electron 复用，set_input_files 同 API）。
+    """upload 步骤的通道无关实现（web / electron 复用）。
 
-    语义约束见 StepUpload：缺文件抛错不静默；多文件需 input 带 multiple。
+    两种模式（见 StepUpload）：
+    - trigger 模式：点按钮 → expect_file_chooser → set_files（隐藏 input 场景）
+    - selector 模式：set_input_files 直连（input 可精确选中时）
+
+    语义约束：缺文件抛 FileNotFoundError 不静默；selector 命中多个报错不猜。
     """
     sel = resolve_vars(step.selector, data)
     files = [Path(resolve_vars(f, data)).expanduser() for f in step.files]
@@ -260,7 +264,34 @@ def _do_upload(page, step, ir, idx: int, data: dict[str, str],
     if missing:
         # 缺资产不静默跳过：假装传了 = 伪造执行结果（见 StepUpload 语义约束）
         raise FileNotFoundError(f"upload 步骤{idx} 待上传文件不存在: {missing}")
-    page.set_input_files(
-        sel, files=[str(f) for f in files], timeout=step.timeout_ms
-    )
+    paths = [str(f) for f in files]
+
+    trigger = getattr(step, "trigger", None)
+    if trigger:
+        trig = resolve_vars(trigger, data)
+        try:
+            with page.expect_file_chooser(timeout=step.timeout_ms) as fc_info:
+                page.click(trig)
+        except Exception as e:
+            raise RuntimeError(
+                f"upload 步骤{idx} 点击 trigger {trig!r} 未触发文件选择器: "
+                f"{type(e).__name__}: {e}"
+            ) from e
+        fc_info.value.set_files(paths)
+        logger(f"[{ir.id}] 步骤{idx} upload（trigger {trig}）← {[f.name for f in files]}")
+        return
+
+    # 直连模式：先数一遍命中数，多个就明确报错（Playwright strict 报错信息不如这里清楚）
+    hit = page.locator(sel).count()
+    if hit == 0:
+        raise RuntimeError(
+            f"upload 步骤{idx} selector {sel!r} 未命中任何元素；"
+            f"若上传入口是按钮触发的隐藏 input，请改用 trigger 字段"
+        )
+    if hit > 1:
+        raise RuntimeError(
+            f"upload 步骤{idx} selector {sel!r} 命中 {hit} 个元素，无法确定目标；"
+            f"请用更精确的 selector，或改用 trigger: '<上传按钮选择器>'"
+        )
+    page.set_input_files(sel, files=paths, timeout=step.timeout_ms)
     logger(f"[{ir.id}] 步骤{idx} upload {sel} ← {[f.name for f in files]}")

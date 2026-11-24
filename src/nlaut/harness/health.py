@@ -268,7 +268,7 @@ def split_cases(cases_dir: str | Path = "cases/cecoder",
             continue
         text = f.read_text(encoding="utf-8")
         has_interaction = bool(
-            re.search(r"^\s*- action: (click|wait_visible|fill|select_option)\b", text, re.MULTILINE)
+            re.search(r"^\s*- action: (click|wait_visible|fill|select_option|upload)\b", text, re.MULTILINE)
         )
         # 只用 process_state 断言 → 不依赖 GUI
         assertion_kinds = set(re.findall(r"^\s*- kind: (\w+)", text, re.MULTILINE))

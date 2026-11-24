@@ -44,15 +44,29 @@ class StepFill(_StepBase):
 
 
 class StepUpload(_StepBase):
-    """文件上传步骤：向 input[type=file] 塞入本地文件。
+    """文件上传步骤：把本地文件塞进页面的文件选择器。
 
     v0.5.0 新增。背景：CeCoder 工序节点要求上传基线资产（变更资产清单、
     代码变更分析等），`fill` 无法驱动 input[type=file]——该元素不响应
     fill/type，必须用 Playwright set_input_files 直接注入文件路径。
 
+    **两种触发方式，二选一**（真机实测得出，见下）：
+
+    | 模式 | 字段 | 适用 |
+    | --- | --- | --- |
+    | 直连 input | `selector` | 页面 file input 唯一/可精确选中（如弹框附件区） |
+    | 按钮触发 | `trigger` | 上传按钮触发**隐藏** input，且页面有多个同名 input |
+
+    实测（CeCoder.app 2026-11-24）：单页同时存在 **3 个 `input[type=file]`**
+    （新建任务弹框 / 工序节点「补充本地材料」/ 会话输入框），全部
+    `display:none`。此时 `selector: 'input[type=file]'` 命中多个 →
+    Playwright strict mode 报错，必须改用 `trigger: 'button:has-text("上传附件")'`
+    走 `expect_file_chooser` 路径。
+
     语义约束（执行器强制）：
     - 文件不存在 → 抛 FileNotFoundError **不静默跳过**（缺资产 = 用例该失败，
       假装传了等于伪造执行结果）；
+    - 直连模式下 selector 命中多个元素 → 报错并提示改用 trigger（不猜第几个）；
     - 多文件要求 input 带 multiple 属性，否则 Playwright 报错——如实暴露。
 
     路径规则：支持 `~` 展开；相对路径按执行时 cwd（仓库根）解析。
@@ -60,6 +74,8 @@ class StepUpload(_StepBase):
 
     action: Literal["upload"]
     selector: str = 'input[type=file]'
+    trigger: str | None = None
+    """点击该 selector 触发 filechooser（走 expect_file_chooser）。设置后忽略 selector。"""
     files: list[str] = Field(min_length=1)
     timeout_ms: int = Field(default=10000, ge=100, le=60000)
 

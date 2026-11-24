@@ -26,14 +26,61 @@ def _ir():
     return SimpleNamespace(id="tc_upload_x")
 
 
-class FakePage:
-    """记录 set_input_files 调用的 Playwright page 替身。"""
-
+class FakeFileChooser:
     def __init__(self):
+        self.files: list[str] | None = None
+
+    def set_files(self, paths):
+        self.files = list(paths)
+
+
+class _FakeContext:
+    """expect_file_chooser 的上下文管理器替身。"""
+
+    def __init__(self, chooser, raise_on_exit=False):
+        self._chooser = chooser
+        self._raise = raise_on_exit
+        self.value = chooser
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        if self._raise:
+            raise TimeoutError("no file chooser")
+        return False
+
+
+class _FakeLocator:
+    def __init__(self, page, sel):
+        self.page = page
+        self.sel = sel
+
+    def count(self):
+        return self.page.match_counts.get(self.sel, 1)
+
+
+class FakePage:
+    """记录 set_input_files / click / filechooser 的 Playwright page 替身。"""
+
+    def __init__(self, match_counts=None, chooser_ok=True):
         self.calls: list[tuple[str, list[str], int]] = []
+        self.clicks: list[str] = []
+        self.match_counts = match_counts or {}
+        self.chooser = FakeFileChooser()
+        self._chooser_ok = chooser_ok
 
     def set_input_files(self, selector, files, timeout):
         self.calls.append((selector, list(files), timeout))
+
+    def locator(self, sel):
+        return _FakeLocator(self, sel)
+
+    def click(self, sel):
+        self.clicks.append(sel)
+
+    def expect_file_chooser(self, timeout):
+        return _FakeContext(self.chooser, raise_on_exit=not self._chooser_ok)
 
 
 # ---------- 1. IR schema ----------
@@ -138,3 +185,61 @@ def test_upload_optional_step_degrades(tmp_path):
     step = StepUpload(action="upload", files=[str(tmp_path / "缺.md")], optional=True)
     with pytest.raises(FileNotFoundError):
         _do_upload_checked(page, step)
+
+
+# ---------- 3. trigger 模式（真机实测：页面有多个隐藏 input 时必须用） ----------
+
+
+def test_upload_trigger_mode_uses_file_chooser(tmp_path):
+    """trigger 模式：点按钮触发 filechooser，再 set_files。"""
+    f1 = tmp_path / "变更资产清单.yaml"
+    f1.write_text("a: 1", encoding="utf-8")
+    f2 = tmp_path / "变更资产清单.json"
+    f2.write_text("{}", encoding="utf-8")
+
+    page = FakePage()
+    step = StepUpload(
+        action="upload",
+        trigger='button:has-text("上传附件")',
+        files=[str(f1), str(f2)],
+    )
+    _do_upload_checked(page, step)
+    assert page.clicks == ['button:has-text("上传附件")']
+    assert page.chooser.files == [str(f1), str(f2)]
+    assert page.calls == []  # trigger 模式不走 set_input_files
+
+
+def test_upload_trigger_not_firing_raises(tmp_path):
+    """按钮点了没触发 filechooser → 明确报错（不静默当成功）。"""
+    f = tmp_path / "x.md"
+    f.write_text("x", encoding="utf-8")
+    page = FakePage(chooser_ok=False)
+    step = StepUpload(action="upload", trigger='button:has-text("上传附件")', files=[str(f)])
+    with pytest.raises(RuntimeError, match="未触发文件选择器"):
+        _do_upload_checked(page, step)
+
+
+def test_upload_multi_match_raises_with_hint(tmp_path):
+    """selector 命中多个 → 报错并提示改用 trigger（真机 3 个 file input 的场景）。"""
+    f = tmp_path / "x.md"
+    f.write_text("x", encoding="utf-8")
+    page = FakePage(match_counts={"input[type=file]": 3})
+    step = StepUpload(action="upload", files=[str(f)])
+    with pytest.raises(RuntimeError, match="命中 3 个元素"):
+        _do_upload_checked(page, step)
+    assert page.calls == []
+
+
+def test_upload_zero_match_raises_with_hint(tmp_path):
+    f = tmp_path / "x.md"
+    f.write_text("x", encoding="utf-8")
+    page = FakePage(match_counts={"input[type=file]": 0})
+    step = StepUpload(action="upload", files=[str(f)])
+    with pytest.raises(RuntimeError, match="未命中任何元素"):
+        _do_upload_checked(page, step)
+
+
+def test_upload_schema_trigger_field():
+    s = StepUpload(action="upload", trigger='button:has-text("上传")', files=["a.md"])
+    assert s.trigger == 'button:has-text("上传")'
+    assert StepUpload(action="upload", files=["a.md"]).trigger is None
