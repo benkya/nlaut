@@ -243,3 +243,39 @@ def test_upload_schema_trigger_field():
     s = StepUpload(action="upload", trigger='button:has-text("上传")', files=["a.md"])
     assert s.trigger == 'button:has-text("上传")'
     assert StepUpload(action="upload", files=["a.md"]).trigger is None
+
+
+# ---------- 4. 数据集注入（能力归框架、数据归用例，禁止硬编码资产） ----------
+
+
+def test_upload_files_from_dataset_vars(tmp_path):
+    """files 里的 $var 由 data_ref 数据集解析——用例不内嵌资产路径。"""
+    a1 = tmp_path / "资产一.yaml"
+    a1.write_text("a: 1", encoding="utf-8")
+    a2 = tmp_path / "资产二.json"
+    a2.write_text("{}", encoding="utf-8")
+
+    page = FakePage()
+    step = StepUpload(action="upload", files=["$asset_1", "$asset_2"])
+    _do_upload_checked(
+        page, step, data={"asset_1": str(a1), "asset_2": str(a2)}
+    )
+    assert page.calls[0][1] == [str(a1), str(a2)]
+
+
+def test_upload_unknown_dataset_var_raises(tmp_path):
+    """数据集缺字段 → KeyError（不静默留空路径）。"""
+    page = FakePage()
+    step = StepUpload(action="upload", files=["$asset_missing"])
+    with pytest.raises(KeyError):
+        _do_upload_checked(page, step, data={"asset_1": "x"})
+
+
+def test_upload_trigger_supports_vars(tmp_path):
+    """trigger 选择器本身也支持 $var（不同环境按钮文案可能不同）。"""
+    f = tmp_path / "a.md"
+    f.write_text("x", encoding="utf-8")
+    page = FakePage()
+    step = StepUpload(action="upload", trigger="$upload_btn", files=[str(f)])
+    _do_upload_checked(page, step, data={"upload_btn": 'button:has-text("上传附件")'})
+    assert page.clicks == ['button:has-text("上传附件")']

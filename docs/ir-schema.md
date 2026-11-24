@@ -115,6 +115,28 @@ Playwright strict mode 报错。框架对此**明确报错并提示改用 trigge
 `trigger` 走 `expect_file_chooser`：点按钮 → 捕获文件选择器 → `set_files`。
 按钮点了没弹选择器 → `RuntimeError`，不静默当成功。
 
+**能力与数据的边界（重要）**：`upload` 是框架的**公共能力**，用例按需调用；
+具体上传什么文件属于**测试数据**，由 `data_ref` 数据集注入，禁止把资产路径
+写进用例、也禁止把资产文件提交进框架仓库。
+
+```yaml
+# 用例侧：只声明变量（cases/cecoder/ 与资产同为本地资产，不入库）
+data_ref: lh_rw_006_assets
+steps:
+  - action: upload
+    trigger: 'button:has-text("上传附件")'
+    files: ['$asset_1', '$asset_2']
+```
+
+```yaml
+# 数据侧：data/datasets.yaml 留骨架（入库），真实路径放 datasets.local.yaml（gitignore）
+lh_rw_006_assets:
+  asset_1: "cases/cecoder/assets/变更资产清单.yaml"
+  asset_2: "cases/cecoder/assets/变更资产清单.json"
+```
+
+数据集缺字段时 `$var` 解析抛 `KeyError`，**不静默留空路径**——缺资产就该失败。
+
 **原生对话框边界**：`set_input_files` 不弹系统文件框，直接塞 `FileList`。
 若页面用 `showOpenFilePicker`（非 input 元素），本步骤不适用，
 需改用 CDP `DOM.setFileInputFiles`。

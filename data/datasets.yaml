@@ -85,3 +85,10 @@ d12_weather:
 ccproto_create_task:
   task_name: "验证统一登录失败提示优化"
   task_goal: "统一登录失败提示，避免内部堆栈泄漏"
+
+# --- 文件上传类用例的资产变量（v0.5.0）---
+# 骨架：真实资产路径放 data/datasets.local.yaml（gitignore），
+# 本文件只留字段形状，保证用例可解析、不把测试资产塞进框架仓库。
+lh_rw_006_assets:
+  asset_1: "cases/cecoder/assets/<待本地配置>.yaml"
+  asset_2: "cases/cecoder/assets/<待本地配置>.json"
