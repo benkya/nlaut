@@ -16,14 +16,13 @@ import json
 import os
 import sys
 from pathlib import Path
-from typing import Any
 
 # 添加项目根目录到 sys.path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from nlaut.judge.agent_judge import AgentJudge
 from nlaut.judge.llm_judge import LLMJudge
-from nlaut.judge.protocol import Evidence, Question, Verdict
+from nlaut.judge.protocol import Evidence, Question
 
 
 def load_golden_standard(path: str = "config/calibrate_v2.json") -> list[dict]:
@@ -133,7 +132,7 @@ def calibrate_llm_judge(samples: list[dict]) -> dict:
             print(f"  Judge 判定: {result['judge_judgement']} (置信度: {result['judge_confidence']:.2f})")
             print(f"  一致: {'✓' if result['agree'] else '✗'}")
             
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  逐样本兜底，失败记入结果继续跑
             result = {
                 "sample_id": s["id"],
                 "golden_judgement": s.get("final_judgement", s["human_annotation"]["judgement"]),
@@ -224,7 +223,7 @@ def calibrate_agent_judge(samples: list[dict]) -> dict:
             print(f"  成本: ${result['cost_usd']:.4f}")
             print(f"  一致: {'✓' if result['agree'] else '✗'}")
             
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  逐样本兜底，失败记入结果继续跑
             result = {
                 "sample_id": s["id"],
                 "golden_judgement": s.get("final_judgement", s["human_annotation"]["judgement"]),
@@ -255,14 +254,14 @@ def calibrate_agent_judge(samples: list[dict]) -> dict:
     }
 
 
-def generate_report(llm_result: dict = None, agent_result: dict = None):
+def generate_report(llm_result: dict | None = None, agent_result: dict | None = None):
     """生成对比报告"""
     print("=" * 60)
     print("Judge 标定对比报告")
     print("=" * 60)
     print()
     
-    report = f"""# Judge 标定报告
+    report = """# Judge 标定报告
 
 **生成时间**: 2026-10-31
 

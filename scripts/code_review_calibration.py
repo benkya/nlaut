@@ -21,7 +21,6 @@ from nlaut.judge.code_review_tools import (
 )
 from nlaut.judge.protocol import Evidence, Question
 
-
 # 代码审查专用 System Prompt
 CODE_REVIEW_SYSTEM = """你是代码质量判定器（Code-as-Judge）。
 
@@ -85,7 +84,7 @@ def calibrate_code_review(samples: list[dict]) -> dict:
     print(f"端点: {config['base_url']}")
     print(f"模型: {config['model']}")
     print(f"样本数: {len(samples)}")
-    print(f"配置: 代码审查专用工具 + 5 维度判定 Prompt")
+    print("配置: 代码审查专用工具 + 5 维度判定 Prompt")
     print()
     
     # 构建工具实现
@@ -158,7 +157,7 @@ def calibrate_code_review(samples: list[dict]) -> dict:
             print(f"  成本: ${result['cost_usd']:.4f}")
             print(f"  一致: {'✓' if result['agree'] else '✗'}")
             
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  逐样本兜底，失败记入结果继续跑
             result = {
                 "sample_id": s["id"],
                 "golden_judgement": s.get("final_judgement", s["human_annotation"]["judgement"]),

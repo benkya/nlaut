@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """导出 nlaut 测试用例为自包含 MD 文档（用户偏好：内容内嵌不外链）。
 
 用法:
@@ -35,7 +34,7 @@ def resolve_var(text: str, data: dict | None) -> str:
     return _re.sub(r"\$([a-zA-Z_][a-zA-Z0-9_]*)",
                    lambda m: str(data.get(m.group(1), m.group(0))), text)
 
-from nlaut.ir.model import TestCaseIR  # noqa: E402  用 IR 校验同步报告加载状态
+from nlaut.ir.model import TestCaseIR
 
 DIMS = {
     # cases/llm 的维度中文名（按 tc_ 前缀）
@@ -140,7 +139,7 @@ def load_all(d: Path):
         try:
             ir = TestCaseIR.model_validate(raw)
             cases.append((ir, p, None))
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  逐样本兜底，失败记入结果继续跑
             cases.append((raw, p, str(e)[:120]))
     return cases
 
@@ -255,9 +254,9 @@ def main() -> None:
                     L.append(f"- **数据集**：`{ir.data_ref}` → {kv}")
                 else:
                     L.append(f"- **数据集**：`{ir.data_ref}`（⚠️ datasets.yaml 中未找到）")
-            L.append(f"- **判定标准**：")
+            L.append("- **判定标准**：")
             L.append(fmt_assertions(ir))
-            L.append(f"- **执行步骤**：")
+            L.append("- **执行步骤**：")
             L.append(fmt_steps(ir, ds))
             reps = [getattr(s, "repeat", 1) or 1 for s in ir.steps
                     if getattr(s, "action", "") == "api_stream"]

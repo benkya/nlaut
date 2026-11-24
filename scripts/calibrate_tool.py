@@ -21,9 +21,6 @@
 import json
 import sys
 from pathlib import Path
-from typing import Any
-
-import yaml
 
 
 def load_samples(path: str = "config/calibrate_v1.json") -> list[dict]:

@@ -14,7 +14,6 @@ import json
 import os
 import sys
 from pathlib import Path
-from typing import Any
 
 # 添加项目根目录到 sys.path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -22,7 +21,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from nlaut.judge.agent_judge import AgentJudge
 from nlaut.judge.agent_tools import DEFAULT_TOOLS, build_env_tool_impls
 from nlaut.judge.protocol import Evidence, Question
-
 
 # 与消融实验相同的 system prompt
 LLM_JUDGE_SYSTEM = (
@@ -74,7 +72,7 @@ def calibrate_agent_judge_v2(samples: list[dict], max_samples: int = 20) -> dict
     print(f"端点: {config['base_url']}")
     print(f"模型: {config['model']}")
     print(f"样本数: {min(len(samples), max_samples)}")
-    print(f"配置: db_state 注入工具，Agent 需调用工具")
+    print("配置: db_state 注入工具，Agent 需调用工具")
     print()
     
     results = []
@@ -135,7 +133,7 @@ def calibrate_agent_judge_v2(samples: list[dict], max_samples: int = 20) -> dict
             print(f"  成本: ${result['cost_usd']:.4f}")
             print(f"  一致: {'✓' if result['agree'] else '✗'}")
             
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  逐样本兜底，失败记入结果继续跑
             result = {
                 "sample_id": s["id"],
                 "golden_judgement": s.get("final_judgement", s["human_annotation"]["judgement"]),
