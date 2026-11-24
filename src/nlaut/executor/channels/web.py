@@ -177,6 +177,8 @@ def _run_step(page, step, ir, idx: int, data: dict[str, str], base_url: str,
         sel = resolve_vars(step.selector, data)
         page.fill(sel, resolve_vars(step.value, data))
         logger(f"[{ir.id}] 步骤{idx} fill {sel}")
+    elif step.action == "upload":
+        _do_upload(page, step, ir, idx, data, logger)
     elif step.action == "click":
         sel = resolve_vars(step.selector, data)
         # 候选降级：selector 可写逗号分隔的多个候选，逐个尝试
@@ -244,3 +246,21 @@ def _run_step(page, step, ir, idx: int, data: dict[str, str], base_url: str,
         logger(f"[{ir.id}] 步骤{idx} process_probe {result.get('probe')} ✓")
     else:
         raise ValueError(f"未知步骤类型: {step.action}")
+
+
+def _do_upload(page, step, ir, idx: int, data: dict[str, str],
+               logger: Callable[[str], None]) -> None:
+    """upload 步骤的通道无关实现（web / electron 复用，set_input_files 同 API）。
+
+    语义约束见 StepUpload：缺文件抛错不静默；多文件需 input 带 multiple。
+    """
+    sel = resolve_vars(step.selector, data)
+    files = [Path(resolve_vars(f, data)).expanduser() for f in step.files]
+    missing = [str(f) for f in files if not f.is_file()]
+    if missing:
+        # 缺资产不静默跳过：假装传了 = 伪造执行结果（见 StepUpload 语义约束）
+        raise FileNotFoundError(f"upload 步骤{idx} 待上传文件不存在: {missing}")
+    page.set_input_files(
+        sel, files=[str(f) for f in files], timeout=step.timeout_ms
+    )
+    logger(f"[{ir.id}] 步骤{idx} upload {sel} ← {[f.name for f in files]}")

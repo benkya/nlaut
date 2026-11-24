@@ -62,6 +62,7 @@ assertions:
 | --- | --- | --- | --- |
 | `nav` | path | web/electron | 导航（web）/窗口切换（electron） |
 | `fill` | selector, value | web | 填充；`$var` 引用 data_ref 数据集字段 |
+| `upload` | selector=`input[type=file]`, files[], timeout_ms=10000 | web/electron | **文件上传**（v0.5.0 新增）：`set_input_files` 注入本地文件；`files` 支持 `~` 与 `$var`；**文件不存在直接报错不静默跳过**；多文件需 input 带 `multiple` |
 | `click` | selector | web | 点击 |
 | `select_option` | selector, value | web | 下拉选择 |
 | `wait_visible` | selector, timeout_ms=5000 | web | 等待元素可见（禁止 sleep） |
@@ -70,6 +71,30 @@ assertions:
 | `api_tool_call` | prompt, tools | api | 带工具定义调用（OpenAI function schema） |
 | `api_stream` | prompt, system_prompt?, repeat=1 | api | 流式调用（stream=true，收完比对）；v0.2.7 加 `repeat` 字段（1-20，多样本 P95） |
 | `process_probe` | 全部 | probe, task_id?, node?, root? | **工序域探针**：在动作执行时即时采集工序状态（v0.5.0 新增）；`task_id: "@latest"` 按落盘 mtime 定位新建任务（id 是动态 UUID） |
+
+### 文件上传（`upload`，v0.5.0）
+
+**为什么单独一个步骤类型**：`input[type=file]` 不响应 `fill`/`type`——浏览器安全模型
+只允许程序通过 `set_input_files` 注入文件路径。此前 CeCoder 工序节点要求上传基线资产
+（LH-RW-006/007），`fill` 无能为力，只能标 `blocked`。
+
+```yaml
+- action: upload
+  selector: 'input[type=file][name="attachments"]'   # 省略则默认 input[type=file]
+  files:                                             # 至少 1 个
+    - data/baseline/变更资产清单.yaml                 # 相对仓库根
+    - "~/$asset_dir/影响脑图.json"                   # 支持 ~ 与 $var
+  timeout_ms: 10000
+```
+
+**语义约束**（刻意的严格）：
+- 文件不存在 → `FileNotFoundError`，**不静默跳过**。缺资产假装传了 = 伪造执行结果。
+- 多文件必须 input 带 `multiple`，否则 Playwright 报错——如实暴露而非吞掉。
+- 需要「传不传都行」时用 `optional: true`，走统一的 optional 降级通道。
+
+**原生对话框**：`set_input_files` 不触发系统文件选择框，直接塞 `FileList`。
+若页面用 `showOpenFilePicker` 之类的 API（非 input 元素），本步骤不适用，
+需改用 CDP `DOM.setFileInputFiles` 或 `page.on("filechooser")`。
 
 ## 断言类型（assertions）
 

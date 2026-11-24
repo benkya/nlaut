@@ -24,7 +24,7 @@ from pathlib import Path
 
 from ...ir.model import TestCaseIR
 from ..selectors import SelectorNotFound, probe_selectors, split_candidates
-from .web import _build_dom_state, resolve_vars
+from .web import _build_dom_state, _do_upload, resolve_vars
 
 
 def execute(
@@ -128,6 +128,9 @@ def _run_step(page, step, ir, idx: int, data: dict[str, str], base_url: str,
         sel = resolve_vars(step.selector, data)
         page.fill(sel, resolve_vars(step.value, data))
         logger(f"[{ir.id}] 步骤{idx} fill {sel}")
+    elif step.action == "upload":
+        # 复用 Web 通道的文件注入（set_input_files 两通道同 API）
+        _do_upload(page, step, ir, idx, data, logger)
     elif step.action == "click":
         sel = resolve_vars(step.selector, data)
         # 候选降级：selector 可写逗号分隔的多个候选，逐个尝试
